@@ -1,8 +1,12 @@
 # ============================================================
-# UGV Jetson Environment - Jetson Orin Nano Super (ARM64)
-# Base: dustynv/ros - JetPack 6.x (L4T R36) + CUDA + PyTorch
+# FSD_Vehicle Jetson Environment - Jetson Orin Nano Super (ARM64)
+# Project: https://github.com/SeyeongW/FSD_Vehicle
+# Maintainer: SeyeongW
 # ============================================================
 FROM dustynv/ros:humble-desktop-l4t-r36.4.0
+
+LABEL project="FSD_Vehicle"
+LABEL maintainer="SeyeongW"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -11,7 +15,7 @@ RUN apt-get update && apt-get install -y \
     git cmake build-essential ninja-build \
     python3-pip python3-rosdep python3-colcon-common-extensions \
     python3-vcstool \
-    wget curl vim nano \
+    wget curl v4l-utils alsa-utils \
     ssh net-tools \
     libssl-dev libusb-1.0-0-dev \
     libopencv-dev python3-opencv \
@@ -56,6 +60,9 @@ RUN pip3 install --no-cache-dir \
 # ── 4. YOLO (Jetson CUDA 지원) ───────────────────────────
 # dustynv 이미지에 PyTorch가 이미 포함됨 → ultralytics만 설치
 RUN pip3 install --no-cache-dir ultralytics
+
+# ── 4.1 하드웨어 권한 설정 ───────────────────────────
+RUN usermod -aG dialout root && usermod -aG audio root
 
 # ── 5. Livox SDK2 (시스템 라이브러리) ─────────────────────
 RUN git clone https://github.com/Livox-SDK/Livox-SDK2.git /tmp/Livox-SDK2 \
