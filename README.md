@@ -1,93 +1,100 @@
 # FSD_Vehicle Project
-ROS2-based integrated development environment for UGV autonomous driving research, supporting both x86_64 (PC) and ARM64 (Jetson) architectures.
+ROS2 Humble-based integrated development environment for UGV (Unmanned Ground Vehicle) autonomous driving research. This project provides a unified workspace supporting both PC-based high-fidelity simulations (Gazebo/RViz) and physical deployment on Jetson Orin Nano hardware.
 
 ---
 
-## 1. Prerequisites
-- OS: Ubuntu 22.04 LTS (Recommended)
-- Docker Engine
-- Docker Compose v2.0+
+## 1. Prerequisites and Environment Setup
+Before proceeding with the installation, ensure the following system dependencies are met:
+- **Operating System**: Ubuntu 22.04 LTS (Jammy Jellyfish) is highly recommended for native ROS2 Humble compatibility.
+- **Docker Engine**: Required for environment isolation.
+- **Docker Compose v2.0+**: Utilized for managing multi-container configurations and environment variable substitution.
 
 ---
 
-## 2. Setup and Execution
+## 2. Installation and Initial Configuration
 
 ### 2.1 Repository Cloning
-Create a workspace and clone the repository.
+Initialize the workspace by cloning the repository into your preferred ROS2 workspace directory.
 ```bash
+# Recommended directory structure: ~/ros2_ws/ugv_ws
 mkdir -p ~/ros2_ws && cd ~/ros2_ws
 git clone https://github.com/SeyeongW/FSD_Vehicle.git ugv_ws
 cd ugv_ws
 ```
 
-### 2.2 Docker Image Build
-Build the image according to the target architecture.
+### 2.2 Docker Image Reconstruction
+Build the environment images tailored for the target architecture. This process includes installing pinned versions of libraries such as OpenCV, PyTorch, and Livox SDK2.
 ```bash
-# PC (Simulation/Development)
+# For PC-based development (x86_64)
 bash docker/run.sh build-pc
 
-# Jetson Orin Nano (Deployment)
+# For Jetson-based physical deployment (ARM64)
 bash docker/run.sh build-jetson
 ```
 
-### 2.3 Container Execution
+### 2.3 Container Execution and Hardware Verification
+Execute the environment using the unified entry script.
 ```bash
-# PC Development
+# Launch PC environment
 bash docker/run.sh pc
 
-# Jetson Deployment
+# Launch Jetson environment
 bash docker/run.sh jetson
 ```
-Note: Hardware connection warnings in the `run.sh` script can be ignored for simulation-only tasks.
+Note: The `run.sh` script automatically verifies the connectivity of pre-configured serial ports (e.g., `/dev/ttyTHS1`). If hardware is not connected, a warning will be displayed; however, the container will still initialize for simulation purposes.
 
-### 2.4 Initial Workspace Build
-The following scripts must be executed within the container for the first-time setup.
+---
+
+## 3. Workspace Initialization (Inside Container)
+Upon first container entry, binary libraries and core ROS2 packages must be compiled. 
+
+### 3.1 External Library Compilation
 ```bash
-# Build Apriltag library
+# Compile AprilTag detection library (C-based dependency)
 bash build_apriltag.sh
+```
 
-# Build all ROS2 packages
+### 3.2 Full Workspace Compilation
+Execute the primary build script to resolve dependencies and compile all internal packages using `colcon`.
+```bash
 bash build_first.sh
 ```
 
 ---
 
-## 3. Development Workflow
+## 4. Development and Operational Workflow
 
-For incremental builds after source code modifications:
+### 4.1 Incremental Builds
+For frequent source code updates, use the common build script to minimize compilation time.
 ```bash
-# Incremental build
 bash build_common.sh
-
-# Environment sourcing
 source install/setup.bash
 ```
 
----
-
-## 4. Launching Applications
-
-### 4.1 Gazebo Simulation (PC)
+### 4.2 Simulation (Gazebo/RViz)
+Launch the full SLAM and Navigation stack in the virtual Gazebo environment.
 ```bash
 ros2 launch ugv_gazebo slam_nav.launch.py
 ```
 
-### 4.2 Physical Hardware Bringup (Jetson/Robot)
+### 4.3 Hardware Bringup
+Execute the core driver nodes to initialize LiDAR sensors and motor controllers.
 ```bash
 ros2 launch ugv_bringup bringup_lidar.launch.py
 ```
 
 ---
 
-## 5. Project Structure
-- `src/ugv_main`: Core logic, control, and perception source code.
-- `src/ugv_else`: 3rd party libraries and sensor drivers (Livox SDK2, LDLiDAR, etc.).
-- `docker/`: Dockerfiles and system configuration files.
-- `.env`: Global project configuration (Image names, serial paths, etc.).
+## 5. Technical Architecture and Configuration
+
+- **Workspace Path Mapping**: The host's current directory is bi-directionally mounted to `/ros2_ws/ugv_ws`, enabling live code editing via host-side IDEs.
+- **Hardware Permissions**: Root access to `dialout`, `audio`, and `video` groups is pre-configured to handle serial MCU communication and sensor data acquisition.
+- **Environment Variables**: Key parameters such as `ROS_DOMAIN_ID`, `SERIAL_PORT`, and `UGV_MODEL` are managed via the `.env` file located in the project root.
+- **Project Structure**:
+    - `src/ugv_main`: Primary development area for FSD-specific algorithms and control logic.
+    - `src/ugv_else`: Integration layer for 3rd party drivers (Livox, Realsense, LDLiDAR).
 
 ---
 
-## 6. Technical Notes
-- **GUI Support**: Automated X11 forwarding is configured in `run.sh` for RViz and Gazebo.
-- **Volume Mapping**: Current directory is mounted to `/ros2_ws/ugv_ws` inside the container.
-- **Hardware Access**: Correct serial and audio group permissions are pre-configured in the Docker images.
+**Maintainer**: SeyeongW  
+For technical inquiries or bug reports, please refer to the project's Issue tracker.
