@@ -5,12 +5,16 @@
 FROM osrf/ros:humble-desktop-full
 
 ARG DEBIAN_FRONTEND=noninteractive
+ENV PYTHON_VERSION=3.10
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # ── 1. 기본 시스템 도구 ───────────────────────────────────
 RUN apt-get update && apt-get install -y \
-    git cmake build-essential ninja-build \
+    python3.10 python3.10-dev python3.10-venv \
     python3-pip python3-rosdep python3-colcon-common-extensions \
     python3-vcstool \
+    git cmake build-essential ninja-build \
     wget curl vim nano \
     ssh net-tools \
     libssl-dev libusb-1.0-0-dev \
@@ -19,8 +23,6 @@ RUN apt-get update && apt-get install -y \
     liblua5.3-dev libgoogle-glog-dev libgflags-dev \
     libatlas-base-dev libsuitesparse-dev \
     libeigen3-dev libceres-dev \
-    # TEB Local Planner 의존성
-    libg2o-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # ── 2. ROS2 Humble 추가 패키지 ───────────────────────────
@@ -46,16 +48,34 @@ RUN apt-get update && apt-get install -y \
     ros-humble-realsense2-camera \
     ros-humble-realsense2-description \
     ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-libg2o \
     && rm -rf /var/lib/apt/lists/*
 
-# ── 3. Python 패키지 ─────────────────────────────────────
+# ── 3. Python 3.10 환경 설정 ─────────────────────────────
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 \
+    && update-alternatives --set python3 /usr/bin/python3.10 \
+    && python3 -m pip install --upgrade pip setuptools wheel
+
+# 시스템 패키지 sympy 충돌 해결 (distutils 설치본 덮어쓰기)
+RUN pip3 install --no-cache-dir --ignore-installed sympy
+
+# 기본 패키지
 RUN pip3 install --no-cache-dir \
-    pyserial \
-    flask \
-    mediapipe \
-    requests \
-    ultralytics \
-    numpy opencv-python-headless
+    pyserial==3.5 \
+    flask==3.0.3 \
+    requests==2.31.0 \
+    numpy==1.26.4
+
+# mediapipe (opencv-contrib-python 포함)
+RUN pip3 install --no-cache-dir mediapipe==0.10.14
+
+# PyTorch CPU 버전 (PC 개발용 - CUDA 버전은 10배 더 큼)
+RUN pip3 install --no-cache-dir \
+    torch torchvision \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# YOLO (mediapipe가 설치한 opencv 재사용)
+RUN pip3 install --no-cache-dir ultralytics
 
 # ── 4. Livox SDK2 (시스템 라이브러리) ─────────────────────
 RUN git clone https://github.com/Livox-SDK/Livox-SDK2.git /tmp/Livox-SDK2 \
