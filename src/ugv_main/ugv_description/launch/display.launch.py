@@ -1,6 +1,6 @@
 import os
 from launch import LaunchDescription
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, Command
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory
@@ -52,12 +52,15 @@ def launch_setup(context, *args, **kwargs):
     # Determine whether to use the joint_state_publisher_gui based on the rviz configuration
     use_joint_state_publisher_gui = 'true' if rviz_config == 'description' else context.launch_configurations.get('use_joint_state_publisher_gui', 'false')
 
+    # Process the URDF with XACRO
+    robot_description_content = Command(['xacro ', urdf_model_path])
+
     # Define the robot_state_publisher node to publish the robot's URDF model
     robot_state_publisher_node = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
         namespace='ugv',
-        arguments=[urdf_model_path]
+        parameters=[{'robot_description': robot_description_content}]
     )
 
     # Define the joint_state_publisher_gui node if the GUI is enabled
@@ -66,7 +69,7 @@ def launch_setup(context, *args, **kwargs):
         executable='joint_state_publisher_gui',
         namespace='ugv',
         name='joint_state_publisher_gui',
-        arguments=[urdf_model_path],
+        parameters=[{'robot_description': robot_description_content}],
         condition=IfCondition(use_joint_state_publisher_gui)
     )
 
@@ -75,8 +78,7 @@ def launch_setup(context, *args, **kwargs):
         package='joint_state_publisher',
         executable='joint_state_publisher',
         namespace='ugv',
-        name='joint_state_publisher',
-        arguments=[urdf_model_path],
+        parameters=[{'robot_description': robot_description_content}],
         condition=UnlessCondition(use_joint_state_publisher_gui)
     )
 

@@ -1,6 +1,6 @@
 import os
 from launch import LaunchDescription
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, Command
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory
@@ -25,11 +25,14 @@ def generate_launch_description():
         'urdf', 
         urdf_file_name)   
             
+    # Process the URDF with XACRO
+    robot_description_content = Command(['xacro ', urdf_model_path])
+
     # Create a robot state publisher node
     robot_state_publisher_node = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
-        arguments=[urdf_model_path]
+        parameters=[{'robot_description': robot_description_content}]
         )
 
     # Create a joint state publisher node
@@ -37,7 +40,7 @@ def generate_launch_description():
         package='joint_state_publisher',
         executable='joint_state_publisher',
         name='joint_state_publisher',
-        arguments=[urdf_model_path]
+        parameters=[{'robot_description': robot_description_content}]
         )
 
     # Create a rviz2 node
