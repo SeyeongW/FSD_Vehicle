@@ -49,6 +49,7 @@ RUN apt-get update && apt-get install -y \
     ros-humble-realsense2-description \
     ros-humble-rmw-cyclonedds-cpp \
     ros-humble-libg2o \
+    ros-humble-rosbridge-suite \
     && rm -rf /var/lib/apt/lists/*
 
 # ── 3. Python 3.10 환경 설정 ─────────────────────────────
