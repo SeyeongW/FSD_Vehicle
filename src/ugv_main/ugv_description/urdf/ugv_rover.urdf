@@ -327,7 +327,7 @@
   
   <xacro:include filename="$(find ugv_description)/urdf/mid360.xacro" />
   <xacro:mid360 name="livox" parent="base_link">
-    <origin xyz="-0.05 0 0.08" rpy="0 0 0" /> 
+    <origin xyz="0.12 0 0.05" rpy="0 0 0" /> 
   </xacro:mid360>
   
   <link
