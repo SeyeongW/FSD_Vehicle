@@ -1,0 +1,11 @@
+# Docker 관련 파일은 제외하지 않음
+# 빌드 아티팩트만 제외
+
+build/
+log/
+install/
+__pycache__/
+*.pyc
+.git/
+images/
+*.zip

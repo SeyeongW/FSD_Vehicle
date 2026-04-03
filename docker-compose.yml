@@ -1,0 +1,25 @@
+services:
+  ugv-dev:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile
+    image: ugv-ros2:humble-pc
+    container_name: ugv_dev
+    env_file:
+      - ./docker/.env
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - LIBGL_ALWAYS_SOFTWARE=0
+    volumes:
+      # GUI 지원 (RViz, Gazebo)
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # 전체 워크스페이스 마운트 (소스 수정 즉시 반영)
+      - .:/ros2_ws/ugv_ws
+      # Gazebo 모델 캐시 유지
+      - ${HOME}/.gazebo:/root/.gazebo
+    network_mode: host
+    privileged: true
+    stdin_open: true
+    tty: true
+    working_dir: /ros2_ws/ugv_ws

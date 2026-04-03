@@ -1,0 +1,24 @@
+services:
+  ugv-jetson:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.jetson
+    image: ugv-ros2:humble-jetson
+    container_name: ugv_jetson
+    restart: unless-stopped
+    env_file:
+      - ./docker/.env
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all,compute,video
+    volumes:
+      # 전체 워크스페이스 마운트
+      - .:/ros2_ws/ugv_ws
+      # 실제 센서 접근 (Livox 라이다, 카메라 등)
+      - /dev:/dev
+    runtime: nvidia
+    network_mode: host
+    privileged: true
+    stdin_open: true
+    tty: true
+    working_dir: /ros2_ws/ugv_ws

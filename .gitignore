@@ -1,0 +1,42 @@
+# ==============================================
+# ROS2 Workspace - Git Ignore
+# ==============================================
+
+# 빌드 아티팩트 (절대 커밋하지 않음)
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# 에디터
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 대용량 이미지 파일 (images/ 폴더)
+images/
+
+# 압축 파일
+*.zip
+*.tar.gz
+
+# 지도 파일 (런타임 생성)
+*.pgm
+*.yaml
+map_points.txt
+
+# Gazebo 임시 파일
+.gazebo/
+
