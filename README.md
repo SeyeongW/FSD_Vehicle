@@ -1,100 +1,166 @@
-# FSD_Vehicle Project
-ROS2 Humble-based integrated development environment for UGV (Unmanned Ground Vehicle) autonomous driving research. This project provides a unified workspace supporting both PC-based high-fidelity simulations (Gazebo/RViz) and physical deployment on Jetson Orin Nano hardware.
+# FSD_Vehicle: Advanced UGV Autonomous Driving Framework
+Professional ROS2 Humble-based development environment for UGV (Unmanned Ground Vehicle) research. Supports high-fidelity Gazebo simulation and multi-platform deployment (x86_64 PC / ARM64 Jetson).
 
 ---
 
-## 1. Prerequisites and Environment Setup
-Before proceeding with the installation, ensure the following system dependencies are met:
-- **Operating System**: Ubuntu 22.04 LTS (Jammy Jellyfish) is highly recommended for native ROS2 Humble compatibility.
-- **Docker Engine**: Required for environment isolation.
-- **Docker Compose v2.0+**: Utilized for managing multi-container configurations and environment variable substitution.
+## 1. System Specifications
+- **Base OS**: Ubuntu 22.04 LTS (Jammy Jellyfish)
+- **Middleware**: ROS2 Humble Hawksbill
+- **Supported Hardware**: 
+    - **UGV Models**: UGV ROVER, UGV BEAST, RASP ROVER
+    - **Sensors**: Livox Mid-360, LDLiDAR (LD06, LD19, STL27L), Intel Realsense D435i
+- **Containers**: Docker Engine with Docker Compose v2.0+
 
 ---
 
-## 2. Installation and Initial Configuration
+## 2. Setup and Installation
 
-### 2.1 Repository Cloning
-Initialize the workspace by cloning the repository into your preferred ROS2 workspace directory.
+### 2.1 Environment Configuration
+The project uses a root `.env` file for centralized configuration. Ensure this file exists in the project root before building.
+
 ```bash
-# Recommended directory structure: ~/ros2_ws/ugv_ws
+# Clone repository
 mkdir -p ~/ros2_ws && cd ~/ros2_ws
 git clone https://github.com/SeyeongW/FSD_Vehicle.git ugv_ws
 cd ugv_ws
 ```
 
-### 2.2 Docker Image Reconstruction
-Build the environment images tailored for the target architecture. This process includes installing pinned versions of libraries such as OpenCV, PyTorch, and Livox SDK2.
+### 2.2 Docker Image Provisioning
+Build images tailored for your target platform. This process installs all system dependencies including OpenCV, PyTorch, and navigation stacks.
+
 ```bash
-# For PC-based development (x86_64)
+# For PC (Simulation/Development)
 bash docker/run.sh build-pc
 
-# For Jetson-based physical deployment (ARM64)
+# For physical deployment (Jetson Orin/Nano)
 bash docker/run.sh build-jetson
 ```
-
-### 2.3 Container Execution and Hardware Verification
-Execute the environment using the unified entry script.
-```bash
-# Launch PC environment
-bash docker/run.sh pc
-
-# Launch Jetson environment
-bash docker/run.sh jetson
-```
-Note: The `run.sh` script automatically verifies the connectivity of pre-configured serial ports (e.g., `/dev/ttyTHS1`). If hardware is not connected, a warning will be displayed; however, the container will still initialize for simulation purposes.
 
 ---
 
 ## 3. Workspace Initialization (Inside Container)
-Upon first container entry, binary libraries and core ROS2 packages must be compiled. 
 
-### 3.1 External Library Compilation
+After establishing the container environment, initialize the ROS2 workspace.
+
+### 3.1 Initial Build Sequence
 ```bash
-# Compile AprilTag detection library (C-based dependency)
+# 1. Enter the container
+bash docker/run.sh pc
+
+# 2. Build AprilTag dependency (Native C)
 bash build_apriltag.sh
-```
 
-### 3.2 Full Workspace Compilation
-Execute the primary build script to resolve dependencies and compile all internal packages using `colcon`.
-```bash
+# 3. Full workspace compilation
 bash build_first.sh
 ```
 
 ---
 
-## 4. Development and Operational Workflow
+## 4. Software Architecture
 
-### 4.1 Incremental Builds
-For frequent source code updates, use the common build script to minimize compilation time.
+### 4.1 Core Packages (`src/ugv_main`)
+- `ugv_base_node`: Differential kinematics and odometry calculation.
+- `ugv_bringup`: Hardware interface for motor control and sensor drivers.
+- `ugv_nav`: Navigation2 integration including DWA/TEB local planners.
+- `ugv_slam`: SLAM configurations (Gmapping, Cartographer, Rtabmap).
+- `ugv_description`: URDF/Xacro models for all supported UGV variants.
+- `ugv_gazebo`: Simulation environments and Gazebo-specific plugins.
+- `ugv_vision`: Computer vision modules (AprilTag tracking, YOLO).
+- `ugv_chat_ai`: LLM-based interaction (Ollama/AI interface).
+
+### 4.2 Dependency Layer (`src/ugv_else`)
+Includes integrations for `cartographer`, `teb_local_planner`, `vizanti`, and various LiDAR drivers.
+
+---
+
+## 5. Operational Manual
+
+### 5.1 Teleoperation and Basic Control
 ```bash
-bash build_common.sh
-source install/setup.bash
+# Export the model before launching
+export UGV_MODEL=ugv_rover # Options: ugv_rover, ugv_beast, rasp_rover
+
+# Visualization check (RViz)
+ros2 launch ugv_description display.launch.py use_rviz:=true
+
+# Keyboard control
+ros2 run ugv_tools keyboard_ctrl
+
+# Joystick control (requires controller connection)
+ros2 launch ugv_tools teleop_twist_joy.launch.py
 ```
 
-### 4.2 Simulation (Gazebo/RViz)
-Launch the full SLAM and Navigation stack in the virtual Gazebo environment.
+### 5.2 Sensor/Hardware Bringup
 ```bash
-ros2 launch ugv_gazebo slam_nav.launch.py
-```
-
-### 4.3 Hardware Bringup
-Execute the core driver nodes to initialize LiDAR sensors and motor controllers.
-```bash
+# Launch LiDAR and Chassis drivers
+# Automatically selects LiDAR model based on environment variables
 ros2 launch ugv_bringup bringup_lidar.launch.py
 ```
 
+### 5.3 Vision-based Interaction (AprilTag)
+```bash
+# Basic camera bringup
+ros2 launch ugv_vision camera.launch.py
+
+# AprilTag target tracking
+ros2 run ugv_vision apriltag_track_1
+```
+
+### 5.4 Mapping (SLAM)
+Support for 2D and 3D mapping using various algorithms.
+
+- **Gmapping (2D)**:
+  ```bash
+  ros2 launch ugv_slam gmapping.launch.py
+  # Save map: ./save_2d_gmapping_map.sh
+  ```
+- **Cartographer (2D/3D)**:
+  ```bash
+  ros2 launch ugv_slam cartographer.launch.py
+  ```
+- **RTAB-Map (3D RGB-D)**:
+  ```bash
+  ros2 launch ugv_slam rtabmap_rgbd.launch.py
+  ```
+
+### 5.5 Navigation2 (Autonomous Driving)
+Supports multiple localization and local planning options.
+```bash
+# Basic Navigation (AMCL + TEB)
+ros2 launch ugv_nav nav.launch.py use_localization:=amcl use_localplan:=teb
+
+# Simultaneous SLAM and Navigation
+ros2 launch ugv_nav slam_nav.launch.py
+```
+
 ---
 
-## 5. Technical Architecture and Configuration
+## 6. Gazebo Simulation Environment
 
-- **Workspace Path Mapping**: The host's current directory is bi-directionally mounted to `/ros2_ws/ugv_ws`, enabling live code editing via host-side IDEs.
-- **Hardware Permissions**: Root access to `dialout`, `audio`, and `video` groups is pre-configured to handle serial MCU communication and sensor data acquisition.
-- **Environment Variables**: Key parameters such as `ROS_DOMAIN_ID`, `SERIAL_PORT`, and `UGV_MODEL` are managed via the `.env` file located in the project root.
-- **Project Structure**:
-    - `src/ugv_main`: Primary development area for FSD-specific algorithms and control logic.
-    - `src/ugv_else`: Integration layer for 3rd party drivers (Livox, Realsense, LDLiDAR).
+For pure simulation development, use the Gazebo-specific launch files.
+
+### 6.1 Simulation Bringup
+```bash
+# Launch house environment with UGV model
+ros2 launch ugv_gazebo bringup.launch.py
+```
+
+### 6.2 Simulation Scenarios
+- **Autonomous Exploration**: 
+  ```bash
+  ros2 launch explore_lite explore.launch.py
+  ```
+- **AI Interaction Test**: 
+  ```bash
+  ros2 run ugv_chat_ai app
+  ```
 
 ---
+
+## 7. Technical Notes and Deployment
+- **Network Stack**: Configured with `network_mode: host` for low-latency ROS2 discovery.
+- **Hardware Mapping**: Serial controllers are mapped to `/dev/ttyTHS1` (Jetson) or `/dev/ttyUSB0` (PC) via `.env`.
+- **User Permissions**: Automated `dialout` and `audio` group assignments for immediate hardware access.
 
 **Maintainer**: SeyeongW  
-For technical inquiries or bug reports, please refer to the project's Issue tracker.
+For architectural details or contribution guidelines, please refer to the project documentation.
