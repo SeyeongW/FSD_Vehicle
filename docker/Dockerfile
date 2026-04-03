@@ -103,5 +103,9 @@ WORKDIR /ros2_ws/ugv_ws
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# ── 7. .bashrc 자동 설정 ────────────────────────────────
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc \
+    && echo "if [ -f /ros2_ws/ugv_ws/install/setup.bash ]; then source /ros2_ws/ugv_ws/install/setup.bash; fi" >> /root/.bashrc
+
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]
