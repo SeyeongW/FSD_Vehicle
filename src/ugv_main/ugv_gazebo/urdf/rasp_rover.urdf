@@ -1,6 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<robot
-  name="rasp_rover">
+<robot name="rasp_rover" xmlns:xacro="http://ros.org/wiki/xacro">
   <link name="base_footprint"></link>
   <link
     name="base_link">
@@ -271,59 +269,11 @@
     <axis
       xyz="0 1 0" />
   </joint>
-  <link
-    name="base_lidar_link">
-    <inertial>
-      <origin
-        xyz="0 -8.5259736538555E-19 0.0165546434494574"
-        rpy="0 0 0" />
-      <mass
-        value="0.0418000091653573" />
-      <inertia
-        ixx="8.26853377699878E-06"
-        ixy="2.40188591344428E-23"
-        ixz="-8.79312987446486E-22"
-        iyy="8.26853377699876E-06"
-        iyz="2.55603864237559E-22"
-        izz="8.32524607487378E-06" />
-    </inertial>
-    <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="package://ugv_description/meshes/rasp_rover/base_lidar_link.stl" />
-      </geometry>
-      <material
-        name="">
-        <color
-          rgba="0.627450980392157 0.627450980392157 0.627450980392157 1" />
-      </material>
-    </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="package://ugv_description/meshes/rasp_rover/base_lidar_link.stl" />
-      </geometry>
-    </collision>
-  </link>
-  <joint
-    name="base_lidar_link_joint"
-    type="fixed">
-    <origin
-      xyz="0.0316958390518911 -0.00101477740749894 0.0976480280297308"
-      rpy="0 0 0" />
-    <parent
-      link="base_link" />
-    <child
-      link="base_lidar_link" />
-    <axis
-      xyz="0 0 0" />
-  </joint>
+  <xacro:include filename="$(find ugv_description)/urdf/mid360.xacro" />
+  <xacro:mid360 name="livox" parent="base_link">
+    <origin xyz="-0.05 0 0.08" rpy="0 0 0" /> 
+  </xacro:mid360>
+
   <link
     name="pt_base_link">
     <inertial>
