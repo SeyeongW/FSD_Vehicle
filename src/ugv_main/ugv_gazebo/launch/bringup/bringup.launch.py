@@ -20,7 +20,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, SetEnvironmentVariable
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch.actions import ExecuteProcess
@@ -33,6 +33,21 @@ def generate_launch_description():
 
     # Get the use_sim_time parameter from the launch file
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+
+    # Set GAZEBO_PLUGIN_PATH to include the Livox simulation plugin
+    livox_plugin_path = os.path.join(
+        get_package_share_directory('ros2_livox_simulation'), '..', '..', 'lib'
+    )
+    # Normalize the path
+    livox_plugin_path = os.path.normpath(livox_plugin_path)
+    
+    current_plugin_path = os.environ.get('GAZEBO_PLUGIN_PATH', '')
+    new_plugin_path = livox_plugin_path + ':' + current_plugin_path if current_plugin_path else livox_plugin_path
+
+    set_gazebo_plugin_path = SetEnvironmentVariable(
+        name='GAZEBO_PLUGIN_PATH',
+        value=new_plugin_path
+    )
 
     # Get the world file
     world = os.path.join(
@@ -73,6 +88,9 @@ def generate_launch_description():
 
     # Create a launch description
     ld = LaunchDescription()
+
+    # Set env var BEFORE gazebo starts
+    ld.add_action(set_gazebo_plugin_path)
 
     # Add the commands to the launch description
     ld.add_action(gzserver_cmd)
