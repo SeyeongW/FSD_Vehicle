@@ -1,4 +1,3 @@
-<?xml version="1.0" ?>
 <robot name="ugv_rover" xmlns:xacro="http://ros.org/wiki/xacro">
   <link name="base_footprint"></link>
   <link
@@ -324,12 +323,19 @@
     <axis
       xyz="0 0 0" />
   </joint>
-  
-  <xacro:include filename="$(find ugv_description)/urdf/mid360.xacro" />
-  <xacro:mid360 name="livox" parent="base_link">
-    <origin xyz="-0.05 0 0.08" rpy="0 0 0" /> 
-  </xacro:mid360>
-  
+  <link name="livox">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.01"/>
+      <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+    </inertial>
+  </link>
+  <joint name="livox_joint" type="fixed">
+    <origin xyz="-0.05 0 0.08" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="livox"/>
+  </joint>
+
   <link
     name="pt_base_link">
     <inertial>

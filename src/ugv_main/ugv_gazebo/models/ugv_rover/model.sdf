@@ -300,74 +300,69 @@
       </sensor>
   </link>
   
-  <link name='base_lidar_link'>
-  <pose relative_to='base_lidar_link_joint'>0 0 0 0 -0 0</pose>
-    <inertial>
-      <pose>0 0 0 0 -0 0</pose>
-      <mass>0.0418000091653573</mass>
-      <inertia>
-        <ixx>8.26853377699878E-06</ixx>
-        <ixy>-2.32283058129169E-22</ixy>
-        <ixz>-3.51417304718746E-22</ixz>
-        <iyy>8.26853377699876E-06</iyy>
-        <iyz>2.66754484573224E-23</iyz>
-        <izz>8.32524607487378E-06</izz> 
-       </inertia>
-    </inertial>
-    <visual name='base_lidar_link_visual'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/base_lidar_link.stl</uri>
-          </mesh>
-      </geometry>
-    </visual>
-    <collision name='base_lidar_link_collision'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/base_lidar_link.stl</uri>
-          </mesh>
-      </geometry>
-    </collision>
-    
-    <sensor name='hls_lfcd_lds' type='ray'>
-        <always_on>true</always_on>
+    <link name='livox'>
+      <pose relative_to='livox_joint'>0 0 0 0 -0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 -0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.000453333</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.000453333</iyy>
+          <iyz>0</iyz>
+          <izz>0.00024</izz>
+        </inertia>
+      </inertial>
+      <visual name='livox_visual'>
+        <geometry>
+          <box>
+            <size>0.1 0.06 0.06</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.2 0.2 0.8 1</ambient>
+          <diffuse>0.2 0.2 0.8 1</diffuse>
+        </material>
+      </visual>
+      <sensor name='livox' type='ray'>
         <visualize>true</visualize>
-        <pose>0 0 0.04 0 -0 0</pose>
         <update_rate>10</update_rate>
-        <ray>
-          <scan>
-            <horizontal>
-              <samples>360</samples>
-              <resolution>1.000000</resolution>
-              <min_angle>0.000000</min_angle>
-              <max_angle>6.280000</max_angle>
-            </horizontal>
-          </scan>
-          <range>
-            <min>0.160000</min>
-            <max>3.5</max>
-            <resolution>0.015000</resolution>
-          </range>
-          <noise>
-            <type>gaussian</type>
-            <mean>0.0</mean>
-            <stddev>0.01</stddev>
-          </noise>
-        </ray>
-        <plugin name='ugv_laserscan' filename='libgazebo_ros_ray_sensor.so'>
-          <ros>
-            <!-- <namespace>/tb3</namespace> -->
-            <remapping>~/out:=scan</remapping>
-          </ros>
-          <output_type>sensor_msgs/LaserScan</output_type>
-          <frame_name>base_lidar_link</frame_name>
+        <plugin name='livox_plugin' filename='libros2_livox.so'>
+          <ray>
+            <scan>
+              <horizontal>
+                <samples>100</samples>
+                <resolution>1</resolution>
+                <min_angle>0</min_angle>
+                <max_angle>6.2831852</max_angle>
+              </horizontal>
+              <vertical>
+                <samples>360</samples>
+                <resolution>1</resolution>
+                <min_angle>-0.126017</min_angle>
+                <max_angle>0.96378</max_angle>
+              </vertical>
+            </scan>
+            <range>
+              <min>0.1</min>
+              <max>200.0</max>
+              <resolution>0.002</resolution>
+            </range>
+            <noise>
+              <type>gaussian</type>
+              <mean>0.0</mean>
+              <stddev>0.01</stddev>
+            </noise>
+          </ray>
+          <visualize>false</visualize>
+          <samples>40000</samples>
+          <downsample>1</downsample>
+	  <csv_file_name>/home/seo/ros2_ws/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv</csv_file_name>
+          <topic>mid360</topic>
         </plugin>
       </sensor>
-  </link>
+    </link>
   
   <link name='pt_base_link'>
   <pose relative_to='pt_base_link_joint'>0 0 0 0 -0 0</pose>
@@ -589,6 +584,12 @@
       </axis>
   </joint>
   
+  <joint name='livox_joint' type='fixed'>
+    <pose relative_to='base_link'>-0.05 0 0.08 0 -0 0</pose>
+    <parent>base_link</parent>
+    <child>livox</child>
+  </joint>
+
   <joint name='3d_camera_link_joint' type='fixed'>
       <pose relative_to='base_footprint'>0.06577 0 0.101953 0 -0 0</pose>
       <parent>base_footprint</parent>
@@ -598,14 +599,6 @@
       </axis>
   </joint>
   
-  <joint name='base_lidar_link_joint' type='fixed'>
-    <pose relative_to='base_footprint'>0.040275 0 0.12 0 -0 0</pose>
-      <parent>base_footprint</parent>
-    <child>base_lidar_link</child>
-       <axis>
-        <xyz>0 0 1</xyz>
-      </axis>
-  </joint>
   
   <joint name='pt_base_link_joint' type='fixed'>
     <pose relative_to='base_footprint'>-0.018432 0 0.12 0 -0 0</pose>
