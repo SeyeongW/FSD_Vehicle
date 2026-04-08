@@ -169,5 +169,19 @@ ros2 launch ugv_gazebo bringup.launch.py
 - **Hardware Mapping**: Serial controllers are mapped to `/dev/ttyTHS1` (Jetson) or `/dev/ttyUSB0` (PC) via `.env`.
 - **User Permissions**: Automated `dialout` and `audio` group assignments for immediate hardware access.
 
+---
+
+## 8. Quick Commands Reference (자주 쓰는 명령어)
+
+| Command (명령어) | Description (설명) |
+|------------------|------------------|
+| `build_pc` | Windows: PC 가상환경 (도커) 이미지 빌드 |
+| `run_pc` | Windows: PC 가상환경 (도커) 실행 및 접속 |
+| `make build_pc` | Linux/WSL: PC 가상환경 이미지 빌드 |
+| `make run_pc` | Linux/WSL: PC 가상환경 실행 및 접속 |
+| `bash build_first.sh` | 환경 내 전체 워크스페이스 빌드 (Livox 자동 다운로드 포함) |
+| `bash docker/run.sh jetson` | Jetson 배포환경 시작 |
+| `bash docker/run.sh stop` | 실행 중인 컨테이너 중지 |
+
 **Maintainer**: SeyeongW  
 For architectural details or contribution guidelines, please refer to the project documentation.
