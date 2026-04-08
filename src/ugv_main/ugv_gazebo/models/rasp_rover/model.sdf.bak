@@ -1,13 +1,13 @@
 <?xml version='1.0'?>
 <sdf version='1.5'>
-  <model name='ugv_rover'>
+  <model name='rasp_rover'>
    <pose>0.0 0.0 0.0 0.0 0.0 0</pose>
    
   <link name='base_footprint'/>
   
   <link name='base_link'>
-  <pose relative_to='base_joint'>0 0 0 0 0 0</pose>
     <inertial>
+      <pose relative_to='base_joint'>0 0 0 0 0 0</pose>
       <mass>2.78375064359473</mass>
       <inertia>
         <ixx>0.00651567554169617</ixx>
@@ -23,7 +23,7 @@
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/base_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/base_link.stl</uri>
           </mesh>
       </geometry>
     </visual>
@@ -32,7 +32,7 @@
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/base_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/base_link.stl</uri>
           </mesh>
       </geometry>
     </collision>
@@ -95,274 +95,208 @@
   
   <link name='left_up_wheel_link'>
   <pose relative_to='left_up_wheel_link_joint'>0 0 0 0 -0 0</pose>
-    <inertial>
-     <pose>0 0 0 1.5708 -0 0</pose> 
-      <mass>0.207085933743005</mass>
-      <inertia>
-        <ixx>0.000116541923504163</ixx>
-        <ixy>-1.59309191113245E-55</ixy>
-        <ixz>-3.43238458333891E-37</ixz>
-        <iyy>0.000170742352371108</iyy>
-        <iyz>-3.6165187302327E-37</iyz>
-        <izz>0.000116541923504163</izz>
-       </inertia>
-    </inertial>
+        <inertial>
+          <pose>-0 0.02679 0 0 -0 0</pose>
+          <mass>0.210587</mass>
+          <inertia>
+            <ixx>0.000115402</ixx>
+            <ixy>-1.32502e-18</ixy>
+            <ixz>-4.34981e-35</ixz>
+            <iyy>0.000168891</iyy>
+            <iyz>2.37169e-21</iyz>
+            <izz>0.000115402</izz>
+          </inertia>
+        </inertial>
     <visual name='left_up_wheel_link_visual'>
-      <pose>0 0 0 1.5708 -0 0</pose>
+      <pose>0 0 0 0 -0 0</pose>
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/left_up_wheel_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/left_up_wheel_link.stl</uri>
           </mesh>
       </geometry>
     </visual>
     <collision name='left_up_wheel_link_collision'>
-      <pose>0 0 0 1.5708 -0 0</pose>
+      <pose>0 0 0 0 -0 0</pose>
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/left_up_wheel_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/left_up_wheel_link.stl</uri>
           </mesh>
       </geometry>
     </collision>
   </link>
   
   <link name='left_down_wheel_link'>
-  <pose relative_to='left_down_wheel_link_joint'>0 0 0 0 -0 0</pose>
-    <inertial>
-      <pose>0 0 0 1.5708 -0 0</pose>
-      <mass>0.207085933743005</mass>
-      <inertia>
-        <ixx>0.000116541923504163</ixx>
-        <ixy>-1.59309191113245E-55</ixy>
-        <ixz>-3.43238458333891E-37</ixz>
-        <iyy>0.000170742352371108</iyy>
-        <iyz>-3.6165187302327E-37</iyz>
-        <izz>0.000116541923504163</izz>
-       </inertia>        
-    </inertial>
+        <pose relative_to='left_down_wheel_link_joint'>0 0 0 0 -0 0</pose>
+        <inertial>
+          <pose>-0 0.02679 0 0 -0 0</pose>
+          <mass>0.210587</mass>
+          <inertia>
+            <ixx>0.000115402</ixx>
+            <ixy>-1.32809e-18</ixy>
+            <ixz>1.27629e-32</ixz>
+            <iyy>0.000168891</iyy>
+            <iyz>-5.16307e-19</iyz>
+            <izz>0.000115402</izz>
+          </inertia>
+        </inertial>
     <visual name='left_down_wheel_link_visual'>
-      <pose>0 0 0 1.5708 -0 0</pose>
+      <pose>0 0 0 0 -0 0</pose>
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/left_down_wheel_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/left_down_wheel_link.stl</uri>
           </mesh>
       </geometry>
     </visual>
     <collision name='left_down_wheel_link_collision'>
-      <pose>0 0 0 1.5708 -0 0</pose>
+      <pose>0 0 0 0 -0 0</pose>
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/left_down_wheel_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/left_down_wheel_link.stl</uri>
           </mesh>
       </geometry>
     </collision>
   </link>
   
   <link name='right_up_wheel_link'>
-  <pose relative_to='right_up_wheel_link_joint'>0 0 0 0 -0 0</pose>
-    <inertial>
-      <pose>0 0 0 1.5708 -0 0</pose>
-      <mass>0.207085933743005</mass>
-      <inertia>
-        <ixx>0.000116541923504163</ixx>
-        <ixy>-1.59309191113245E-55</ixy>
-        <ixz>-3.43238458333891E-37</ixz>
-        <iyy>0.000170742352371108</iyy>
-        <iyz>-3.6165187302327E-37</iyz>
-        <izz>0.000116541923504163</izz> 
-       </inertia>
-    </inertial>
+        <pose relative_to='right_up_wheel_link_joint'>0 0 0 0 -0 0</pose>
+        <inertial>
+          <pose>0 -0.02679 0 0 -0 0</pose>
+          <mass>0.210587</mass>
+          <inertia>
+            <ixx>0.000115402</ixx>
+            <ixy>-1.32502e-18</ixy>
+            <ixz>-4.34981e-35</ixz>
+            <iyy>0.000168891</iyy>
+            <iyz>2.37169e-21</iyz>
+            <izz>0.000115402</izz>
+          </inertia>
+        </inertial>
     <visual name='right_up_wheel_link_visual'>
-      <pose>0 0 0 1.5708 -0 0</pose>
+      <pose>0 0 0 0 -0 0</pose>
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/right_up_wheel_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/right_up_wheel_link.stl</uri>
           </mesh>
       </geometry>
     </visual>
     <collision name='right_up_wheel_link_collision'>
-      <pose>0 0 0 1.5708 -0 0</pose>
+      <pose>0 0 0 0 -0 0</pose>
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/right_up_wheel_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/right_up_wheel_link.stl</uri>
           </mesh>
       </geometry>
     </collision>
   </link>
   
   <link name='right_down_wheel_link'>      
-  <pose relative_to='right_down_wheel_link_joint'>0 0 0 0 -0 0</pose>
-    <inertial>
-      <pose>0 0 0 1.5708 -0 0</pose>
-      <mass>0.207085933743005</mass>
-      <inertia>
-        <ixx>0.000116541923504163</ixx>
-        <ixy>-1.59309191113245E-55</ixy>
-        <ixz>-3.43238458333891E-37</ixz>
-        <iyy>0.000170742352371108</iyy>
-        <iyz>-3.6165187302327E-37</iyz>
-        <izz>0.000116541923504163</izz>  
-        </inertia>
-    </inertial>
+        <pose relative_to='right_down_wheel_link_joint'>0 0 0 0 -0 0</pose>
+        <inertial>
+          <pose>0 -0.02679 0 0 -0 0</pose>
+          <mass>0.210587</mass>
+          <inertia>
+            <ixx>0.000115402</ixx>
+            <ixy>-1.32502e-18</ixy>
+            <ixz>1.27637e-32</ixz>
+            <iyy>0.000168891</iyy>
+            <iyz>-5.18688e-19</iyz>
+            <izz>0.000115402</izz>
+          </inertia>
+        </inertial>
     <visual name='right_down_wheel_link_visual'>
-      <pose>0 0 0 1.5708 -0 0</pose>
+      <pose>0 0 0 0 -0 0</pose>
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/right_down_wheel_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/right_down_wheel_link.stl</uri>
           </mesh>
       </geometry>
     </visual>
     <collision name='right_down_wheel_link_collision'>
-      <pose>0 0 0 1.5708 -0 0</pose>
+      <pose>0 0 0 0 -0 0</pose>
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/right_down_wheel_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/right_down_wheel_link.stl</uri>
           </mesh>
       </geometry>
     </collision>
   </link>
  
-  <link name='3d_camera_link'>
-  <pose relative_to='3d_camera_link_joint'>0 0 0 0 -0 0</pose>
+  <link name='base_lidar_link'>
+  <pose relative_to='base_lidar_link_joint'>0 0 0 0 -0 0</pose>
     <inertial>
       <pose>0 0 0 0 -0 0</pose>
-      <mass>0.043316</mass>
+      <mass>0.0418000091653573</mass>
       <inertia>
-        <ixx>3.27216283333333E-05</ixx>
-        <ixy>1.12259284465067E-22</ixy>
-        <ixz>-1.19114008207636E-22</ixz>
-        <iyy>3.87317233333333E-06</iyy>
-        <iyz>-2.37303626261453E-22</iyz>
-        <izz>3.09348433333333E-05</izz>
+        <ixx>8.26853377699878E-06</ixx>
+        <ixy>-2.32283058129169E-22</ixy>
+        <ixz>-3.51417304718746E-22</ixz>
+        <iyy>8.26853377699876E-06</iyy>
+        <iyz>2.66754484573224E-23</iyz>
+        <izz>8.32524607487378E-06</izz> 
        </inertia>
     </inertial>
-    <visual name='3d_camera_link_visual'>
+    <visual name='base_lidar_link_visual'>
       <pose>0 0 0 0 -0 0</pose>
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/3d_camera_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/base_lidar_link.stl</uri>
           </mesh>
       </geometry>
     </visual>
-    <collision name='3d_camera_link_collision'>
+    <collision name='base_lidar_link_collision'>
       <pose>0 0 0 0 -0 0</pose>
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/3d_camera_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/base_lidar_link.stl</uri>
           </mesh>
       </geometry>
     </collision>
-
-      <sensor name="camera" type="depth">
-        <pose>0 0 0 0 -0 0</pose>
+    
+    <sensor name='hls_lfcd_lds' type='ray'>
         <always_on>true</always_on>
         <visualize>true</visualize>
-        <update_rate>30</update_rate>
-        <camera name="intel_realsense_r200">
-          <horizontal_fov>1.02974</horizontal_fov>
-          <image>
-            <width>640</width>
-            <height>480</height>
-            <format>R8G8B8</format>
-          </image>
-          <clip>
-            <near>0.02</near>
-            <far>300</far>
-          </clip>
+        <pose>0 0 0.04 0 -0 0</pose>
+        <update_rate>10</update_rate>
+        <ray>
+          <scan>
+            <horizontal>
+              <samples>360</samples>
+              <resolution>1.000000</resolution>
+              <min_angle>0.000000</min_angle>
+              <max_angle>6.280000</max_angle>
+            </horizontal>
+          </scan>
+          <range>
+            <min>0.160000</min>
+            <max>3.5</max>
+            <resolution>0.015000</resolution>
+          </range>
           <noise>
             <type>gaussian</type>
-            <!-- Noise is sampled independently per pixel on each frame.
-                  That pixel's noise value is added to each of its color
-                  channels, which at that point lie in the range [0,1]. -->
             <mean>0.0</mean>
-            <stddev>0.007</stddev>
+            <stddev>0.01</stddev>
           </noise>
-        </camera>
-          <plugin name="camera_driver" filename="libgazebo_ros_camera.so">
-            <ros>
-              <!-- <namespace>test_cam</namespace> -->
-              <!-- <remapping>image_raw:=image_demo</remapping> -->
-              <!-- <remapping>camera_info:=camera_info_demo</remapping> -->
-            </ros>
-            <!-- camera_name>omit so it defaults to sensor name</camera_name-->
-            <!-- frame_name>omit so it defaults to link name</frameName-->
-            <!-- <hack_baseline>0.07</hack_baseline> -->
-          </plugin>
-      </sensor>
-  </link>
-  
-    <link name='livox'>
-      <pose relative_to='livox_joint'>0 0 0 0 -0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 -0 0</pose>
-        <mass>0.4</mass>
-        <inertia>
-          <ixx>0.000453333</ixx>
-          <ixy>0</ixy>
-          <ixz>0</ixz>
-          <iyy>0.000453333</iyy>
-          <iyz>0</iyz>
-          <izz>0.00024</izz>
-        </inertia>
-      </inertial>
-      <visual name='livox_visual'>
-        <geometry>
-          <box>
-            <size>0.1 0.06 0.06</size>
-          </box>
-        </geometry>
-        <material>
-          <ambient>0.2 0.2 0.8 1</ambient>
-          <diffuse>0.2 0.2 0.8 1</diffuse>
-        </material>
-      </visual>
-      <sensor name='livox' type='ray'>
-        <visualize>true</visualize>
-        <update_rate>10</update_rate>
-        <plugin name='livox_plugin' filename='libros2_livox.so'>
-          <ray>
-            <scan>
-              <horizontal>
-                <samples>100</samples>
-                <resolution>1</resolution>
-                <min_angle>0</min_angle>
-                <max_angle>6.2831852</max_angle>
-              </horizontal>
-              <vertical>
-                <samples>360</samples>
-                <resolution>1</resolution>
-                <min_angle>-0.126017</min_angle>
-                <max_angle>0.96378</max_angle>
-              </vertical>
-            </scan>
-            <range>
-              <min>0.1</min>
-              <max>200.0</max>
-              <resolution>0.002</resolution>
-            </range>
-            <noise>
-              <type>gaussian</type>
-              <mean>0.0</mean>
-              <stddev>0.01</stddev>
-            </noise>
-          </ray>
-          <visualize>false</visualize>
-          <samples>40000</samples>
-          <downsample>1</downsample>
-	  <csv_file_name>/home/seyeongw/ros2_ws/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv</csv_file_name>
-          <topic>mid360</topic>
+        </ray>
+        <plugin name='ugv_laserscan' filename='libgazebo_ros_ray_sensor.so'>
+          <ros>
+            <!-- <namespace>/tb3</namespace> -->
+            <remapping>~/out:=scan</remapping>
+          </ros>
+          <output_type>sensor_msgs/LaserScan</output_type>
+          <frame_name>base_lidar_link</frame_name>
         </plugin>
       </sensor>
-    </link>
+  </link>
   
   <link name='pt_base_link'>
   <pose relative_to='pt_base_link_joint'>0 0 0 0 -0 0</pose>
@@ -383,7 +317,7 @@
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_base_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/pt_base_link.stl</uri>
           </mesh>
       </geometry>
     </visual>
@@ -392,7 +326,7 @@
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_base_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/pt_base_link.stl</uri>
           </mesh>
       </geometry>
     </collision>
@@ -417,7 +351,7 @@
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_link1.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/pt_link1.stl</uri>
           </mesh>
       </geometry>
     </visual>
@@ -426,7 +360,7 @@
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_link1.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/pt_link1.stl</uri>
           </mesh>
       </geometry>
     </collision>
@@ -451,7 +385,7 @@
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_link2.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/pt_link2.stl</uri>
           </mesh>
       </geometry>
     </visual>
@@ -460,7 +394,7 @@
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_link2.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/pt_link2.stl</uri>
           </mesh>
       </geometry>
     </collision>
@@ -485,7 +419,7 @@
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_camera_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/pt_camera_link.stl</uri>
           </mesh>
       </geometry>
     </visual>
@@ -494,11 +428,11 @@
       <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_camera_link.stl</uri>
+            <uri>model://ugv_description/meshes/rasp_rover/pt_camera_link.stl</uri>
           </mesh>
       </geometry>
     </collision>
-    <sensor name="pt_camera" type="camera">
+      <sensor name="pt_camera" type="camera">
         <pose>0 0 0 0 -0 0</pose>
         <always_on>true</always_on>
         <visualize>true</visualize>
@@ -533,11 +467,11 @@
             <!-- frame_name>omit so it defaults to link name</frameName-->
             <!-- <hack_baseline>0.07</hack_baseline> -->
           </plugin>
-      </sensor>
+      </sensor>  
   </link>
   
   <joint name='base_joint' type='fixed'>
-    <pose relative_to='base_footprint'>0.00046 0 0.08 0 -0 0</pose>
+    <pose relative_to='base_footprint'>0.00046 0 0.03 0 -0 0</pose>
     <parent>base_footprint</parent>
     <child>base_link</child>
   </joint>
@@ -549,7 +483,7 @@
   </joint>
  
   <joint name='left_up_wheel_link_joint' type='revolute'>
-    <pose relative_to='base_footprint'>0.08596 0.08726 0.038788 1.5708 -0 0</pose>
+    <pose relative_to='base_footprint'>0.049926 0.03801 0.036748 0 -0 0</pose>
       <parent>base_footprint</parent>
     <child>left_up_wheel_link</child>
        <axis>
@@ -558,7 +492,7 @@
   </joint>
   
   <joint name='left_down_wheel_link_joint' type='revolute'>
-    <pose relative_to='base_footprint'>-0.08504 0.08726 0.038788 1.5708 -0 0</pose>
+    <pose relative_to='base_footprint'>-0.047072 0.03801 0.036748 0 -0 0</pose>
       <parent>base_footprint</parent>
     <child>left_down_wheel_link</child>
        <axis>
@@ -567,7 +501,7 @@
   </joint>
   
   <joint name='right_up_wheel_link_joint' type='revolute'>
-    <pose relative_to='base_footprint'>0.08596 -0.08726 0.038788 1.5708 -0 0</pose>
+    <pose relative_to='base_footprint'>0.049926 -0.03801 0.036748 0 -0 0</pose>
       <parent>base_footprint</parent>
     <child>right_up_wheel_link</child>
        <axis>
@@ -576,7 +510,7 @@
   </joint>
   
   <joint name='right_down_wheel_link_joint' type='revolute'>
-    <pose relative_to='base_footprint'>-0.08504 -0.08726 0.038788 1.5708 -0 0</pose>
+    <pose relative_to='base_footprint'>-0.047072 -0.03801 0.036748 0 -0 0</pose>
       <parent>base_footprint</parent>
     <child>right_down_wheel_link</child>
        <axis>
@@ -584,24 +518,17 @@
       </axis>
   </joint>
   
-  <joint name='livox_joint' type='fixed'>
-    <pose relative_to='base_link'>-0.05 0 0.08 0 -0 0</pose>
-    <parent>base_link</parent>
-    <child>livox</child>
-  </joint>
-
-  <joint name='3d_camera_link_joint' type='fixed'>
-      <pose relative_to='base_footprint'>0.06577 0 0.101953 0 -0 0</pose>
+  <joint name='base_lidar_link_joint' type='fixed'>
+    <pose relative_to='base_link'>0.0316958390518911 -0.00101477740749894 0.1276480280297308 0 -0 0</pose>
       <parent>base_footprint</parent>
-      <child>3d_camera_link</child>
+    <child>base_lidar_link</child>
        <axis>
         <xyz>0 0 1</xyz>
       </axis>
   </joint>
   
-  
   <joint name='pt_base_link_joint' type='fixed'>
-    <pose relative_to='base_footprint'>-0.018432 0 0.12 0 -0 0</pose>
+    <pose relative_to='base_footprint'>-0.02525 -0.001015 0.127648 0 -0 0</pose>
       <parent>base_footprint</parent>
     <child>pt_base_link</child>
        <axis>
@@ -610,7 +537,7 @@
   </joint>   
   
   <joint name='pt_base_link_to_pt_link1' type='fixed'>
-    <pose relative_to='base_footprint'>-0.008281 0 0.168 0 -0 0</pose>
+    <pose relative_to='base_footprint'>-0.035401 -0.001015 0.165948 0 -0 0</pose>
       <parent>pt_base_link</parent>
     <child>pt_link1</child>
        <axis>
@@ -653,8 +580,8 @@
     <right_joint>right_down_wheel_link_joint</right_joint>
 
     <!-- kinematics -->
-    <wheel_separation>0.175</wheel_separation>
-    <wheel_separation>0.175</wheel_separation>
+    <wheel_separation>0.125</wheel_separation>
+    <wheel_separation>0.125</wheel_separation>
 
     <wheel_diameter>0.05</wheel_diameter>
     <wheel_diameter>0.05</wheel_diameter>

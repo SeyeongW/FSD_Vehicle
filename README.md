@@ -1,40 +1,35 @@
-# FSD Vehicle - UGV ROS2 개발 환경
-
-**Full Self-Driving Vehicle** 프로젝트 - Livox Mid-360 3D 라이다 탑재 UGV 자율주행 개발 환경
-
-## 개발 스택
-
-| 항목 | 내용 |
-|------|------|
-| OS | Ubuntu 22.04 |
-| ROS | ROS2 Humble |
-| 시뮬레이터 | Gazebo |
-| 라이다 | Livox Mid-360 |
-| 카메라 | Intel RealSense D435i |
-| 실행 플랫폼 | x86_64 PC / Jetson Orin Nano Super (JetPack 6) |
+# FSD_Vehicle: Advanced UGV Autonomous Driving Framework
+Professional ROS2 Humble-based development environment for UGV (Unmanned Ground Vehicle) research. Supports high-fidelity Gazebo simulation and multi-platform deployment (x86_64 PC / ARM64 Jetson).
 
 ---
 
-## 빠른 시작 (새 팀원 - 모든 PC 동일)
+## 1. System Specifications
+- **Base OS**: Ubuntu 22.04 LTS (Jammy Jellyfish)
+- **Middleware**: ROS2 Humble Hawksbill
+- **Supported Hardware**: 
+    - **UGV Models**: UGV ROVER, UGV BEAST, RASP ROVER
+    - **Sensors**: Livox Mid-360, LDLiDAR (LD06, LD19, STL27L), Intel Realsense D435i
+- **Containers**: Docker Engine with Docker Compose v2.0+
 
-### 1. 저장소 클론
+---
+
+## 2. Setup and Installation
+
+### 2.1 Environment Configuration
+The project uses a root `.env` file for centralized configuration. Ensure this file exists in the project root before building.
 
 ```bash
-git clone https://github.com/SeyeongW/FSD_Vehicle.git
-cd FSD_Vehicle
+# Clone repository
+mkdir -p ~/ros2_ws && cd ~/ros2_ws
+git clone https://github.com/SeyeongW/FSD_Vehicle.git ugv_ws
+cd ugv_ws
 ```
 
-### 2. 로봇 모델 설정
-
-`docker/.env` 파일에서 원하는 모델로 변경:
-```bash
-UGV_MODEL=ugv_rover   # ugv_rover / ugv_beast / rasp_rover
-```
-
-### 3. Docker 이미지 빌드 & 실행
+### 2.2 Docker Image Provisioning
+Build images tailored for your target platform. This process installs all system dependencies including OpenCV, PyTorch, and navigation stacks.
 
 ```bash
-# PC 개발환경 (첫 빌드 10~20분 소요)
+# For PC (Simulation/Development)
 # Windows (cmd/powershell):
 build_pc
 run_pc
@@ -42,95 +37,137 @@ run_pc
 # Linux / WSL:
 make build_pc
 make run_pc
-# (또는 ./build_pc.sh / ./run_pc.sh)
-```
+# (or ./build_pc.sh / ./run_pc.sh)
 
-### 4. 컨테이너 안에서 ROS 빌드 (최초 1회)
-
-```bash
-bash build_first.sh    # 외부 패키지 포함 전체 빌드
-```
-
-### 5. 이후 개발 시
-
-```bash
-# 컨테이너 실행
-bash docker/run.sh pc
-
-# 코드 수정 후 빌드
-bash build_common.sh
+# For physical deployment (Jetson Orin/Nano)
+bash docker/run.sh build-jetson
 ```
 
 ---
 
-## Jetson Orin Nano Super 배포
+## 3. Workspace Initialization (Inside Container)
 
+After establishing the container environment, initialize the ROS2 workspace.
+
+### 3.1 Initial Build Sequence
 ```bash
-# Jetson에서 클론
-git clone https://github.com/SeyeongW/FSD_Vehicle.git
-cd FSD_Vehicle
+# 1. Enter the container
+bash docker/run.sh pc
 
-# Jetson 이미지 빌드 & 실행 (30~40분 소요)
-bash docker/run.sh build-jetson
-bash docker/run.sh jetson
+# 2. Build AprilTag dependency (Native C)
+bash build_apriltag.sh
 
-# 컨테이너 안에서 빌드
+# 3. Full workspace compilation
 bash build_first.sh
 ```
 
 ---
 
-## 자주 쓰는 명령어
+## 4. Software Architecture
 
-| 명령어 | 설명 |
-|--------|------|
-| `run_pc` | PC 개발환경 시작 |
-| `bash docker/run.sh jetson` | Jetson 배포환경 시작 |
-| `bash docker/run.sh stop` | 컨테이너 중지 |
-| `build_pc` | PC 이미지 빌드 |
-| `bash docker/run.sh build-jetson` | Jetson 이미지 빌드 |
-| `bash build_common.sh` | ugv_main 패키지만 빌드 |
-| `bash build_first.sh` | 전체 빌드 (최초 1회) |
+### 4.1 Core Packages (`src/ugv_main`)
+- `ugv_base_node`: Differential kinematics and odometry calculation.
+- `ugv_bringup`: Hardware interface for motor control and sensor drivers.
+- `ugv_nav`: Navigation2 integration including DWA/TEB local planners.
+- `ugv_slam`: SLAM configurations (Gmapping, Cartographer, Rtabmap).
+- `ugv_description`: URDF/Xacro models for all supported UGV variants.
+- `ugv_gazebo`: Simulation environments and Gazebo-specific plugins.
+- `ugv_vision`: Computer vision modules (AprilTag tracking, YOLO).
+- `ugv_chat_ai`: LLM-based interaction (Ollama/AI interface).
 
----
-
-## 브랜치 전략
-
-```
-main          ← 안정 버전 (배포용)
-develop       ← 개발 통합 브랜치
-feature/xxx   ← 기능 개발 브랜치
-```
+### 4.2 Dependency Layer (`src/ugv_else`)
+Includes integrations for `cartographer`, `teb_local_planner`, `vizanti`, and various LiDAR drivers.
 
 ---
 
-## 패키지 구조
+## 5. Operational Manual
 
+### 5.1 Teleoperation and Basic Control
+```bash
+# Export the model before launching
+export UGV_MODEL=ugv_rover # Options: ugv_rover, ugv_beast, rasp_rover
+
+# Visualization check (RViz)
+ros2 launch ugv_description display.launch.py use_rviz:=true
+
+# Keyboard control
+ros2 run ugv_tools keyboard_ctrl
+
+# Joystick control (requires controller connection)
+ros2 launch ugv_tools teleop_twist_joy.launch.py
 ```
-FSD_Vehicle/
-├── docker/
-│   ├── Dockerfile          ← PC 개발환경 이미지
-│   ├── Dockerfile.jetson   ← Jetson 배포 이미지
-│   ├── entrypoint.sh       ← 컨테이너 시작 스크립트
-│   ├── .env                ← 환경변수 (UGV_MODEL 등)
-│   └── run.sh              ← 편의 실행 스크립트
-├── docker-compose.yml      ← PC 개발용
-├── docker-compose.jetson.yml ← Jetson 배포용
-└── src/
-    ├── ugv_main/           ← 메인 패키지 (직접 개발)
-    │   ├── ugv_description/    ← URDF, 메쉬 (Livox Mid-360 포함)
-    │   ├── ugv_gazebo/         ← Gazebo 시뮬레이션
-    │   ├── ugv_bringup/        ← 실제 로봇 bringup
-    │   ├── ugv_nav/            ← 자율주행 네비게이션
-    │   └── ugv_slam/           ← SLAM (LiDAR 기반)
-    ├── ugv_else/           ← 외부 패키지 (cartographer, teb 등)
-    ├── Livox-SDK2/             ← Livox SDK
-    ├── livox_ros_driver2/      ← Livox ROS2 드라이버
-    └── livox_laser_simulation_RO2/  ← Livox Gazebo 시뮬레이션
+
+### 5.2 Sensor/Hardware Bringup
+```bash
+# Launch LiDAR and Chassis drivers
+# Automatically selects LiDAR model based on environment variables
+ros2 launch ugv_bringup bringup_lidar.launch.py
+```
+
+### 5.3 Vision-based Interaction (AprilTag)
+```bash
+# Basic camera bringup
+ros2 launch ugv_vision camera.launch.py
+
+# AprilTag target tracking
+ros2 run ugv_vision apriltag_track_1
+```
+
+### 5.4 Mapping (SLAM)
+Support for 2D and 3D mapping using various algorithms.
+
+- **Gmapping (2D)**:
+  ```bash
+  ros2 launch ugv_slam gmapping.launch.py
+  # Save map: ./save_2d_gmapping_map.sh
+  ```
+- **Cartographer (2D/3D)**:
+  ```bash
+  ros2 launch ugv_slam cartographer.launch.py
+  ```
+- **RTAB-Map (3D RGB-D)**:
+  ```bash
+  ros2 launch ugv_slam rtabmap_rgbd.launch.py
+  ```
+
+### 5.5 Navigation2 (Autonomous Driving)
+Supports multiple localization and local planning options.
+```bash
+# Basic Navigation (AMCL + TEB)
+ros2 launch ugv_nav nav.launch.py use_localization:=amcl use_localplan:=teb
+
+# Simultaneous SLAM and Navigation
+ros2 launch ugv_nav slam_nav.launch.py
 ```
 
 ---
 
-## 라이선스
+## 6. Gazebo Simulation Environment
 
-이 프로젝트는 Apache-2.0 라이선스를 따릅니다.
+For pure simulation development, use the Gazebo-specific launch files.
+
+### 6.1 Simulation Bringup
+```bash
+# Launch house environment with UGV model
+ros2 launch ugv_gazebo bringup.launch.py
+```
+
+### 6.2 Simulation Scenarios
+- **Autonomous Exploration**: 
+  ```bash
+  ros2 launch explore_lite explore.launch.py
+  ```
+- **AI Interaction Test**: 
+  ```bash
+  ros2 run ugv_chat_ai app
+  ```
+
+---
+
+## 7. Technical Notes and Deployment
+- **Network Stack**: Configured with `network_mode: host` for low-latency ROS2 discovery.
+- **Hardware Mapping**: Serial controllers are mapped to `/dev/ttyTHS1` (Jetson) or `/dev/ttyUSB0` (PC) via `.env`.
+- **User Permissions**: Automated `dialout` and `audio` group assignments for immediate hardware access.
+
+**Maintainer**: SeyeongW  
+For architectural details or contribution guidelines, please refer to the project documentation.

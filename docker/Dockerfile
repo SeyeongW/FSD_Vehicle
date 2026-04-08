@@ -1,8 +1,12 @@
 # ============================================================
-# UGV Development Environment - PC (x86_64)
-# Base: ROS2 Humble + Gazebo + RViz (Full Desktop)
+# FSD_Vehicle Development Environment - PC (x86_64)
+# Project: https://github.com/SeyeongW/FSD_Vehicle
+# Maintainer: SeyeongW
 # ============================================================
 FROM osrf/ros:humble-desktop-full
+
+LABEL project="FSD_Vehicle"
+LABEL maintainer="SeyeongW"
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV PYTHON_VERSION=3.10
@@ -15,7 +19,7 @@ RUN apt-get update && apt-get install -y \
     python3-pip python3-rosdep python3-colcon-common-extensions \
     python3-vcstool \
     git cmake build-essential ninja-build \
-    wget curl vim nano \
+    wget curl v4l-utils alsa-utils \
     ssh net-tools \
     libssl-dev libusb-1.0-0-dev \
     libopencv-dev python3-opencv \
@@ -57,6 +61,9 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
     && update-alternatives --set python3 /usr/bin/python3.10 \
     && python3 -m pip install --upgrade pip setuptools wheel
 
+# ── 3.1 하드웨어 권한 설정 ───────────────────────────
+RUN usermod -aG dialout root && usermod -aG audio root
+
 # 시스템 패키지 sympy 충돌 해결 (distutils 설치본 덮어쓰기)
 RUN pip3 install --no-cache-dir --ignore-installed sympy
 
@@ -93,6 +100,10 @@ WORKDIR /ros2_ws/ugv_ws
 # ── 6. Entrypoint 설정 ───────────────────────────────────
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# ── 7. .bashrc 자동 설정 ────────────────────────────────
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc \
+    && echo "if [ -f /ros2_ws/ugv_ws/install/setup.bash ]; then source /ros2_ws/ugv_ws/install/setup.bash; fi" >> /root/.bashrc
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]

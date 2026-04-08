@@ -14,10 +14,13 @@ def is_jetson():
     result = any("ugv_jetson" in root for root, dirs, files in os.walk("/"))
     return result
 
+# 환경변수에서 시리얼 포트 가져오기 (없으면 기본값 사용)
 if is_jetson():
-    serial_port = '/dev/ttyTHS1'
+    default_port = '/dev/ttyTHS1'
 else:
-    serial_port = '/dev/ttyAMA0'
+    default_port = '/dev/ttyAMA0'
+
+serial_port = os.environ.get('SERIAL_PORT', default_port)
 
 # Initialize serial communication with the UGV
 ser = serial.Serial(serial_port, 115200, timeout=1)
@@ -105,7 +108,14 @@ class UgvDriver(Node):
 
         # If voltage drops below a threshold, play a low battery warning sound
         if 0.1 < voltage_value < 9: 
-            subprocess.run(['aplay', '-D', 'plughw:3,0', '/home/ws/ugv_ws/src/ugv_main/ugv_bringup/ugv_bringup/low_battery.wav'])
+            # 파일 경로를 현재 스크립트 위치 기준으로 동적 계산
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            wav_path = os.path.join(current_dir, 'low_battery.wav')
+            
+            if os.path.exists(wav_path):
+                subprocess.run(['aplay', '-D', 'plughw:3,0', wav_path])
+            else:
+                self.get_logger().error(f"Low battery sound file not found at: {wav_path}")
             time.sleep(5)
 
 def main(args=None):

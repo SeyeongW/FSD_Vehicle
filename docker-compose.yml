@@ -1,16 +1,17 @@
 services:
-  ugv-dev:
+  fsd-dev:
     build:
       context: ./docker
       dockerfile: Dockerfile
-    image: ugv-ros2:humble-pc
-    container_name: ugv_dev
+    image: ${IMAGE_NAME}:humble-pc
+    container_name: ${CONTAINER_NAME}
     env_file:
-      - ./docker/.env
+      - .env
     environment:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
       - LIBGL_ALWAYS_SOFTWARE=0
+      - SERIAL_PORT=${SERIAL_PORT_PC}
     volumes:
       # GUI 지원 (RViz, Gazebo)
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
