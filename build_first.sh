@@ -17,6 +17,38 @@ if [ -f "build/apriltag/CMakeCache.txt" ]; then
     fi
 fi
 
+# 0. 외부 SDK 및 시뮬레이션 패키지 다운로드 및 설치
+echo "[build_first] 확인: SDK 및 드라이버 소스코드 검사..."
+cd "$WS_ROOT/src"
+
+if [ ! -d "Livox-SDK2" ]; then
+    echo ">> Cloning Livox-SDK2..."
+    git clone https://github.com/Livox-SDK/Livox-SDK2.git
+    cd Livox-SDK2 && mkdir -p build && cd build
+    cmake .. && make -j$(nproc) && sudo make install
+    cd "$WS_ROOT/src"
+fi
+
+if [ ! -d "unitree_lidar_sdk" ]; then
+    echo ">> Cloning unitree_lidar_sdk..."
+    git clone https://github.com/UnitreeRobotics/unitree_lidar_sdk.git
+    cd unitree_lidar_sdk && mkdir -p build && cd build
+    cmake .. && make -j$(nproc) && sudo make install
+    cd "$WS_ROOT/src"
+fi
+
+if [ ! -d "livox_ros_driver2" ]; then
+    echo ">> Cloning livox_ros_driver2..."
+    git clone https://github.com/Livox-SDK/livox_ros_driver2.git
+fi
+
+if [ ! -d "livox_laser_simulation_RO2" ]; then
+    echo ">> Cloning livox_laser_simulation_RO2..."
+    git clone https://github.com/zigobeast/livox_laser_simulation_RO2.git
+fi
+
+cd "$WS_ROOT"
+
 # 1. 외부 패키지 빌드 (ugv_else, livox 등)
 colcon build --packages-select \
     apriltag apriltag_msgs apriltag_ros \
@@ -35,7 +67,8 @@ colcon build --packages-select \
 # 2. 메인 패키지 빌드
 colcon build --packages-select \
     ugv_bringup ugv_chat_ai ugv_description ugv_gazebo \
-    ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app \
+    ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app ugv_lidar_detection \
+    livox_ros_driver2 livox_laser_simulation_RO2 \
     --symlink-install
 
 # 3. 환경 설정 (.bashrc에 추가)

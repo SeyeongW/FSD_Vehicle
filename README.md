@@ -35,8 +35,14 @@ UGV_MODEL=ugv_rover   # ugv_rover / ugv_beast / rasp_rover
 
 ```bash
 # PC 개발환경 (첫 빌드 10~20분 소요)
-bash docker/run.sh build-pc
-bash docker/run.sh pc
+# Windows (cmd/powershell):
+build_pc
+run_pc
+
+# Linux / WSL:
+make build_pc
+make run_pc
+# (또는 ./build_pc.sh / ./run_pc.sh)
 ```
 
 ### 4. 컨테이너 안에서 ROS 빌드 (최초 1회)
@@ -78,10 +84,10 @@ bash build_first.sh
 
 | 명령어 | 설명 |
 |--------|------|
-| `bash docker/run.sh pc` | PC 개발환경 시작 |
+| `run_pc` | PC 개발환경 시작 |
 | `bash docker/run.sh jetson` | Jetson 배포환경 시작 |
 | `bash docker/run.sh stop` | 컨테이너 중지 |
-| `bash docker/run.sh build-pc` | PC 이미지 빌드 |
+| `build_pc` | PC 이미지 빌드 |
 | `bash docker/run.sh build-jetson` | Jetson 이미지 빌드 |
 | `bash build_common.sh` | ugv_main 패키지만 빌드 |
 | `bash build_first.sh` | 전체 빌드 (최초 1회) |

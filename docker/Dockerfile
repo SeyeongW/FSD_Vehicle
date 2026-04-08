@@ -65,7 +65,8 @@ RUN pip3 install --no-cache-dir \
     pyserial==3.5 \
     flask==3.0.3 \
     requests==2.31.0 \
-    numpy==1.26.4
+    numpy==1.26.4 \
+    scikit-learn
 
 # mediapipe (opencv-contrib-python 포함)
 RUN pip3 install --no-cache-dir mediapipe==0.10.14
@@ -78,14 +79,11 @@ RUN pip3 install --no-cache-dir \
 # YOLO (mediapipe가 설치한 opencv 재사용)
 RUN pip3 install --no-cache-dir ultralytics
 
-# ── 4. Livox SDK2 (시스템 라이브러리) ─────────────────────
-RUN git clone https://github.com/Livox-SDK/Livox-SDK2.git /tmp/Livox-SDK2 \
-    && cd /tmp/Livox-SDK2 \
-    && mkdir build && cd build \
-    && cmake .. -DCMAKE_BUILD_TYPE=Release \
-    && make -j$(nproc) && make install \
-    && ldconfig \
-    && rm -rf /tmp/Livox-SDK2
+# ── 4. PCL Dependencies for Simulation ──────────────────
+RUN apt-get update && apt-get install -y \
+    ros-humble-pcl-ros \
+    ros-humble-pcl-conversions \
+    && rm -rf /var/lib/apt/lists/*
 
 # ── 5. 워크스페이스 경로 생성 ────────────────────────────
 RUN mkdir -p /ros2_ws/ugv_ws/src
