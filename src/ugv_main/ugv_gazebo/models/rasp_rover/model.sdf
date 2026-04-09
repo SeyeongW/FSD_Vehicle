@@ -287,7 +287,7 @@
           <visualize>false</visualize>
           <samples>40000</samples>
           <downsample>1</downsample>
-          <csv_file_name>/home/seyeongw/ros2_ws/ugv_ws/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv</csv_file_name>
+	  <csv_file_name>/home/seyeongw/ros2_ws/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv</csv_file_name>
           <topic>mid360</topic>
         </plugin>
       </sensor>
@@ -482,7 +482,7 @@
       <parent>base_footprint</parent>
     <child>left_up_wheel_link</child>
        <axis>
-        <xyz>0 0 -1</xyz>
+        <xyz>0 1 0</xyz>
       </axis>
   </joint>
   
@@ -491,7 +491,7 @@
       <parent>base_footprint</parent>
     <child>left_down_wheel_link</child>
        <axis>
-        <xyz>0 0 -1</xyz>
+        <xyz>0 1 0</xyz>
       </axis>
   </joint>
   
@@ -500,7 +500,7 @@
       <parent>base_footprint</parent>
     <child>right_up_wheel_link</child>
        <axis>
-        <xyz>0 0 -1</xyz>
+        <xyz>0 1 0</xyz>
       </axis>
   </joint>
   
@@ -509,7 +509,7 @@
       <parent>base_footprint</parent>
     <child>right_down_wheel_link</child>
        <axis>
-        <xyz>0 0 -1</xyz>
+        <xyz>0 1 0</xyz>
       </axis>
   </joint>
   
