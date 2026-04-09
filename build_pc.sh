@@ -1,4 +1,4 @@
 #!/bin/bash
 echo "Building PC Docker environment..."
-docker-compose build ugv-dev
+docker compose build fsd-dev
 echo "Build complete."
