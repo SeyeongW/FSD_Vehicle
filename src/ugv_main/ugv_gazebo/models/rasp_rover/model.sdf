@@ -124,14 +124,6 @@
             <uri>model://ugv_description/meshes/rasp_rover/left_up_wheel_link.stl</uri>
           </mesh>
       </geometry>
-      <surface>
-        <friction>
-          <ode>
-            <mu>0.5</mu>
-            <mu2>0.1</mu2>
-          </ode>
-        </friction>
-      </surface>
     </collision>
   </link>
   
@@ -166,14 +158,6 @@
             <uri>model://ugv_description/meshes/rasp_rover/left_down_wheel_link.stl</uri>
           </mesh>
       </geometry>
-      <surface>
-        <friction>
-          <ode>
-            <mu>0.5</mu>
-            <mu2>0.1</mu2>
-          </ode>
-        </friction>
-      </surface>
     </collision>
   </link>
   
@@ -208,14 +192,6 @@
             <uri>model://ugv_description/meshes/rasp_rover/right_up_wheel_link.stl</uri>
           </mesh>
       </geometry>
-      <surface>
-        <friction>
-          <ode>
-            <mu>0.5</mu>
-            <mu2>0.1</mu2>
-          </ode>
-        </friction>
-      </surface>
     </collision>
   </link>
   
@@ -250,14 +226,6 @@
             <uri>model://ugv_description/meshes/rasp_rover/right_down_wheel_link.stl</uri>
           </mesh>
       </geometry>
-      <surface>
-        <friction>
-          <ode>
-            <mu>0.5</mu>
-            <mu2>0.1</mu2>
-          </ode>
-        </friction>
-      </surface>
     </collision>
   </link>
  
