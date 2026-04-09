@@ -36,6 +36,11 @@ def generate_launch_description():
         'localization', default_value='false',
         description='Launch in localization mode.'
     )
+
+    declare_use_rviz = DeclareLaunchArgument(
+        'use_rviz', default_value='false',
+        description='Launch RViz'
+    )
                             
     # Parameters for the SLAM node
     parameters = {
@@ -112,6 +117,7 @@ def generate_launch_description():
         declare_queue_size,
         declare_qos,
         declare_localization,
+        declare_use_rviz,
         bringup_lidar_launch,
         bringup_oak_lite_launch,
         robot_pose_publisher_launch,
