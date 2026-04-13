@@ -112,10 +112,10 @@ class BirdManager(Node):
         super().__init__('bird_manager')
 
         # 50x50 범위 (0,0 중심)
-        self.x_min = -35.0
-        self.x_max = 35.0
-        self.y_min = -35.0
-        self.y_max = 35.0
+        self.x_min = -15.0
+        self.x_max = 15.0
+        self.y_min = -15.0
+        self.y_max = 15.0
 
         # 낮춘 고도 범위
         self.z_min = 5.0

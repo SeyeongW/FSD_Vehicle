@@ -91,7 +91,7 @@ def generate_launch_description():
         }.items()
     )
 
-    # 새들도 전부 (0,0) 근처에 스폰
+    # bird_single만 스폰
     spawn_bird_single_cmd = TimerAction(
         period=4.0,
         actions=[
@@ -109,6 +109,7 @@ def generate_launch_description():
         ]
     )
 
+    # 스웜 스폰 정의는 남겨두지만, 아래 ld.add_action(...)에서 등록하지 않으면 실행되지 않음
     spawn_swarm_cmd = TimerAction(
         period=5.5,
         actions=[
@@ -200,7 +201,7 @@ def generate_launch_description():
     ld.add_action(robot_state_publisher_cmd)
     ld.add_action(spawn_ugv_cmd)
     ld.add_action(spawn_bird_single_cmd)
-    ld.add_action(spawn_swarm_cmd)
+    # ld.add_action(spawn_swarm_cmd)  # 스웜 비활성화
     ld.add_action(run_bird_manager_cmd)
     ld.add_action(run_ugv_manager_cmd)
 
