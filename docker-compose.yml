@@ -12,6 +12,7 @@ services:
       - QT_X11_NO_MITSHM=1
       - LIBGL_ALWAYS_SOFTWARE=0
       - SERIAL_PORT=${SERIAL_PORT_PC}
+      - UGV_WS_PATH=/ros2_ws/ugv_ws
     volumes:
       # GUI 지원 (RViz, Gazebo)
       - /tmp/.X11-unix:/tmp/.X11-unix:rw

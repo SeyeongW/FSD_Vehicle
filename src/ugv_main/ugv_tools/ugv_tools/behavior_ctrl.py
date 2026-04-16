@@ -7,6 +7,7 @@ from geometry_msgs.msg import Twist, PoseStamped, Pose
 from nav_msgs.msg import Odometry 
 
 import math
+import os
 import threading
 import json
 import queue
@@ -220,7 +221,8 @@ class BehaviorController(Node):
 
     def save_points_to_file(self):
         # Save the map points to a file
-        with open('/home/ws/ugv_ws/map_points.txt', 'w') as file:
+        ws_path = os.environ.get('UGV_WS_PATH', '/ros2_ws/ugv_ws')
+        with open(os.path.join(ws_path, 'map_points.txt'), 'w') as file:
             for point_name, pose in self.points.items():
                 file.write(f'{point_name}: Position(x={pose.position.x}, y={pose.position.y}, z={pose.position.z}), Orientation(x={pose.orientation.x}, y={pose.orientation.y}, z={pose.orientation.z}, w={pose.orientation.w})\n')
         self.get_logger().info('Saved points to map_points.txt')

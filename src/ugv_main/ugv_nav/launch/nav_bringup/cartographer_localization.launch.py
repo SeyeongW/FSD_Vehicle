@@ -36,7 +36,8 @@ def generate_launch_description():
     resolution = LaunchConfiguration('resolution', default='0.05')
     publish_period_sec = LaunchConfiguration('publish_period_sec', default='1.0')
     # Path to the pbstream file
-    pbstream_path = "/home/ws/ugv_ws/src/ugv_main/ugv_gazebo/maps/map.pbstream"
+    ws_path = os.environ.get('UGV_WS_PATH', '/ros2_ws/ugv_ws')
+    pbstream_path = os.path.join(ws_path, 'src/ugv_main/ugv_gazebo/maps/map.pbstream')
  
     # Return the launch description
     return LaunchDescription([
@@ -56,7 +57,8 @@ def generate_launch_description():
             default_value='false',
             description='Use simulation (Gazebo) clock if true'),
 
-    pbstream_path = "/home/ws/ugv_ws/src/ugv_main/ugv_gazebo/maps/map.pbstream"
+    ws_path = os.environ.get('UGV_WS_PATH', '/ros2_ws/ugv_ws')
+    pbstream_path = os.path.join(ws_path, 'src/ugv_main/ugv_gazebo/maps/map.pbstream')
     return LaunchDescription([
         # Create a node to run the cartographer node
         Node(

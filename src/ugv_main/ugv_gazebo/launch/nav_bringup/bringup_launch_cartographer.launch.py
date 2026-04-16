@@ -103,7 +103,9 @@ def generate_launch_description():
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(cartographer_launch_dir,
                                                        'localization.launch.py')),
-            launch_arguments={'pbstream_path': '/home/ws/ugv_ws/src/ugv_main/ugv_gazebo/maps/map.pbstream',
+            launch_arguments={'pbstream_path': os.path.join(
+                                    os.environ.get('UGV_WS_PATH', '/ros2_ws/ugv_ws'),
+                                    'src/ugv_main/ugv_gazebo/maps/map.pbstream'),
                               'use_sim_time': use_sim_time}.items()),
 
         IncludeLaunchDescription(

@@ -43,6 +43,35 @@ make run_pc
 bash docker/run.sh build-jetson
 ```
 
+### 2.3 로컬 실행 환경 설정 (Docker 없이 직접 실행 시)
+
+Docker를 사용하지 않고 로컬 PC에서 직접 ROS2를 실행할 경우, **워크스페이스 경로**를 설정해야 합니다.  
+각 팀원의 유저네임과 디렉토리 구조가 다르기 때문에, `UGV_WS_PATH` 환경변수를 통해 경로를 자동 감지합니다.
+
+#### 자동 설정 (권장)
+```bash
+# 워크스페이스 루트에서 한 번만 실행
+cd ~/ros2_ws/ugv_ws
+source setup_local_env.sh
+```
+> `setup_local_env.sh`는 스크립트 위치를 자동 감지하여 `UGV_WS_PATH`를 설정합니다.  
+> `.env` 파일의 기타 환경변수(`UGV_MODEL`, `ROS_DOMAIN_ID` 등)도 함께 로드합니다.
+
+#### 수동 설정
+```bash
+# 직접 환경변수를 지정할 수도 있습니다
+export UGV_WS_PATH=/home/사용자이름/ros2_ws/ugv_ws
+```
+
+#### 동작 원리
+| 실행 환경 | UGV_WS_PATH 값 | 설정 방법 |
+|-----------|---------------|----------|
+| **Docker** | `/ros2_ws/ugv_ws` | `docker-compose.yml`에서 자동 설정 |
+| **로컬 (자동)** | 스크립트 위치 자동 감지 | `source setup_local_env.sh` |
+| **로컬 (수동)** | 직접 지정 | `export UGV_WS_PATH=...` |
+
+> ⚠️ **주의**: `source setup_local_env.sh` 없이 로컬에서 `save_2d_*.sh` 스크립트나 일부 launch 파일을 실행하면 `UGV_WS_PATH` 미설정 에러가 발생합니다.
+
 ---
 
 ## 3. Workspace Initialization (Inside Container)
