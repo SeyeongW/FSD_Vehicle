@@ -111,11 +111,11 @@ class BirdManager(Node):
     def __init__(self):
         super().__init__('bird_manager')
 
-        # 0,0 중심 비행 범위
-        self.x_min = -80.0
-        self.x_max = 80.0
-        self.y_min = -80.0
-        self.y_max = 80.0
+        # 50x50 범위 (0,0 중심)
+        self.x_min = -15.0
+        self.x_max = 15.0
+        self.y_min = -15.0
+        self.y_max = 15.0
 
         # 낮춘 고도 범위
         self.z_min = 5.0
@@ -147,8 +147,10 @@ class BirdManager(Node):
         self.swarm_target_x = 0.0
         self.swarm_target_y = 0.0
         self.swarm_target_z = 6.5
-        self.swarm_center_speed = 16.0
-        self.swarm_center_arrival_threshold = 12.0
+
+        # swarm 중심 이동 속도도 절반
+        self.swarm_center_speed = 2.0
+        self.swarm_center_arrival_threshold = 8.0
 
         self.weight_seek = 1.7
         self.weight_separation = 2.6
@@ -159,12 +161,12 @@ class BirdManager(Node):
         self.state_fail_count = {}
 
         self.birds = [
-            BirdConfig('bird_single', False, 12.0, 3.0, 7.0, 0.0, 0.0),
-            BirdConfig('bird_swarm_1', True, 10.0, 3.0, 4.5, 22.0, 7.0),
-            BirdConfig('bird_swarm_2', True, 10.0, 3.0, 4.5, 22.0, 7.0),
-            BirdConfig('bird_swarm_3', True, 10.0, 3.0, 4.5, 22.0, 7.0),
-            BirdConfig('bird_swarm_4', True, 10.0, 3.0, 4.5, 22.0, 7.0),
-            BirdConfig('bird_swarm_5', True, 10.0, 3.0, 4.5, 22.0, 7.0),
+            BirdConfig('bird_single', False, 3.0, 0.75, 7.0, 0.0, 0.0),
+            # BirdConfig('bird_swarm_1', True, 2.5, 0.75, 4.5, 22.0, 7.0),
+            # BirdConfig('bird_swarm_2', True, 2.5, 0.75, 4.5, 22.0, 7.0),
+            # BirdConfig('bird_swarm_3', True, 2.5, 0.75, 4.5, 22.0, 7.0),
+            # BirdConfig('bird_swarm_4', True, 2.5, 0.75, 4.5, 22.0, 7.0),
+            # BirdConfig('bird_swarm_5', True, 2.5, 0.75, 4.5, 22.0, 7.0),
         ]
 
         self.runtime = {bird.name: BirdRuntime() for bird in self.birds}
@@ -265,7 +267,7 @@ class BirdManager(Node):
             return
 
         if dist < 30.0:
-            target_speed = max(6.0, self.swarm_center_speed * (dist / 30.0))
+            target_speed = max(1.5, self.swarm_center_speed * (dist / 30.0))
         else:
             target_speed = self.swarm_center_speed
 
@@ -594,7 +596,8 @@ class BirdManager(Node):
         x, y, z = pos
         vx, vy, vz = vel
 
-        margin = 12.0
+        # 50x50 범위에 맞춰 margin 축소
+        margin = 5.0
         push_gain = 1.2
 
         if x < self.x_min + margin:
@@ -607,7 +610,6 @@ class BirdManager(Node):
         elif y > self.y_max - margin:
             vy -= (y - (self.y_max - margin)) * push_gain
 
-        # z 경계 보정 완화
         if z < self.z_min + 1.0:
             vz += (self.z_min + 1.0 - z) * 1.5
         elif z > self.z_max - 1.0:
