@@ -36,7 +36,7 @@ def generate_launch_description():
     pkg_share = get_package_share_directory('ugv_gazebo')
 
     launch_file_dir = os.path.join(pkg_share, 'launch', 'bringup')
-    world = os.path.join(pkg_share, 'worlds', 'ugv_world.world')
+    world = os.path.join(pkg_share, 'worlds', 'plane_fit_world.world')
     bird_model_file = os.path.join(pkg_share, 'models', 'bird', 'model.sdf')
 
     bird_manager_py = _find_script('bird_manager.py', pkg_share)
@@ -200,7 +200,7 @@ def generate_launch_description():
     ld.add_action(robot_state_publisher_cmd)
     ld.add_action(spawn_ugv_cmd)
     ld.add_action(spawn_bird_single_cmd)
-    ld.add_action(spawn_swarm_cmd)
+    # ld.add_action(spawn_swarm_cmd)
     ld.add_action(run_bird_manager_cmd)
     ld.add_action(run_ugv_manager_cmd)
 
