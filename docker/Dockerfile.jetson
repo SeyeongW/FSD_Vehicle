@@ -58,7 +58,7 @@ RUN apt-get update && apt-get install -y -o Dpkg::Options::="--force-overwrite" 
     && rm -rf /var/lib/apt/lists/*
 
 # ── 3. Python 패키지 (mediapipe 제외) ────────────────────
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --no-cache-dir -i https://pypi.org/simple \
     pyserial \
     flask \
     requests \
@@ -66,7 +66,7 @@ RUN pip3 install --no-cache-dir \
 
 # ── 4. YOLO (Jetson CUDA 지원) ───────────────────────────
 # dustynv 이미지에 PyTorch가 이미 포함됨 → ultralytics만 설치
-RUN pip3 install --no-cache-dir ultralytics
+RUN pip3 install --no-cache-dir -i https://pypi.org/simple ultralytics
 
 # ── 4.1 하드웨어 권한 설정 ───────────────────────────
 RUN usermod -aG dialout root && usermod -aG audio root
