@@ -32,8 +32,6 @@ RUN apt-get update && apt-get install -y \
     liblua5.3-dev libgoogle-glog-dev libgflags-dev \
     libatlas-base-dev libsuitesparse-dev \
     libeigen3-dev libceres-dev \
-    # TEB 의존성
-    libg2o-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # ── 2. ROS2 Humble 추가 패키지 (Gazebo 제외) ─────────────
@@ -57,6 +55,7 @@ RUN apt-get update && apt-get install -y \
     ros-humble-realsense2-camera \
     ros-humble-realsense2-description \
     ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-libg2o \
     && rm -rf /var/lib/apt/lists/*
 
 # ── 3. Python 패키지 (mediapipe 제외) ────────────────────
