@@ -58,7 +58,7 @@ RUN apt-get update && apt-get install -y -o Dpkg::Options::="--force-overwrite" 
     && rm -rf /var/lib/apt/lists/*
 
 # ── 3. Python 패키지 (mediapipe 제외) ────────────────────
-RUN pip3 install --no-cache-dir -i https://pypi.org/simple \
+RUN pip3 install --no-cache-dir -i https://pypi.org/simple --ignore-installed \
     pyserial \
     flask \
     requests \
