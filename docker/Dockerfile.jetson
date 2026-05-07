@@ -12,6 +12,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # ── 1. 기본 시스템 도구 ───────────────────────────────────
 RUN rm -f /etc/apt/sources.list.d/ros2* && \
+    echo "deb http://ports.ubuntu.com/ubuntu-ports jammy universe multiverse" >> /etc/apt/sources.list && \
     apt-get update || true && \
     apt-get install -y curl gnupg2
 
