@@ -1,77 +1,78 @@
-#!/usr/bin/env python3
-#
-# Copyright 2019 ROBOTIS CO., LTD.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-# Authors: Joep Tool
-
 import os
+import glob as _glob
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, SetEnvironmentVariable
+from launch.actions import (
+    IncludeLaunchDescription,
+    ExecuteProcess,
+    SetEnvironmentVariable,
+    TimerAction,
+)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch.actions import ExecuteProcess
+
+
+def _find_script(filename: str, pkg_share: str) -> str:
+    candidate = os.path.normpath(
+        os.path.join(pkg_share, '..', '..', 'lib', 'ugv_gazebo', filename)
+    )
+    if os.path.isfile(candidate):
+        return candidate
+
+    ws_src = os.path.expanduser('~/ugv_ws/src')
+    matches = _glob.glob(os.path.join(ws_src, '**', filename), recursive=True)
+    if matches:
+        return matches[0]
+
+    cwd_matches = _glob.glob(os.path.join(os.getcwd(), '**', filename), recursive=True)
+    if cwd_matches:
+        return cwd_matches[0]
+
+    return candidate
+
 
 def generate_launch_description():
-    # Get the directory of the launch file
-    launch_file_dir = os.path.join(get_package_share_directory('ugv_gazebo'), 'launch/bringup')
-    # Get the directory of the gazebo_ros package
-    pkg_gazebo_ros = get_package_share_directory('gazebo_ros')
+    pkg_share = get_package_share_directory('ugv_gazebo')
 
-    # Get the use_sim_time parameter from the launch file
+    launch_file_dir = os.path.join(pkg_share, 'launch', 'bringup')
+    world = os.path.join(pkg_share, 'worlds', 'plane_fit_world.world')
+    bird_model_file = os.path.join(pkg_share, 'models', 'bird', 'model.sdf')
+
+    bird_manager_py = _find_script('bird_manager.py', pkg_share)
+    ugv_manager_py = _find_script('ugv_manager.py', pkg_share)
+
+    print(f'[bringup] bird_manager.py -> {bird_manager_py}')
+    print(f'[bringup] ugv_manager.py  -> {ugv_manager_py}')
+
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
 
-    # Set GAZEBO_PLUGIN_PATH to include the Livox simulation plugin
-    livox_plugin_path = os.path.join(
-        get_package_share_directory('ros2_livox_simulation'), '..', '..', 'lib'
-    )
-    # Normalize the path
-    livox_plugin_path = os.path.normpath(livox_plugin_path)
-    
-    current_plugin_path = os.environ.get('GAZEBO_PLUGIN_PATH', '')
-    new_plugin_path = livox_plugin_path + ':' + current_plugin_path if current_plugin_path else livox_plugin_path
-
-    set_gazebo_plugin_path = SetEnvironmentVariable(
-        name='GAZEBO_PLUGIN_PATH',
-        value=new_plugin_path
+    gazebo_model_database_uri = SetEnvironmentVariable(
+        name='GAZEBO_MODEL_DATABASE_URI',
+        value=''
     )
 
-    # Get the world file
-    world = os.path.join(
-        get_package_share_directory('ugv_gazebo'),
-        'worlds',
-        'ugv_world.world'
+    gazebo_model_path = SetEnvironmentVariable(
+        name='GAZEBO_MODEL_PATH',
+        value=os.path.join(pkg_share, 'models') + ':' + os.environ.get('GAZEBO_MODEL_PATH', '')
     )
 
-    # Include the gzserver launch file
-    gzserver_cmd = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_gazebo_ros, 'launch', 'gzserver.launch.py')
-        ),
-        launch_arguments={'world': world}.items()
+    gzserver_cmd = ExecuteProcess(
+        cmd=[
+            'gzserver',
+            '--verbose',
+            world,
+            '-s', 'libgazebo_ros_init.so',
+            '-s', 'libgazebo_ros_factory.so',
+        ],
+        output='screen'
     )
 
-    # Include the gzclient launch file
-    gzclient_cmd = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py')
-        )
+    gzclient_cmd = ExecuteProcess(
+        cmd=['gzclient'],
+        output='screen'
     )
-            
-    # Include the robot_state_publisher launch file
+
     robot_state_publisher_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(launch_file_dir, 'robot_state_publisher.launch.py')
@@ -79,23 +80,128 @@ def generate_launch_description():
         launch_arguments={'use_sim_time': use_sim_time}.items()
     )
 
-    # Include the spawn_ugv launch file
+    # UGV를 (0,0)에 스폰
     spawn_ugv_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(launch_file_dir, 'spawn_ugv.launch.py')
-        )
+        ),
+        launch_arguments={
+            'x_pose': '0.0',
+            'y_pose': '0.0',
+        }.items()
     )
 
-    # Create a launch description
+    # 새들도 전부 (0,0) 근처에 스폰
+    spawn_bird_single_cmd = TimerAction(
+        period=4.0,
+        actions=[
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'run', 'gazebo_ros', 'spawn_entity.py',
+                    '-entity', 'bird_single',
+                    '-file', bird_model_file,
+                    '-x', '0.0',
+                    '-y', '0.0',
+                    '-z', '15.0',
+                ],
+                output='screen'
+            )
+        ]
+    )
+
+    spawn_swarm_cmd = TimerAction(
+        period=5.5,
+        actions=[
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'run', 'gazebo_ros', 'spawn_entity.py',
+                    '-entity', 'bird_swarm_1',
+                    '-file', bird_model_file,
+                    '-x', '0.0',
+                    '-y', '0.0',
+                    '-z', '20.0',
+                ],
+                output='screen'
+            ),
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'run', 'gazebo_ros', 'spawn_entity.py',
+                    '-entity', 'bird_swarm_2',
+                    '-file', bird_model_file,
+                    '-x', '3.0',
+                    '-y', '2.0',
+                    '-z', '19.0',
+                ],
+                output='screen'
+            ),
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'run', 'gazebo_ros', 'spawn_entity.py',
+                    '-entity', 'bird_swarm_3',
+                    '-file', bird_model_file,
+                    '-x', '-3.0',
+                    '-y', '-2.0',
+                    '-z', '21.0',
+                ],
+                output='screen'
+            ),
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'run', 'gazebo_ros', 'spawn_entity.py',
+                    '-entity', 'bird_swarm_4',
+                    '-file', bird_model_file,
+                    '-x', '4.0',
+                    '-y', '-3.0',
+                    '-z', '18.0',
+                ],
+                output='screen'
+            ),
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'run', 'gazebo_ros', 'spawn_entity.py',
+                    '-entity', 'bird_swarm_5',
+                    '-file', bird_model_file,
+                    '-x', '-4.0',
+                    '-y', '3.0',
+                    '-z', '22.0',
+                ],
+                output='screen'
+            ),
+        ]
+    )
+
+    run_bird_manager_cmd = TimerAction(
+        period=8.5,
+        actions=[
+            ExecuteProcess(
+                cmd=['python3', bird_manager_py],
+                output='screen',
+                additional_env={'PYTHONUNBUFFERED': '1'},
+            )
+        ]
+    )
+
+    run_ugv_manager_cmd = TimerAction(
+        period=10.0,
+        actions=[
+            ExecuteProcess(
+                cmd=['python3', ugv_manager_py],
+                output='screen',
+                additional_env={'PYTHONUNBUFFERED': '1'},
+            )
+        ]
+    )
+
     ld = LaunchDescription()
-
-    # Set env var BEFORE gazebo starts
-    ld.add_action(set_gazebo_plugin_path)
-
-    # Add the commands to the launch description
+    ld.add_action(gazebo_model_database_uri)
+    ld.add_action(gazebo_model_path)
     ld.add_action(gzserver_cmd)
     ld.add_action(gzclient_cmd)
     ld.add_action(robot_state_publisher_cmd)
     ld.add_action(spawn_ugv_cmd)
+    ld.add_action(spawn_bird_single_cmd)
+    # ld.add_action(spawn_swarm_cmd)
+    ld.add_action(run_bird_manager_cmd)
+    ld.add_action(run_ugv_manager_cmd)
 
     return ld
