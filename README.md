@@ -40,7 +40,9 @@ make run_pc
 # (or ./build_pc.sh / ./run_pc.sh)
 
 # For physical deployment (Jetson Orin/Nano)
-bash docker/run.sh build-jetson
+make build_jetson
+make run_jetson
+# (or bash docker/run.sh build-jetson / bash docker/run.sh jetson)
 ```
 
 ### 2.3 로컬 실행 환경 설정 (Docker 없이 직접 실행 시)
@@ -208,9 +210,11 @@ ros2 launch ugv_gazebo bringup.launch.py
 | `run_pc` | Windows: PC 가상환경 (도커) 실행 및 접속 |
 | `make build_pc` | Linux/WSL: PC 가상환경 이미지 빌드 |
 | `make run_pc` | Linux/WSL: PC 가상환경 실행 및 접속 |
+| `make build_jetson` | Linux: Jetson 배포환경 이미지 빌드 |
+| `make run_jetson` | Linux: Jetson 배포환경 실행 및 접속 |
 | `bash build_first.sh` | 환경 내 전체 워크스페이스 빌드 (Livox 자동 다운로드 포함) |
-| `bash docker/run.sh jetson` | Jetson 배포환경 시작 |
-| `bash docker/run.sh stop` | 실행 중인 컨테이너 중지 |
+| `bash docker/run.sh jetson` | Jetson 배포환경 시작 (명령어 방식) |
+| `bash docker/run.sh stop` | 실행 중인 모든 컨테이너 중지 |
 
 **Maintainer**: SeyeongW  
 For architectural details or contribution guidelines, please refer to the project documentation.
