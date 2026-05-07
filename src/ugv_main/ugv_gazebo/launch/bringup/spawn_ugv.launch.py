@@ -24,7 +24,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     UGV_MODEL = os.environ['UGV_MODEL']
  
-    urdf_path = os.path.join(
+    sdf_path = os.path.join(
         get_package_share_directory('ugv_gazebo'),
         'models',
         UGV_MODEL,
@@ -45,7 +45,7 @@ def generate_launch_description():
         executable='spawn_entity.py',
         arguments=[
             '-entity', UGV_MODEL,
-            '-file', urdf_path
+            '-file', sdf_path
         ],
         output='screen',
     )

@@ -11,7 +11,8 @@ LABEL maintainer="SeyeongW"
 ARG DEBIAN_FRONTEND=noninteractive
 
 # ── 1. 기본 시스템 도구 ───────────────────────────────────
-RUN apt-get update && apt-get install -y \
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F42ED6FBAB17C654 \
+    && apt-get update && apt-get install -y \
     git cmake build-essential ninja-build \
     python3-pip python3-rosdep python3-colcon-common-extensions \
     python3-vcstool \

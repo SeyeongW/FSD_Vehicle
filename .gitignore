@@ -39,4 +39,5 @@ map_points.txt
 
 # Gazebo 임시 파일
 .gazebo/
+.tmp/
 
