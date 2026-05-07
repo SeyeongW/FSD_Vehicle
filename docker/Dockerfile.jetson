@@ -66,7 +66,7 @@ RUN pip3 install --no-cache-dir -i https://pypi.org/simple --ignore-installed \
 
 # ── 4. YOLO (Jetson CUDA 지원) ───────────────────────────
 # dustynv 이미지에 PyTorch가 이미 포함됨 → ultralytics만 설치
-RUN pip3 install --no-cache-dir -i https://pypi.org/simple ultralytics
+RUN pip3 install --no-cache-dir -i https://pypi.org/simple --ignore-installed ultralytics
 
 # ── 4.1 하드웨어 권한 설정 ───────────────────────────
 RUN usermod -aG dialout root && usermod -aG audio root
