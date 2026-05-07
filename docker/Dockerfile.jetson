@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # ── 2. ROS2 Humble 추가 패키지 (Gazebo 제외) ─────────────
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y -o Dpkg::Options::="--force-overwrite" \
     ros-humble-navigation2 \
     ros-humble-nav2-bringup \
     ros-humble-slam-toolbox \
