@@ -27,7 +27,6 @@ RUN apt-get update && apt-get install -y \
     wget v4l-utils alsa-utils \
     ssh net-tools \
     libssl-dev libusb-1.0-0-dev \
-    libopencv-dev python3-opencv \
     # Cartographer 의존성
     liblua5.3-dev libgoogle-glog-dev libgflags-dev \
     libatlas-base-dev libsuitesparse-dev \
