@@ -27,17 +27,17 @@ RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
     vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server \
     livox_ros_driver2 \
     ugv_base_node ugv_interface \
-    --cmake-args -DHUMBLE_ROS=humble
+    --cmake-args -DHUMBLE_ROS=humble -DBUILD_TESTING=OFF
 
 # 2. C++ 메인 패키지 빌드
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
-    ugv_description ugv_slam \
-    --cmake-args -DHUMBLE_ROS=humble
+    ugv_description ugv_nav ugv_slam \
+    --cmake-args -DHUMBLE_ROS=humble -DBUILD_TESTING=OFF
 
 # 3. Python 메인 패키지 빌드 (--symlink-install 제외 — 구버전 setuptools 호환)
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
     ugv_bringup ugv_chat_ai \
-    ugv_nav ugv_tools ugv_vision ugv_web_app ugv_lidar_detection
+    ugv_tools ugv_vision ugv_web_app ugv_lidar_detection
 
 # 4. Jetson 전용 포인트클라우드 패키지 빌드
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \

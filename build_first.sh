@@ -43,6 +43,7 @@ cd "$WS_ROOT"
 
 # 1. 외부 패키지 빌드 (ugv_else, livox 드라이버 — Jetson 전용)
 # RMW_IMPLEMENTATION 인라인 주입: colcon 하위 cmake 프로세스까지 확실히 전달
+# BUILD_TESTING=OFF: ament_lint_auto 등 테스트 의존성 제거 (젯슨 이미지에 미포함)
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
     apriltag apriltag_msgs apriltag_ros \
     cartographer \
@@ -56,18 +57,17 @@ RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
     vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server \
     livox_ros_driver2 \
     ugv_base_node ugv_interface \
-    --cmake-args -DHUMBLE_ROS=humble
+    --cmake-args -DHUMBLE_ROS=humble -DBUILD_TESTING=OFF
 
 # 2. C++ 메인 패키지 빌드
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
-    ugv_description ugv_slam \
-    --cmake-args -DHUMBLE_ROS=humble
+    ugv_description ugv_nav ugv_slam \
+    --cmake-args -DHUMBLE_ROS=humble -DBUILD_TESTING=OFF
 
 # 3. Python 메인 패키지 빌드 (--symlink-install 제외 — 구버전 setuptools 호환)
-# ugv_* 패키지들은 tests_require 문제로 --symlink-install 불가
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
     ugv_bringup ugv_chat_ai \
-    ugv_nav ugv_tools ugv_vision ugv_web_app ugv_lidar_detection
+    ugv_tools ugv_vision ugv_web_app ugv_lidar_detection
 
 # 4. Jetson 전용 포인트클라우드 패키지 빌드
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
