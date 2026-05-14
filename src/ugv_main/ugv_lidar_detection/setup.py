@@ -20,7 +20,7 @@ setup(
     maintainer_email='user@todo.todo',
     description='4D LiDAR Object Detection package',
     license='TODO',
-    tests_require=['pytest'],
+    extras_require={'test': ['pytest']},
     entry_points={
         'console_scripts': [
             'lidar_detector_node = ugv_lidar_detection.lidar_detector_node:main'

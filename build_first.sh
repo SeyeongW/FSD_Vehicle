@@ -9,6 +9,7 @@ cd "$WS_ROOT"
 source /opt/ros/humble/setup.bash
 
 # RMW 설정 (dustynv Jetson 이미지는 cyclonedds만 포함)
+# export 방식은 colcon 하위 프로세스에 전달이 불안정 → 인라인 주입 사용
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 # 기존 빌드 캐시가 다른 경로에서 만들어졌으면 자동 삭제
@@ -41,12 +42,12 @@ fi
 cd "$WS_ROOT"
 
 # 1. 외부 패키지 빌드 (ugv_else, livox 드라이버 — Jetson 전용)
-colcon build --packages-select \
+# RMW_IMPLEMENTATION 인라인 주입: colcon 하위 cmake 프로세스까지 확실히 전달
+RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
     apriltag apriltag_msgs apriltag_ros \
     cartographer \
     costmap_converter_msgs costmap_converter \
     emcl2 \
-    explore_lite \
     openslam_gmapping slam_gmapping \
     ldlidar \
     rf2o_laser_odometry \
@@ -57,14 +58,19 @@ colcon build --packages-select \
     ugv_base_node ugv_interface \
     --cmake-args -DHUMBLE_ROS=humble
 
-# 2. 메인 패키지 빌드 (Jetson 하드웨어 전용 — 시뮬레이션 제외)
-colcon build --packages-select \
-    ugv_bringup ugv_chat_ai ugv_description \
-    ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app ugv_lidar_detection \
-    --symlink-install
+# 2. C++ 메인 패키지 빌드
+RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
+    ugv_description ugv_slam \
+    --cmake-args -DHUMBLE_ROS=humble
 
-# 3. Python 패키지 빌드 (--symlink-install 제외 — setuptools 호환성 문제)
-colcon build --packages-select \
+# 3. Python 메인 패키지 빌드 (--symlink-install 제외 — 구버전 setuptools 호환)
+# ugv_* 패키지들은 tests_require 문제로 --symlink-install 불가
+RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
+    ugv_bringup ugv_chat_ai \
+    ugv_nav ugv_tools ugv_vision ugv_web_app ugv_lidar_detection
+
+# 4. Jetson 전용 포인트클라우드 패키지 빌드
+RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --packages-select \
     pcd_cluster_pkg pcd_to_scan_pkg plane_fit_pkg
 
 # 3. 환경 설정 (.bashrc에 추가)
