@@ -91,7 +91,9 @@ RUN chmod +x /entrypoint.sh
 
 # ── 8. .bashrc 자동 설정 ────────────────────────────────
 RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc \
-    && echo "if [ -f /ros2_ws/ugv_ws/install/setup.bash ]; then source /ros2_ws/ugv_ws/install/setup.bash; fi" >> /root/.bashrc
+    && echo "if [ -f /ros2_ws/ugv_ws/install/setup.bash ]; then source /ros2_ws/ugv_ws/install/setup.bash; fi" >> /root/.bashrc \
+    && echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc
+
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]
