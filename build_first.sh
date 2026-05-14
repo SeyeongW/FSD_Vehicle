@@ -17,7 +17,7 @@ if [ -f "build/apriltag/CMakeCache.txt" ]; then
     fi
 fi
 
-# 0. 외부 SDK 및 시뮬레이션 패키지 다운로드 및 설치
+# 0. 외부 SDK 및 드라이버 패키지 다운로드 및 설치 (Jetson 하드웨어 전용)
 echo "[build_first] 확인: SDK 및 드라이버 소스코드 검사..."
 cd "$WS_ROOT/src"
 
@@ -29,27 +29,14 @@ if [ ! -d "Livox-SDK2" ]; then
     cd "$WS_ROOT/src"
 fi
 
-if [ ! -d "unitree_lidar_sdk" ]; then
-    echo ">> Cloning unitree_lidar_sdk..."
-    git clone https://github.com/UnitreeRobotics/unitree_lidar_sdk.git
-    cd unitree_lidar_sdk && mkdir -p build && cd build
-    cmake .. && make -j$(nproc) && sudo make install
-    cd "$WS_ROOT/src"
-fi
-
 if [ ! -d "livox_ros_driver2" ]; then
     echo ">> Cloning livox_ros_driver2..."
     git clone https://github.com/Livox-SDK/livox_ros_driver2.git
 fi
 
-if [ ! -d "livox_laser_simulation_RO2" ]; then
-    echo ">> Cloning livox_laser_simulation_RO2..."
-    git clone https://github.com/zigobeast/livox_laser_simulation_RO2.git
-fi
-
 cd "$WS_ROOT"
 
-# 1. 외부 패키지 빌드 (ugv_else, livox 등)
+# 1. 외부 패키지 빌드 (ugv_else, livox 드라이버 — Jetson 전용)
 colcon build --packages-select \
     apriltag apriltag_msgs apriltag_ros \
     cartographer \
@@ -62,15 +49,15 @@ colcon build --packages-select \
     robot_pose_publisher \
     teb_msgs teb_local_planner \
     vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server \
-    ros2_livox_simulation livox_ros_driver2 \
+    livox_ros_driver2 \
     ugv_base_node ugv_interface \
     --cmake-args -DHUMBLE_ROS=humble
 
-# 2. 메인 패키지 빌드
+# 2. 메인 패키지 빌드 (Jetson 하드웨어 전용 — 시뮬레이션 제외)
 colcon build --packages-select \
-    ugv_bringup ugv_chat_ai ugv_description ugv_gazebo \
+    ugv_bringup ugv_chat_ai ugv_description \
     ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app ugv_lidar_detection \
-    livox_ros_driver2 livox_laser_simulation_RO2 \
+    pcd_cluster_pkg pcd_to_scan_pkg plane_fit_pkg \
     --symlink-install
 
 # 3. 환경 설정 (.bashrc에 추가)
