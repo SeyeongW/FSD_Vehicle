@@ -18,7 +18,7 @@ setup(
     maintainer_email='user@example.com',
     description='RANSAC and Least Squares plane fitting for PointCloud2',
     license='MIT',
-    tests_require=['pytest'],
+    extras_require={'test': ['pytest']},
     entry_points={
         'console_scripts': [
             'plane_fit_node = plane_fit_pkg.plane_fit_node:main',

@@ -9,6 +9,9 @@ cd "$WS_ROOT"
 # ROS2 환경 소싱 (필수)
 source /opt/ros/humble/setup.bash
 
+# RMW 설정 (dustynv Jetson 이미지는 cyclonedds만 포함)
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
 # 1. 외부 패키지 빌드 (Jetson 전용 — 시뮬레이션 제외)
 colcon build --packages-select \
     apriltag apriltag_msgs apriltag_ros \
@@ -30,8 +33,11 @@ colcon build --packages-select \
 colcon build --packages-select \
     ugv_bringup ugv_chat_ai ugv_description \
     ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app ugv_lidar_detection \
-    pcd_cluster_pkg pcd_to_scan_pkg plane_fit_pkg \
     --symlink-install
+
+# 3. Python 패키지 빌드 (--symlink-install 제외 — setuptools 호환성 문제)
+colcon build --packages-select \
+    pcd_cluster_pkg pcd_to_scan_pkg plane_fit_pkg
 
 source install/setup.bash
 echo "[build_common] 완료!"

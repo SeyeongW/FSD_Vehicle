@@ -8,6 +8,9 @@ cd "$WS_ROOT"
 # ROS2 환경 소싱 (필수)
 source /opt/ros/humble/setup.bash
 
+# RMW 설정 (dustynv Jetson 이미지는 cyclonedds만 포함)
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
 # 기존 빌드 캐시가 다른 경로에서 만들어졌으면 자동 삭제
 if [ -f "build/apriltag/CMakeCache.txt" ]; then
     CACHED_PATH=$(grep "CMAKE_CACHEFILE_DIR" build/apriltag/CMakeCache.txt 2>/dev/null | cut -d= -f2)
@@ -29,8 +32,9 @@ if [ ! -d "Livox-SDK2" ]; then
     cd "$WS_ROOT/src"
 fi
 
-if [ ! -d "livox_ros_driver2" ]; then
+if [ ! -d "livox_ros_driver2" ] || [ -z "$(ls -A livox_ros_driver2 2>/dev/null)" ]; then
     echo ">> Cloning livox_ros_driver2..."
+    rm -rf livox_ros_driver2
     git clone https://github.com/Livox-SDK/livox_ros_driver2.git
 fi
 
@@ -57,8 +61,11 @@ colcon build --packages-select \
 colcon build --packages-select \
     ugv_bringup ugv_chat_ai ugv_description \
     ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app ugv_lidar_detection \
-    pcd_cluster_pkg pcd_to_scan_pkg plane_fit_pkg \
     --symlink-install
+
+# 3. Python 패키지 빌드 (--symlink-install 제외 — setuptools 호환성 문제)
+colcon build --packages-select \
+    pcd_cluster_pkg pcd_to_scan_pkg plane_fit_pkg
 
 # 3. 환경 설정 (.bashrc에 추가)
 SETUP_BASH="$WS_ROOT/install/setup.bash"
