@@ -66,24 +66,22 @@ RUN pip3 install --no-cache-dir --ignore-installed sympy \
     && pip3 install --no-cache-dir ultralytics
 
 # ── 5. HailoRT runtime + Python bindings ───────────────────
-# The official wheels/.debs are gated behind Hailo's Developer Zone.
-# Drop the matching arm64 artifacts into docker/hailo/ before building:
-#   docker/hailo/hailort_${HAILORT_VERSION}_arm64.deb
-#   docker/hailo/hailort-${HAILORT_VERSION}-cp310-cp310-linux_aarch64.whl
+# On Raspberry Pi OS, `sudo apt install hailo-all` pulls these from the
+# Raspberry Pi apt repo. Grab the runtime + Python binding .debs into
+# docker/hailo/ before building (on the Pi):
+#   mkdir -p ~/hailo-debs && cd ~/hailo-debs
+#   apt download hailort python3-hailort
+#   cp ~/hailo-debs/*.deb <project>/docker/hailo/
 # Both are skipped (with a warning) if absent, so the image still builds
 # for CPU-only development.
 COPY hailo/ /tmp/hailo/
 RUN set -eux; \
-    if ls /tmp/hailo/hailort_*_arm64.deb >/dev/null 2>&1; then \
-        apt-get update && apt-get install -y --no-install-recommends /tmp/hailo/hailort_*_arm64.deb \
+    if ls /tmp/hailo/hailort_*.deb >/dev/null 2>&1 || ls /tmp/hailo/python3-hailort_*.deb >/dev/null 2>&1; then \
+        apt-get update \
+        && apt-get install -y --no-install-recommends /tmp/hailo/*.deb \
         && rm -rf /var/lib/apt/lists/*; \
     else \
-        echo "[Hailo] hailort .deb not found in docker/hailo/ — skipping runtime install"; \
-    fi; \
-    if ls /tmp/hailo/hailort-*-linux_aarch64.whl >/dev/null 2>&1; then \
-        pip3 install --no-cache-dir /tmp/hailo/hailort-*-linux_aarch64.whl; \
-    else \
-        echo "[Hailo] hailort python wheel not found in docker/hailo/ — skipping bindings install"; \
+        echo "[Hailo] no hailort .debs found in docker/hailo/ — skipping (CPU fallback)"; \
     fi; \
     rm -rf /tmp/hailo
 
