@@ -65,23 +65,26 @@ RUN pip3 install --no-cache-dir --ignore-installed sympy \
     && pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \
     && pip3 install --no-cache-dir ultralytics
 
-# ── 5. HailoRT runtime + Python bindings ───────────────────
-# On Raspberry Pi OS, `sudo apt install hailo-all` pulls these from the
-# Raspberry Pi apt repo. Grab the runtime + Python binding .debs into
-# docker/hailo/ before building (on the Pi):
+# ── 5. HailoRT C++ runtime ─────────────────────────────────
+# We install ONLY the hailort .deb (C++ runtime + libhailort.so + hailortcli).
+# python3-hailort .deb from Pi OS Bookworm requires Python 3.11 and ships
+# cpython-311 ABI .so files, which won't load in this Ubuntu 22.04 / Python
+# 3.10 base. To use Hailo from Python, fetch a matching cp310 wheel from
+# Hailo's Developer Zone separately. The yolo_hailo_node falls back to CPU
+# ultralytics when the Python binding is absent, so the pipeline still runs.
+#
+# On the Pi:
 #   mkdir -p ~/hailo-debs && cd ~/hailo-debs
-#   apt download hailort python3-hailort
-#   cp ~/hailo-debs/*.deb <project>/docker/hailo/
-# Both are skipped (with a warning) if absent, so the image still builds
-# for CPU-only development.
+#   apt download hailort
+#   cp hailort_*.deb <project>/docker/hailo/
 COPY hailo/ /tmp/hailo/
 RUN set -eux; \
-    if ls /tmp/hailo/hailort_*.deb >/dev/null 2>&1 || ls /tmp/hailo/python3-hailort_*.deb >/dev/null 2>&1; then \
+    if ls /tmp/hailo/hailort_*.deb >/dev/null 2>&1; then \
         apt-get update \
-        && apt-get install -y --no-install-recommends /tmp/hailo/*.deb \
+        && apt-get install -y --no-install-recommends /tmp/hailo/hailort_*.deb \
         && rm -rf /var/lib/apt/lists/*; \
     else \
-        echo "[Hailo] no hailort .debs found in docker/hailo/ — skipping (CPU fallback)"; \
+        echo "[Hailo] hailort .deb not in docker/hailo/ — skipping (CPU fallback only)"; \
     fi; \
     rm -rf /tmp/hailo
 
