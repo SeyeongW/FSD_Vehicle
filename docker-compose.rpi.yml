@@ -1,0 +1,31 @@
+services:
+  fsd-rpi:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.rpi
+    image: ${IMAGE_NAME}:humble-rpi
+    container_name: ${CONTAINER_NAME}_rpi
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - SERIAL_PORT=${SERIAL_PORT_RPI}
+      - UGV_WS_PATH=/ros2_ws/ugv_ws
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    volumes:
+      - .:/ros2_ws/ugv_ws
+      - /dev:/dev
+      - /run/udev:/run/udev:ro
+      # Hailo PCIe driver state from host (driver itself stays on the host)
+      - /lib/firmware:/lib/firmware:ro
+    devices:
+      # Hailo 8 PCIe / USB nodes (kept optional via /dev passthrough above
+      # if the device is not enumerated yet)
+      - /dev/hailo0:/dev/hailo0
+      - ${SERIAL_PORT_RPI}:${SERIAL_PORT_RPI}
+      - ${VIDEO_DEVICE}:${VIDEO_DEVICE}
+    network_mode: host
+    privileged: true
+    stdin_open: true
+    tty: true
+    working_dir: /ros2_ws/ugv_ws
