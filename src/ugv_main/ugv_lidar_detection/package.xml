@@ -13,6 +13,9 @@
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
 
+  <!-- gimbal_track_lidar.launch.py runs ugv_vision's gimbal_controller_node -->
+  <exec_depend>ugv_vision</exec_depend>
+
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

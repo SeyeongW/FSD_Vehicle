@@ -23,7 +23,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'lidar_detector_node = ugv_lidar_detection.lidar_detector_node:main'
+            'lidar_detector_node = ugv_lidar_detection.lidar_detector_node:main',
+            'lidar_motion_tracker_node = ugv_lidar_detection.lidar_motion_tracker_node:main',
+            'cluster_select_node = ugv_lidar_detection.cluster_select_node:main',
         ],
     },
 )
