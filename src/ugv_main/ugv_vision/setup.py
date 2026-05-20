@@ -32,6 +32,7 @@ setup(
             'apriltag_track_1 = ugv_vision.apriltag_track_1:main',
             'apriltag_track_2 = ugv_vision.apriltag_track_2:main',
             'yolo_hailo_node = ugv_vision.yolo_hailo_node:main',
+            'yolo_track_select_node = ugv_vision.yolo_track_select_node:main',
             'lidar_camera_fusion_node = ugv_vision.lidar_camera_fusion_node:main',
             'gimbal_controller_node = ugv_vision.gimbal_controller_node:main',
         ],

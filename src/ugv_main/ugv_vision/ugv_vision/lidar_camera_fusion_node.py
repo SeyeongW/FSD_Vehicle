@@ -1,14 +1,17 @@
 """Fuse LiDAR cluster centroids with camera YOLO detections.
 
 Pipeline:
-  /lidar/detections (PoseArray, lidar frame) ─┐
-                                              ├─► /target/position (PointStamped, lidar frame)
-  /camera/detections (Detection2DArray) ──────┘
+  /lidar/detections        (PoseArray, lidar frame) ─┐
+  /perception/locked_bbox  (Detection2D, click-lock) ─┼─► /target/position
+  /camera/detections       (Detection2DArray)        ─┘    (PointStamped, lidar frame)
 
 A LiDAR centroid is accepted as a confirmed target only if, after projection
-into the camera image, it lies inside one of the YOLO bounding boxes (and the
-camera detection is fresh). If multiple centroids match, the closest in 2D
-range is published.
+into the camera image, it lies inside a matching bounding box (and that box is
+fresh). Matching priority:
+  1. The click-locked box on /perception/locked_bbox, when use_locked_bbox is
+     true and a fresh lock exists -> only that single target is considered.
+  2. Otherwise any box in /camera/detections.
+If multiple centroids match, the closest in 2D range is published.
 """
 from __future__ import annotations
 
@@ -19,7 +22,7 @@ from rclpy.node import Node
 from rclpy.duration import Duration
 from rclpy.time import Time
 from geometry_msgs.msg import PoseArray, PointStamped, PoseStamped
-from vision_msgs.msg import Detection2DArray
+from vision_msgs.msg import Detection2DArray, Detection2D
 
 import tf2_ros
 from tf2_geometry_msgs import do_transform_pose
@@ -32,7 +35,11 @@ class LidarCameraFusionNode(Node):
         # Topics
         self.declare_parameter('lidar_topic', '/lidar/detections')
         self.declare_parameter('camera_topic', '/camera/detections')
+        self.declare_parameter('locked_bbox_topic', '/perception/locked_bbox')
         self.declare_parameter('target_topic', '/target/position')
+        # When true, a fresh click-locked box overrides /camera/detections so
+        # only the selected subject drives the gimbal.
+        self.declare_parameter('use_locked_bbox', True)
 
         # Frames
         self.declare_parameter('camera_frame', 'camera_optical_frame')
@@ -60,15 +67,20 @@ class LidarCameraFusionNode(Node):
         self.img_h = int(self.get_parameter('image_height').value)
         self.stale = float(self.get_parameter('camera_stale_sec').value)
         self.pad = float(self.get_parameter('bbox_padding_px').value)
+        self.use_locked_bbox = bool(self.get_parameter('use_locked_bbox').value)
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self.latest_cam: Detection2DArray | None = None
+        self.latest_lock: Detection2D | None = None
 
         self.create_subscription(Detection2DArray,
                                  self.get_parameter('camera_topic').value,
                                  self.camera_cb, 5)
+        self.create_subscription(Detection2D,
+                                 self.get_parameter('locked_bbox_topic').value,
+                                 self.lock_cb, 5)
         self.create_subscription(PoseArray,
                                  self.get_parameter('lidar_topic').value,
                                  self.lidar_cb, 5)
@@ -76,20 +88,40 @@ class LidarCameraFusionNode(Node):
                                                 self.get_parameter('target_topic').value, 5)
 
         self.get_logger().info(
-            f'Fusion ready: lidar({self.lidar_frame}) x camera({self.camera_frame})')
+            f'Fusion ready: lidar({self.lidar_frame}) x camera({self.camera_frame}), '
+            f'use_locked_bbox={self.use_locked_bbox}')
 
     def camera_cb(self, msg: Detection2DArray):
         self.latest_cam = msg
 
+    def lock_cb(self, msg: Detection2D):
+        self.latest_lock = msg
+
+    def _active_boxes(self):
+        """Return the bbox list to match against, or None if nothing fresh.
+
+        Each entry is (center_x, center_y, size_x, size_y) in image pixels.
+        Prefers the click-locked box when fresh; falls back to camera dets.
+        """
+        now = self.get_clock().now()
+        if self.use_locked_bbox and self.latest_lock is not None:
+            lock_t = Time.from_msg(self.latest_lock.header.stamp)
+            if (now - lock_t) <= Duration(seconds=self.stale):
+                b = self.latest_lock.bbox
+                return [(b.center.position.x, b.center.position.y, b.size_x, b.size_y)]
+        if self.latest_cam is not None:
+            cam_t = Time.from_msg(self.latest_cam.header.stamp)
+            if (now - cam_t) <= Duration(seconds=self.stale):
+                return [(d.bbox.center.position.x, d.bbox.center.position.y,
+                         d.bbox.size_x, d.bbox.size_y) for d in self.latest_cam.detections]
+        return None
+
     def lidar_cb(self, msg: PoseArray):
         if not msg.poses:
             return
-        if self.latest_cam is None:
-            return
 
-        cam_t = Time.from_msg(self.latest_cam.header.stamp)
-        now = self.get_clock().now()
-        if (now - cam_t) > Duration(seconds=self.stale):
+        boxes = self._active_boxes()
+        if not boxes:
             return
 
         # Static transform lidar -> camera_optical
@@ -116,7 +148,7 @@ class LidarCameraFusionNode(Node):
             v = self.fy * y / z + self.cy_px
             if not (0 <= u < self.img_w and 0 <= v < self.img_h):
                 continue
-            if not self._inside_any_bbox(u, v):
+            if not self._inside_any_bbox(u, v, boxes):
                 continue
             r = math.hypot(pose.position.x, pose.position.y)
             if best is None or r < best[0]:
@@ -133,12 +165,10 @@ class LidarCameraFusionNode(Node):
         out.point.z = best[1].position.z
         self.target_pub.publish(out)
 
-    def _inside_any_bbox(self, u: float, v: float) -> bool:
-        for d in self.latest_cam.detections:
-            half_x = d.bbox.size_x / 2.0 + self.pad
-            half_y = d.bbox.size_y / 2.0 + self.pad
-            cx = d.bbox.center.position.x
-            cy = d.bbox.center.position.y
+    def _inside_any_bbox(self, u: float, v: float, boxes) -> bool:
+        for cx, cy, size_x, size_y in boxes:
+            half_x = size_x / 2.0 + self.pad
+            half_y = size_y / 2.0 + self.pad
             if (cx - half_x) <= u <= (cx + half_x) and (cy - half_y) <= v <= (cy + half_y):
                 return True
         return False
