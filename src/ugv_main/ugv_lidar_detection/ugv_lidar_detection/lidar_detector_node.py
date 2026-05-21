@@ -42,14 +42,15 @@ class LidarDetectorNode(Node):
 
     def cloud_callback(self, msg):
         # 1. Read points as an (N, 3) float array.
-        # read_points_numpy returns a 2D ndarray; the older read_points returns
-        # a structured 1D array, so fall back by stacking fields.
-        try:
-            points = pc2.read_points_numpy(
-                msg, field_names=("x", "y", "z"), skip_nans=True)
-        except AttributeError:
-            arr = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
-            points = np.column_stack([arr["x"], arr["y"], arr["z"]])
+        # read_points_numpy can't handle clouds with mixed-datatype fields
+        # (the L1 has float xyz plus other-typed intensity/ring/time), so use
+        # read_points and pull x/y/z by name. Modern sensor_msgs_py returns a
+        # structured ndarray; older versions yield tuples.
+        arr = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
+        if hasattr(arr, "dtype") and arr.dtype.names:
+            points = np.column_stack([arr["x"], arr["y"], arr["z"]]).astype(np.float32)
+        else:
+            points = np.array([[p[0], p[1], p[2]] for p in arr], dtype=np.float32)
 
         if points.ndim != 2 or points.shape[0] == 0:
             return
