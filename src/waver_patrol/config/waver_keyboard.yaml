@@ -1,0 +1,7 @@
+rover:
+  default_speed: 0.14
+  max_demo_speed: 0.24
+  turn_gain: 0.60
+keyboard:
+  input_timeout_s: 0.3
+  manual_override_timeout_s: 1.0

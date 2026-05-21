@@ -1,0 +1,197 @@
+mission_patrol_manager_node:
+  ros__parameters:
+    waypoint_file: "waypoints/waver_nav2_patrol_mission.yaml"
+    nav2_action_name: "/navigate_to_pose"
+    use_nav2: true
+    resume_policy: "RETURN_TO_INTERRUPTED_WAYPOINT"
+    patrol_loop: true
+    default_mode: "AUTO"
+    target_mission_timeout_sec: 120.0
+    target_goal_tolerance_xy: 0.50
+    target_re_detection_timeout_sec: 20.0
+    target_classification_timeout_sec: 15.0
+    patrol_goal_timeout_sec: 180.0
+    sound_task_timeout_sec: 15.0
+    bird_confidence_threshold: 0.70
+    max_goal_retries: 2
+    recovery_retry_count: 2
+    ignore_new_target_during_mission: true
+    update_target_if_closer: false
+    update_target_if_higher_priority: true
+    target_update_cooldown_sec: 5.0
+    frame_id: "map"
+    base_frame: "base_link"
+    global_frame: "map"
+
+radar_command_bridge_node:
+  ros__parameters:
+    global_frame: "map"
+    base_frame: "base_link"
+    use_tf_transform: true
+    min_target_distance_m: 0.8
+    max_target_distance_m: 40.0
+    min_target_height_m: 0.2
+    max_target_height_m: 20.0
+    min_radar_confidence: 0.50
+    require_positive_confidence: false
+    goal_publish_cooldown_sec: 3.0
+    radar_command_timeout_sec: 2.0
+    reject_nan_inf: true
+    reject_missing_frame_id: true
+
+target_goal_manager_node:
+  ros__parameters:
+    global_frame: "map"
+    base_frame: "base_link"
+    use_tf_transform: true
+    min_height_m: 0.30
+    min_depth_m: 0.50
+    max_depth_m: 30.0
+    min_target_distance_m: 0.8
+    max_target_distance_m: 25.0
+    require_motion: true
+    require_bird_confirmed: false
+    allow_radar_without_bird_confirmed: true
+    goal_offset_distance_m: 1.5
+    goal_publish_cooldown_sec: 3.0
+    target_hold_sec: 1.0
+    target_lost_timeout_sec: 2.0
+    goal_yaw_policy: "FACE_TARGET"
+
+livox_pointcloud_to_scan_node:
+  ros__parameters:
+    # 역할: 3D LiDAR PointCloud2를 지상 장애물 안전정지용 2D /scan으로 투영한다.
+    # 이 /scan은 z값이 없으므로 공중 객체/새 판별에는 사용하지 않는다.
+    pointcloud_topic: "/mid360_PointCloud2"
+    scan_topic: "/scan"
+    state_topic: "/waver/livox_scan_adapter_state"
+    forward_axis: "x"
+    lateral_axis: "y"
+    height_axis: "z"
+    positive_lateral_is_left: true
+    obstacle_min_height_m: -0.35
+    obstacle_max_height_m: 0.80
+    range_min_m: 0.08
+    range_max_m: 12.0
+    angle_increment_rad: 0.0174533
+    max_points: 60000
+    min_raw_points: 50
+    min_used_points: 10
+
+pointcloud_lidar_objects_node:
+  ros__parameters:
+    # 역할: 3D LiDAR PointCloud2에서 높이 조건을 만족하는 객체 후보 중심을 만든다.
+    # 출력은 /waver/lidar_objects PoseArray이며, /cmd_vel은 절대 발행하지 않는다.
+    pointcloud_topic: "/mid360_PointCloud2"
+    output_pose_array_topic: "/waver/lidar_objects"
+    state_topic: "/waver/lidar_objects_state"
+    min_height_m: 0.35
+    max_height_m: 8.0
+    min_depth_m: 0.2
+    max_depth_m: 20.0
+    voxel_leaf_size_m: 0.20
+    cluster_eps_m: 0.55
+    cluster_min_points: 4
+    max_points: 12000
+    remove_robot_body: true
+    self_x_min: -0.6
+    self_x_max: 0.6
+    self_y_min: -0.6
+    self_y_max: 0.6
+    self_z_min: -0.3
+    self_z_max: 0.8
+
+safety_cmd_mux_node:
+  ros__parameters:
+    nav2_cmd_topic: "/waver/cmd_vel_nav2"
+    cmd_vel_auto_topic: ""
+    manual_cmd_vel_topic: "/waver/manual_cmd_vel"
+    cmd_vel_out_topic: "/cmd_vel"
+    scan_topic: "/scan"
+    mode_default: "AUTO"
+    require_scan: true
+    scan_stale_s: 0.5
+    hard_stop_distance_m: 0.45
+    slow_down_distance_m: 1.2
+    clear_distance_m: 1.8
+    front_sector_deg: 40.0
+    rear_sector_deg: 35.0
+    min_valid_scan_points: 40
+    command_timeout_sec: 0.5
+    manual_override_timeout_sec: 0.5
+    max_linear_speed: 0.18
+    max_angular_speed: 0.45
+    max_linear_delta_per_tick: 0.04
+    max_angular_delta_per_tick: 0.08
+    stop_on_unknown_state: true
+    stop_on_adapter_degraded: true
+
+battery_return_manager_node:
+  ros__parameters:
+    warning_percentage: 0.30
+    critical_percentage: 0.20
+    resume_percentage: 0.38
+    warning_voltage: 9.8
+    critical_voltage: 9.3
+    resume_voltage: 10.2
+    battery_stale_sec: 5.0
+    stop_on_battery_stale: false
+    prefer_charge_pose: true
+    waypoint_file: "waypoints/waver_nav2_patrol_mission.yaml"
+    home_frame_id: "map"
+    home_x: 0.0
+    home_y: 0.0
+    home_yaw: 0.0
+
+deep_learning_bridge_stub:
+  ros__parameters:
+    test_mode: false
+    enable_test_classification: false
+    confidence_threshold: 0.70
+    bird_class_names: ["bird", "Bird", "BIRD"]
+    blocked_sound_classes: ["airplane", "drone", "human", "vehicle", "person", "car"]
+    timer_hz: 2.0
+
+sound_alert_stub:
+  ros__parameters:
+    default_mode: "AUTO"
+    enable_sound_output: false
+    sound_task_duration_sec: 5.0
+    alert_cooldown_sec: 10.0
+    require_auto_mode: true
+    sound_type: "SIMULATED_GUNSHOT"
+
+experiment_data_logger_node:
+  ros__parameters:
+    experiment_name: "waver_radar_guided_bird_deterrence"
+    output_root: "~/ros2_ws/waver_experiments"
+    csv_flush_interval_sec: 1.0
+    write_rosbag_command_file: true
+    log_odom: true
+    log_nav2: true
+    log_radar: true
+    log_lidar: true
+    log_camera: true
+    log_sound: true
+    log_battery: true
+    log_safety: true
+    rotate_files: true
+    max_csv_file_size_mb: 100
+    anonymize_location: false
+    include_raw_topic_snapshot: false
+    experiment_notes: ""
+
+serial_cmd_vel_bridge:
+  ros__parameters:
+    cmd_vel_topic: "/cmd_vel"
+    cmd_timeout_s: 0.3
+    command_rate_hz: 20.0
+    stop_repeat: 5
+    serial_port: ""
+
+# Nav2 integration notes:
+# - Controller/velocity smoother output must be remapped from /cmd_vel to
+#   /waver/cmd_vel_nav2 by launch.
+# - Costmaps should use /scan for 2D LiDAR or a PointCloud2 voxel layer /
+#   pointcloud_to_scan adapter for 3D LiDAR.
+# - safety_cmd_mux_node remains the only final /cmd_vel publisher.

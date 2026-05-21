@@ -1,0 +1,15 @@
+column,description
+timestamp,ROS time in seconds
+experiment_id,Unique run id
+mission_state,Waver mission state sample
+event_type,STATE_SAMPLE or mission event name
+previous_state,Previous state if known
+next_state,Next state if known
+reason,Human-readable transition reason
+waypoint_index,Current waypoint index
+waypoint_name,Current waypoint name
+target_id,Target mission id
+nav_goal_id,Navigation goal id if known
+battery_return_active,Battery return override flag
+emergency_stop,Emergency stop flag
+external_stop,External stop flag

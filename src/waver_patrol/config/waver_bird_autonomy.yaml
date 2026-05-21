@@ -1,0 +1,203 @@
+fixed_waypoint_patrol_node:
+  ros__parameters:
+    waypoint_file: "waypoints/waver_bird_patrol_demo.yaml"
+    odom_topic: "/odom"
+    cmd_topic: "/waver/cmd_vel_patrol"
+    state_topic: "/waver/patrol_state"
+    current_waypoint_topic: "/waver/current_waypoint"
+    frame_id: "odom"
+    mode_default: "AUTO"
+    loop_count: -1
+    max_linear_speed: 0.12
+    max_angular_speed: 0.40
+    xy_tolerance_m: 0.25
+    yaw_tolerance_rad: 0.35
+    odom_timeout_sec: 0.8
+
+lidar_aerial_motion_detector_node:
+  ros__parameters:
+    lidar_objects_topic: "/waver/lidar_objects"
+    detections_topic: "/lidar/detections"
+    object_point_topic: "/waver/object_point"
+    enable_pointcloud_input: false
+    pointcloud_topic: "/points"
+    target_topic: "/waver/aerial_target"
+    active_topic: "/waver/aerial_target_active"
+    state_topic: "/waver/aerial_motion_state"
+    lateral_axis: "y"
+    depth_axis: "x"
+    height_axis: "z"
+    positive_lateral_is_left: true
+    min_height_m: 0.35
+    max_height_m: 8.0
+    min_depth_m: 0.2
+    max_depth_m: 20.0
+    min_motion_m: 0.08
+    motion_min_mps: 0.10
+    bearing_motion_min_deg_per_sec: 3.0
+    track_match_gate_m: 1.0
+    motion_confirm_count: 2
+    target_hold_sec: 1.0
+    lost_timeout_sec: 1.5
+    lock_switch_cooldown_sec: 1.0
+    prefer_existing_lock: true
+    reject_negative_depth: true
+
+pointcloud_lidar_objects_node:
+  ros__parameters:
+    pointcloud_topic: "/mid360_PointCloud2"
+    output_pose_array_topic: "/waver/lidar_objects"
+    state_topic: "/waver/lidar_objects_state"
+    min_height_m: 0.35
+    max_height_m: 8.0
+    min_depth_m: 0.2
+    max_depth_m: 20.0
+    voxel_leaf_size_m: 0.20
+    cluster_eps_m: 0.55
+    cluster_min_points: 4
+    max_points: 12000
+    remove_robot_body: true
+    self_x_min: -0.6
+    self_x_max: 0.6
+    self_y_min: -0.6
+    self_y_max: 0.6
+    self_z_min: -0.3
+    self_z_max: 0.8
+
+livox_pointcloud_to_scan_node:
+  ros__parameters:
+    pointcloud_topic: "/mid360"
+    scan_topic: "/scan"
+    state_topic: "/waver/livox_scan_adapter_state"
+    forward_axis: "x"
+    lateral_axis: "y"
+    height_axis: "z"
+    positive_lateral_is_left: true
+    obstacle_min_height_m: -0.35
+    obstacle_max_height_m: 0.80
+    range_min_m: 0.08
+    range_max_m: 12.0
+    angle_increment_rad: 0.01745329252
+    min_raw_points: 50
+    min_used_points: 10
+
+gazebo_bird_pose_bridge_node:
+  ros__parameters:
+    bird_pose_topic: "/bird/nearest_pose"
+    bird_visible_topic: "/bird/visible"
+    odom_topic: "/odom"
+    object_point_topic: "/waver/object_point"
+    base_frame_id: "base_link"
+    odom_timeout_sec: 0.8
+    bird_timeout_sec: 0.8
+
+target_body_tracker_node:
+  ros__parameters:
+    target_topic: "/waver/aerial_target"
+    active_topic: "/waver/aerial_target_active"
+    cmd_topic: "/waver/cmd_vel_target_track"
+    state_topic: "/waver/target_tracking_state"
+    direction_topic: "/waver/target_direction"
+    centered_topic: "/waver/target_centered"
+    base_frame: "base_link"
+    use_tf_transform: true
+    lateral_axis: "y"
+    depth_axis: "x"
+    positive_lateral_is_left: true
+    forward_when_aligned: false
+    center_tolerance_rad: 0.08
+    min_target_depth_m: 0.15
+    max_angular_speed: 0.38
+    max_angular_delta_per_tick: 0.035
+    angular_kp: 1.1
+
+battery_return_manager_node:
+  ros__parameters:
+    warning_percentage: 0.30
+    critical_percentage: 0.20
+    resume_percentage: 0.38
+    warning_voltage: 9.8
+    critical_voltage: 9.3
+    resume_voltage: 10.2
+    battery_stale_sec: 5.0
+    stop_on_battery_stale: false
+    prefer_charge_pose: true
+    waypoint_file: "waypoints/waver_bird_patrol_demo.yaml"
+    home_frame_id: "odom"
+    home_x: 0.0
+    home_y: 0.0
+    home_yaw: 0.0
+
+return_home_controller_node:
+  ros__parameters:
+    max_linear_speed: 0.10
+    max_angular_speed: 0.35
+    xy_tolerance_m: 0.25
+    yaw_tolerance_rad: 0.40
+    odom_timeout_sec: 0.8
+
+auto_behavior_mux_node:
+  ros__parameters:
+    default_mode: "AUTO"
+    command_timeout_sec: 0.5
+    target_active_hold_sec: 0.8
+    return_home_active_hold_sec: 2.0
+    timer_hz: 20.0
+
+safety_cmd_mux_node:
+  ros__parameters:
+    mode_default: "AUTO"
+    require_scan: true
+    scan_stale_s: 0.5
+    front_sector_deg: 55.0
+    rear_sector_deg: 55.0
+    hard_stop_distance_m: 0.45
+    slow_down_distance_m: 1.2
+    clear_distance_m: 1.8
+    min_valid_scan_points: 40
+    max_linear_speed: 0.16
+    max_angular_speed: 0.45
+    max_linear_delta_per_tick: 0.04
+    max_angular_delta_per_tick: 0.08
+    command_timeout_sec: 0.5
+    manual_override_timeout_sec: 0.5
+    stop_on_unknown_state: true
+    stop_on_adapter_degraded: true
+
+serial_cmd_vel_bridge:
+  ros__parameters:
+    cmd_timeout_s: 0.3
+    command_rate_hz: 20.0
+    stop_repeat: 5
+    serial_port: ""
+
+deep_learning_bridge_stub:
+  ros__parameters:
+    test_mode: false
+    confidence_threshold: 0.65
+    bird_class_names: ["bird", "Bird", "BIRD"]
+
+sound_alert_stub:
+  ros__parameters:
+    enable_sound_output: false
+    cooldown_sec: 10.0
+
+simple_sim_odom_node:
+  ros__parameters:
+    cmd_vel_topic: "/cmd_vel"
+    odom_topic: "/odom"
+
+aerial_target_test_publisher_node:
+  ros__parameters:
+    topic: "/waver/object_point"
+    frame_id: "base_link"
+
+lidar_objects_test_publisher_node:
+  ros__parameters:
+    topic: "/waver/lidar_objects"
+    frame_id: "base_link"
+
+battery_test_publisher_node:
+  ros__parameters:
+    percentage: 0.15
+    voltage: 9.2

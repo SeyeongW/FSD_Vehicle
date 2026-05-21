@@ -1,0 +1,21 @@
+column,description
+experiment_id,Unique run id
+start_time,Wall-clock start time
+end_time,Wall-clock end time
+total_duration_sec,Experiment duration
+total_distance_m,Integrated odom distance
+patrol_waypoints_completed,Waypoint completion count
+target_missions_received,Radar/object missions received
+target_missions_completed,Target missions completed
+birds_confirmed,Bird confirmations
+sound_tasks_requested,Sound task requests
+sound_tasks_completed,Sound task completions
+battery_return_count,Battery return activations
+emergency_stop_count,E-stop activations
+external_stop_count,External stop activations
+nav2_failure_count,Nav2 failures
+recovery_count,Nav2 recoveries
+average_target_response_time_sec,Derived response metric
+average_classification_latency_ms,Derived perception metric
+average_return_to_patrol_time_sec,Derived recovery metric
+notes,Operator notes

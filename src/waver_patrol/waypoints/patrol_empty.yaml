@@ -1,0 +1,12 @@
+route_name: "empty"
+frame_id: "map"
+loop_count: 0
+mode: "loop"
+start_policy: "nearest_first"
+home: {name: "home", x: 0.0, y: 0.0, yaw_deg: 0.0}
+waypoints: []
+failure_policy:
+  waypoint_retry: 0
+  skip_after_retry: false
+  return_home_after_skips: 0
+  emergency_stop_on_repeated_recovery: true

@@ -1,0 +1,13 @@
+safety:
+  hard_stop_distance_m: 0.45
+  slow_down_distance_m: 1.2
+  clear_distance_m: 1.8
+  ttc_hard_stop_s: 1.5
+  ttc_slow_down_s: 3.0
+  max_cmd_delta_per_tick: 0.04
+  require_neutral_before_reverse: true
+  scan_stale_s: 0.5
+  pose_stale_s: 1.0
+  tf_stale_s: 1.0
+  low_battery_v: 9.6
+  critical_battery_v: 9.0

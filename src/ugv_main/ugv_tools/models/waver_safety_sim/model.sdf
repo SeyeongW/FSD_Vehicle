@@ -1,0 +1,80 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <!-- 역할: 렌더 카메라 없이 /cmd_vel, /odom, /scan만 검증하는 최소 Waver 모델이다. -->
+  <model name="waver_safety_sim">
+    <static>false</static>
+    <pose>0 0 0.08 0 0 0</pose>
+
+    <!-- 역할: 차체 관성/충돌/시각화를 단순 박스로 표현해 headless 안정성을 높인다. -->
+    <link name="base_link">
+      <inertial>
+        <mass>12.0</mass>
+        <inertia>
+          <ixx>0.22</ixx>
+          <iyy>0.35</iyy>
+          <izz>0.45</izz>
+          <ixy>0.0</ixy>
+          <ixz>0.0</ixz>
+          <iyz>0.0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="base_collision">
+        <geometry>
+          <box>
+            <size>0.62 0.44 0.18</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="base_visual">
+        <geometry>
+          <box>
+            <size>0.62 0.44 0.18</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.05 0.22 0.32 1.0</ambient>
+          <diffuse>0.05 0.45 0.65 1.0</diffuse>
+        </material>
+      </visual>
+
+      <!-- 역할: safety layer 검증용 2D LaserScan이다. z/공중 객체 판별용이 아니다. -->
+      <sensor name="front_lidar" type="ray">
+        <pose>0.42 0 0.22 0 0 0</pose>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <update_rate>10</update_rate>
+        <ray>
+          <scan>
+            <horizontal>
+              <samples>181</samples>
+              <resolution>1</resolution>
+              <min_angle>-1.5708</min_angle>
+              <max_angle>1.5708</max_angle>
+            </horizontal>
+          </scan>
+          <range>
+            <min>0.08</min>
+            <max>8.0</max>
+            <resolution>0.01</resolution>
+          </range>
+        </ray>
+        <plugin name="waver_laserscan" filename="libgazebo_ros_ray_sensor.so">
+          <ros>
+            <remapping>~/out:=scan</remapping>
+          </ros>
+          <output_type>sensor_msgs/LaserScan</output_type>
+          <frame_name>base_link</frame_name>
+        </plugin>
+      </sensor>
+    </link>
+
+    <!-- 역할: 실제 바퀴 물리는 생략하고 /cmd_vel planar 이동과 /odom 발행만 검증한다. -->
+    <plugin name="waver_planar_move" filename="libgazebo_ros_planar_move.so">
+      <commandTopic>cmd_vel</commandTopic>
+      <odometryTopic>odom</odometryTopic>
+      <odometryFrame>odom</odometryFrame>
+      <robotBaseFrame>base_link</robotBaseFrame>
+      <odometryRate>20.0</odometryRate>
+    </plugin>
+  </model>
+</sdf>

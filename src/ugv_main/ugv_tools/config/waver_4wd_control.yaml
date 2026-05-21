@@ -1,0 +1,71 @@
+# Waver 4WD conservative field-control profile.
+#
+# 역할:
+#   - 실차/시뮬 공통 속도와 안전 기본값을 한 파일에서 조정한다.
+#   - WAVE ROVER의 L/R JSON 값은 엔코더 폐루프 m/s가 아니라 좌/우 바퀴쌍 PWM 비율에 가깝다.
+#   - 0.30 m/s 설정은 ROS /cmd_vel 기준 목표 상한이며, 실차에서는 바퀴 공중 테스트 후 줄여서 보정한다.
+
+waver_remote_panel:
+  ros__parameters:
+    cmd_vel_topic: "/cmd_vel"
+    manual_cmd_vel_topic: "/waver/manual_cmd_vel"
+    auto_cmd_vel_topic: "/waver/cmd_vel_nav2"
+    publish_direct_cmd_vel: false
+    manual_override_returns_to_auto: true
+    auto_mode_strategy: "mission_nav2"
+    auto_launch_command: ""
+    default_speed: 0.18
+    default_angular: 0.45
+    max_linear_speed: 0.30
+    max_angular_speed: 0.70
+    max_linear_accel: 0.35
+    max_angular_accel: 1.20
+    reverse_speed: 0.08
+    hard_stop_distance_m: 0.45
+    slow_down_distance_m: 1.20
+    min_valid_scan_points: 40
+    auto_cmd_timeout_s: 0.50
+
+waver_gazebo_patrol:
+  ros__parameters:
+    max_linear_speed: 0.30
+    max_angular_speed: 0.60
+    max_linear_accel: 0.35
+    max_angular_accel: 1.20
+    reverse_speed: 0.08
+    xy_tolerance: 0.18
+    yaw_tolerance: 0.35
+    hard_stop_distance_m: 0.45
+    slow_down_distance_m: 1.20
+    clear_distance_m: 1.80
+    min_valid_scan_points: 40
+    heading_align_threshold_rad: 0.75
+    approach_distance_m: 0.55
+    blocked_wait_s: 2.0
+    recovery_action_s: 0.8
+    stuck_timeout_s: 8.0
+    progress_epsilon_m: 0.01
+    max_recovery_attempts: 3
+
+waver_cmd_vel_serial_bridge:
+  ros__parameters:
+    max_demo_ratio: 0.30
+    max_linear_speed: 0.30
+    max_angular_speed: 0.70
+    max_linear_accel: 0.35
+    max_angular_accel: 1.20
+    reverse_speed: 0.08
+    cmd_timeout_s: 0.30
+    hard_stop_distance_m: 0.45
+    slow_down_distance_m: 1.20
+    min_valid_scan_points: 40
+    stop_repeat: 5
+
+waver_scripted_keyboard:
+  ros__parameters:
+    max_linear_speed: 0.30
+    max_angular_speed: 0.60
+    key_timeout_s: 0.30
+    hard_stop_distance_m: 0.45
+    slow_down_distance_m: 1.20
+    min_valid_scan_points: 40

@@ -1,0 +1,14 @@
+route_name: "indoor_low_speed_example"
+frame_id: "map"
+loop_count: 1
+mode: "loop"
+start_policy: "nearest_first"
+home: {name: "home", x: 0.0, y: 0.0, yaw_deg: 0.0}
+waypoints:
+  - {name: "wp1", x: 0.5, y: 0.0, yaw_deg: 0.0, dwell_s: 1.0, task: ["health_log"]}
+  - {name: "wp2", x: 0.5, y: 0.5, yaw_deg: 90.0, dwell_s: 1.0, task: ["health_log"]}
+failure_policy:
+  waypoint_retry: 1
+  skip_after_retry: true
+  return_home_after_skips: 2
+  emergency_stop_on_repeated_recovery: true

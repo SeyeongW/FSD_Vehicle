@@ -1,0 +1,80 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <!-- 역할: Waver 키보드/순찰/안전 보조 노드를 headless Gazebo에서 검증하는 평지 world다. -->
+  <world name="waver_flat">
+    <!-- 역할: Gazebo entity pose 제어 서비스를 열어 동적 장애물 smoke test를 가능하게 한다. -->
+    <plugin name="gazebo_ros_state" filename="libgazebo_ros_state.so"/>
+
+    <!-- 역할: 기본 물리/조명/지면만 두어 렌더 센서 없이 안정적으로 실행한다. -->
+    <include>
+      <uri>model://sun</uri>
+    </include>
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+    <!-- 역할: /scan hard stop/slow down 확인용 전방 장애물이다. -->
+    <model name="front_test_box">
+      <static>true</static>
+      <pose>2.2 0 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.5 1.0 0.5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.5 1.0 0.5</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.7 0.1 0.08 1.0</ambient>
+            <diffuse>0.9 0.15 0.08 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 역할: Gazebo smoke test에서 로봇 전방을 가로지르는 동적 장애물이다.
+         waver_gazebo_dynamic_obstacle_node가 pose를 갱신한다. -->
+    <model name="dynamic_test_box">
+      <static>false</static>
+      <pose>1.0 -1.2 0.25 0 0 0</pose>
+      <link name="link">
+        <inertial>
+          <mass>2.0</mass>
+          <inertia>
+            <ixx>0.05</ixx>
+            <iyy>0.05</iyy>
+            <izz>0.05</izz>
+            <ixy>0.0</ixy>
+            <ixz>0.0</ixz>
+            <iyz>0.0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.35 0.35 0.5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.35 0.35 0.5</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.15 0.15 0.85 1.0</ambient>
+            <diffuse>0.2 0.25 1.0 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

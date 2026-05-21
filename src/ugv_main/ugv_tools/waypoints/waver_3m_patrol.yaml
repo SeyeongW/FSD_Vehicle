@@ -1,0 +1,42 @@
+# Waver 3m-radius odom-frame patrol example.
+#
+# 역할:
+#   - 실차 적용 직전에는 이 파일의 x/y/yaw를 현장 odom/map 기준으로 다시 찍어서 수정한다.
+#   - 기본 좌표는 시작점 주변 3m 안에서만 순찰하도록 보수적으로 잡았다.
+#   - launch의 max_patrol_radius_m:=3.0이 최종 안전 울타리 역할을 하므로,
+#     실수로 더 큰 좌표를 넣어도 waver_gazebo_patrol이 반경 경계로 clamp한다.
+
+frame_id: odom
+home:
+  name: home
+  x: 0.0
+  y: 0.0
+  yaw: 0.0
+
+waypoints:
+  - name: forward_gate
+    x: 1.20
+    y: 0.00
+    yaw: 0.0
+  - name: right_check
+    x: 1.20
+    y: -0.90
+    yaw: -1.57
+  - name: far_corner
+    x: 0.00
+    y: -1.20
+    yaw: 3.14
+  - name: left_check
+    x: -0.90
+    y: 0.00
+    yaw: 1.57
+  - name: home_return
+    x: 0.00
+    y: 0.00
+    yaw: 0.0
+
+failure_policy:
+  max_patrol_radius_m: 3.0
+  recovery_attempts: 3
+  blocked_wait_s: 2.0
+  human_estop_required: true

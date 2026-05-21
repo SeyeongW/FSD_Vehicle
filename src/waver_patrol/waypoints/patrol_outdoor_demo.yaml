@@ -1,0 +1,35 @@
+route_name: "outdoor_demo_loop"
+frame_id: "map"
+loop_count: -1
+mode: "loop"
+start_policy: "nearest_first"
+return_home_on_low_battery: true
+home:
+  name: "home"
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+waypoints:
+  - name: "gate"
+    x: 1.0
+    y: 0.0
+    yaw_deg: 0.0
+    dwell_s: 3.0
+    task: ["snapshot", "health_log"]
+  - name: "corner_a"
+    x: 2.0
+    y: 1.0
+    yaw_deg: 90.0
+    dwell_s: 2.0
+    task: ["scan_left_right"]
+  - name: "corner_b"
+    x: 0.5
+    y: 2.0
+    yaw_deg: 180.0
+    dwell_s: 2.0
+    task: ["health_log"]
+failure_policy:
+  waypoint_retry: 2
+  skip_after_retry: true
+  return_home_after_skips: 3
+  emergency_stop_on_repeated_recovery: true

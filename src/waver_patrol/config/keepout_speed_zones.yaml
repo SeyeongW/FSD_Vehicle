@@ -1,0 +1,9 @@
+keepout_zones:
+  frame_id: "map"
+  zones: []
+speed_zones:
+  frame_id: "map"
+  zones:
+    - name: "demo_slow_zone"
+      max_speed: 0.12
+      polygon: [[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0]]

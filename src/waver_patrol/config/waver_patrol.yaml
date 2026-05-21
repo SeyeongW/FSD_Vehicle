@@ -1,0 +1,12 @@
+patrol:
+  enabled: true
+  waypoint_file: "waypoints/patrol_outdoor_demo.yaml"
+  loop_count: -1
+  default_dwell_s: 2.0
+  retry_per_waypoint: 2
+  skip_blocked_waypoint: true
+  max_skips_before_return_home: 3
+  return_home_on_low_battery: true
+  pause_on_dynamic_obstacle: true
+  max_wait_for_obstacle_clear_s: 10.0
+  max_recovery_attempts: 3

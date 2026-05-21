@@ -1,0 +1,13 @@
+column,description
+timestamp,ROS time in seconds
+target_id,Target mission id
+image_frame_id,Camera frame id if known
+target_class,Classifier label
+confidence,Classifier confidence
+bird_confirmed,Bird class and threshold passed
+classification_latency_ms,Latency if provided
+camera_tracking_active,Camera tracker status if provided
+detection_bbox_x,Optional bbox x
+detection_bbox_y,Optional bbox y
+detection_bbox_w,Optional bbox width
+detection_bbox_h,Optional bbox height

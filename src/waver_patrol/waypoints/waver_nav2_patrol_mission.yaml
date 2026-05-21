@@ -1,0 +1,45 @@
+frame_id: "map"
+route_name: "waver_bird_patrol"
+loop: true
+experiment_tags: ["bird_deterrence", "radar_guided", "nav2_patrol"]
+
+# These are example map-frame coordinates. Measure and edit them for the real
+# test site after mapping/localization are stable.
+home:
+  name: "home"
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+
+charge:
+  name: "charge"
+  x: 0.0
+  y: -1.0
+  yaw_deg: 180.0
+
+waypoints:
+  - name: "wp_1"
+    x: 1.0
+    y: 0.0
+    yaw_deg: 0.0
+    dwell_s: 2.0
+    task: ["observe"]
+  - name: "wp_2"
+    x: 2.0
+    y: 1.0
+    yaw_deg: 90.0
+    dwell_s: 2.0
+    task: ["observe"]
+  - name: "wp_3"
+    x: 0.5
+    y: 2.0
+    yaw_deg: 180.0
+    dwell_s: 2.0
+    task: ["observe"]
+
+failure_policy:
+  nav2_goal_failed: "RETRY_THEN_SKIP"
+  max_retries_per_goal: 2
+  target_goal_failed: "RETURN_TO_INTERRUPTED_WAYPOINT"
+  battery_critical: "RETURN_CHARGE"
+  emergency_stop: "CANCEL_ALL_GOALS"

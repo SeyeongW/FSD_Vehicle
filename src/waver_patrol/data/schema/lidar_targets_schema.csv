@@ -1,0 +1,15 @@
+column,description
+timestamp,ROS time in seconds
+target_id,Target id or cluster id
+frame_id,Target coordinate frame
+x,3D target x
+y,3D target y
+z,3D target z
+height_m,Height above sensor/base frame
+depth_m,Horizontal distance
+bearing_rad,atan2(y,x)
+cluster_size,Cluster point count if available
+motion_mps,Estimated motion speed
+moving_confirmed,Moving target flag
+accepted_as_aerial_target,Accepted for aerial tracking
+rejection_reason,Reason for rejection

@@ -1,0 +1,36 @@
+# Odom-frame example only. Edit these coordinates at the real field after
+# confirming /odom or localization origin, axes, and safe clearances.
+route_name: "waver_bird_patrol_demo"
+frame_id: "odom"
+loop_count: -1
+home:
+  name: "home"
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+charge:
+  name: "charge"
+  x: 0.0
+  y: -0.4
+  yaw_deg: 180.0
+waypoints:
+  - name: "watch_gate"
+    x: 1.0
+    y: 0.0
+    yaw_deg: 0.0
+    dwell_s: 1.0
+  - name: "watch_tree_line"
+    x: 1.0
+    y: 1.0
+    yaw_deg: 90.0
+    dwell_s: 1.0
+  - name: "watch_open_field"
+    x: 0.0
+    y: 1.0
+    yaw_deg: 180.0
+    dwell_s: 1.0
+failure_policy:
+  waypoint_retry: 2
+  skip_after_retry: true
+  return_home_after_skips: 3
+  emergency_stop_on_repeated_recovery: true

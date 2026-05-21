@@ -1,0 +1,25 @@
+collision_monitor:
+  ros__parameters:
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "/cmd_vel_raw"
+    cmd_vel_out_topic: "/cmd_vel"
+    state_topic: "/collision_monitor_state"
+    transform_tolerance: 0.2
+    source_timeout: 0.5
+    polygons: ["front_stop", "front_slow"]
+    front_stop:
+      type: "polygon"
+      points: "[[0.45, 0.28], [0.45, -0.28], [0.05, -0.28], [0.05, 0.28]]"
+      action_type: "stop"
+      min_points: 2
+    front_slow:
+      type: "polygon"
+      points: "[[1.2, 0.45], [1.2, -0.45], [0.05, -0.45], [0.05, 0.45]]"
+      action_type: "slowdown"
+      slowdown_ratio: 0.35
+      min_points: 2
+    observation_sources: ["scan"]
+    scan:
+      type: "scan"
+      topic: "/scan"

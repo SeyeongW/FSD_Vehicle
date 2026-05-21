@@ -1,0 +1,107 @@
+serial:
+  preferred_ports: ["/dev/ttyTHS0", "/dev/serial0"]
+  glob_ports: ["/dev/ttyUSB*", "/dev/ttyACM*"]
+  baudrate: 115200
+  command_rate_hz: 20
+  reconnect_interval_s: 1.0
+  write_timeout_s: 0.05
+
+http:
+  enabled: false
+  base_ip: "192.168.4.1"
+  timeout_s: 0.3
+
+rover:
+  max_left_right: 0.5
+  default_speed: 0.16
+  max_demo_speed: 0.28
+  max_patrol_speed: 0.20
+  max_mapping_speed: 0.16
+  turn_gain: 0.65
+  stop_repeat: 5
+
+motor:
+  invert_left: false
+  invert_right: false
+  swap_left_right: false
+
+keyboard:
+  input_timeout_s: 0.3
+  manual_override_timeout_s: 1.0
+
+safety:
+  hard_stop_distance_m: 0.45
+  slow_down_distance_m: 1.2
+  clear_distance_m: 1.8
+  ttc_hard_stop_s: 1.5
+  ttc_slow_down_s: 3.0
+  max_cmd_delta_per_tick: 0.04
+  require_neutral_before_reverse: true
+  max_roll_deg: 18
+  max_pitch_deg: 18
+  sensor_stale_s: 0.5
+  scan_stale_s: 0.5
+  camera_stale_s: 1.0
+  pose_stale_s: 1.0
+  tf_stale_s: 1.0
+  loop_deadline_s: 0.1
+  low_battery_v: 9.6
+  critical_battery_v: 9.0
+  max_cpu_temp_c: 80
+  max_gpu_temp_c: 80
+  require_manual_reset_after_estop: true
+  stop_on_unknown_state: true
+
+localization:
+  require_map_for_patrol: true
+  covariance_warn_xy: 0.5
+  covariance_stop_xy: 1.5
+  relocalization_attempts: 3
+  allow_patrol_without_good_pose: false
+
+patrol:
+  enabled: true
+  waypoint_file: "waypoints/patrol_outdoor_demo.yaml"
+  loop_count: -1
+  default_dwell_s: 2.0
+  retry_per_waypoint: 2
+  skip_blocked_waypoint: true
+  max_skips_before_return_home: 3
+  return_home_on_low_battery: true
+  pause_on_dynamic_obstacle: true
+  max_wait_for_obstacle_clear_s: 10.0
+  max_recovery_attempts: 3
+
+nav2:
+  enabled: true
+  cmd_vel_topic: "/cmd_vel"
+  scan_topic: "/scan"
+  map_topic: "/map"
+  odom_topic: "/odom"
+  base_frame: "base_link"
+  global_frame: "map"
+  use_waypoint_follower: true
+  use_collision_monitor: true
+  use_velocity_smoother: true
+  use_keepout_filter: true
+  use_speed_filter: true
+  planner: "nav2_default"
+  local_planner_candidates: ["teb", "dwa"]
+  goal_tolerance_xy: 0.35
+  goal_tolerance_yaw_deg: 15
+  cancel_on_safety_warning: true
+  cancel_on_pose_uncertain: true
+
+mapping:
+  algorithm_2d_preference: ["cartographer", "gmapping", "slam_toolbox"]
+  algorithm_3d_preference: ["rtabmap"]
+  map_save_dir: "maps"
+  dynamic_obstacle_filter: true
+  save_map_on_exit: false
+
+perception:
+  lidar_required_for_patrol: true
+  camera_required_for_patrol: false
+  min_valid_scan_points: 80
+  enable_camera_object_detection: false
+  enable_traversability_estimation: false

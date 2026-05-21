@@ -37,6 +37,9 @@ images/
 *.yaml
 map_points.txt
 
+# ROS2 패키지의 실행 config/waypoint YAML은 소스에 포함해야 함
+!src/**/config/*.yaml
+!src/**/waypoints/*.yaml
+
 # Gazebo 임시 파일
 .gazebo/
-

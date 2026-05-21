@@ -1,0 +1,19 @@
+nav2:
+  enabled: true
+  cmd_vel_topic: "/cmd_vel"
+  scan_topic: "/scan"
+  map_topic: "/map"
+  odom_topic: "/odom"
+  base_frame: "base_link"
+  global_frame: "map"
+  use_waypoint_follower: true
+  use_collision_monitor: true
+  use_velocity_smoother: true
+  use_keepout_filter: true
+  use_speed_filter: true
+  planner: "nav2_default"
+  local_planner_candidates: ["teb", "dwa"]
+  goal_tolerance_xy: 0.35
+  goal_tolerance_yaw_deg: 15
+  cancel_on_safety_warning: true
+  cancel_on_pose_uncertain: true

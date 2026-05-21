@@ -1,0 +1,6 @@
+localization:
+  require_map_for_patrol: true
+  covariance_warn_xy: 0.5
+  covariance_stop_xy: 1.5
+  relocalization_attempts: 3
+  allow_patrol_without_good_pose: false

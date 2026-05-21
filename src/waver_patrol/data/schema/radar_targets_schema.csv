@@ -1,0 +1,16 @@
+column,description
+timestamp,ROS time in seconds
+target_id,Target id or sequence id
+frame_id,Target coordinate frame
+x,Target x
+y,Target y
+z,Target z or height
+range_m,4D radar range
+azimuth_rad,Horizontal bearing
+elevation_rad,Vertical bearing
+doppler_mps,Doppler speed
+radial_velocity_mps,Radial velocity
+confidence,Radar confidence
+target_age_sec,Age since last update
+accepted_as_goal,Whether Waver accepted it as mission goal
+rejection_reason,Reason for rejection

@@ -1,0 +1,8 @@
+mapping:
+  algorithm_2d_preference: ["cartographer", "gmapping", "slam_toolbox"]
+  algorithm_3d_preference: ["rtabmap"]
+  map_save_dir: "maps"
+  dynamic_obstacle_filter: true
+  save_map_on_exit: false
+rover:
+  max_mapping_speed: 0.16

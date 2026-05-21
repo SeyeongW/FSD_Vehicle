@@ -1,0 +1,39 @@
+moving_object_map_transform_node:
+  ros__parameters:
+    # 입력은 기존 LiDAR 객체 후보 토픽을 사용한다. 기본은 pointcloud_lidar_objects_node 출력.
+    input_type: "pose_array"
+    input_topic: "/waver/lidar_objects"
+
+    # 출력은 차량/자율주행 노드가 공통 SLAM 좌표계로 받아쓸 수 있는 데이터 토픽이다.
+    output_pose_array_topic: "/waver/lidar_objects_map"
+    output_point_topic: "/waver/lidar_object_point_map"
+    debug_marker_topic: "/waver/moving_objects_map_marker"
+    state_topic: "/waver/moving_object_map_transform_state"
+
+    # 기본 target_frame은 map, 실패 시 odom으로 fallback한다.
+    lidar_frame: ""
+    target_frame: "map"
+    fallback_frame: "odom"
+    base_frame: "base_link"
+    use_latest_tf: true
+    transform_timeout_sec: 0.2
+    publish_debug_marker: true
+    max_objects: 80
+    z_policy: "keep"
+    marker_lifetime_sec: 0.5
+
+moving_object_goal_relay_node:
+  ros__parameters:
+    # 실차에서 바로 Nav2 goal로 보내지 않는 preview topic이다.
+    # 4D radar mission command와 충돌하지 않도록 /waver/object_mission_goal을 기본 출력으로 쓰지 않는다.
+    input_pose_array_topic: "/waver/lidar_objects_map"
+    output_goal_topic: "/waver/lidar_object_goal_preview"
+    active_topic: "/waver/lidar_object_goal_preview_active"
+    state_topic: "/waver/lidar_object_goal_preview_state"
+    marker_topic: "/waver/lidar_object_goal_preview_marker"
+    goal_z_policy: "zero"
+    goal_yaw_policy: "face_from_origin"
+    min_goal_distance_m: 0.3
+    max_goal_distance_m: 30.0
+    publish_debug_marker: true
+    stale_timeout_sec: 1.0
