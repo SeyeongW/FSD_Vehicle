@@ -26,4 +26,11 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+# V2V goal relay (Python). Installed as an executable so it runs via
+#   ros2 run ugv_nav goal_relay_node
+install(PROGRAMS
+  scripts/goal_relay_node
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()

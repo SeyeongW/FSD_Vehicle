@@ -12,6 +12,8 @@
   <depend>visualization_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
 
   <!-- gimbal_track_lidar.launch.py runs ugv_vision's gimbal_controller_node -->
   <exec_depend>ugv_vision</exec_depend>

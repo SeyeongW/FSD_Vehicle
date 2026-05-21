@@ -26,6 +26,9 @@ from geometry_msgs.msg import PointStamped, PoseStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
 
+import tf2_ros
+from tf2_geometry_msgs import do_transform_point
+
 
 class ClusterSelectNode(Node):
     def __init__(self):
@@ -37,15 +40,22 @@ class ClusterSelectNode(Node):
         self.declare_parameter('v2v_topic', '/v2v/selected_target')
         self.declare_parameter('click_gate', 1.5)     # max click->object distance (m)
         self.declare_parameter('lost_timeout', 1.0)   # release lock after N s missing
+        # Shared world frame for V2V. The station must publish a static
+        # transform output_frame -> <lidar frame> (e.g. map -> unilidar_lidar).
+        self.declare_parameter('output_frame', 'map')
 
         self.click_gate = float(self.get_parameter('click_gate').value)
         self.lost_timeout = float(self.get_parameter('lost_timeout').value)
+        self.output_frame = self.get_parameter('output_frame').value
 
         # current moving objects: id -> (x, y, z)
         self.moving: dict[int, tuple] = {}
         self.frame_id = 'unilidar_lidar'
         self.locked_id = None
         self.last_seen = None
+
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self.create_subscription(MarkerArray,
                                  self.get_parameter('tracks_topic').value,
@@ -103,18 +113,16 @@ class ClusterSelectNode(Node):
         x, y, z = pos
         stamp = self.get_clock().now().to_msg()
 
+        # Local gimbal target: stays in the LiDAR frame (gimbal is on the station).
         target = PointStamped()
         target.header.stamp = stamp
         target.header.frame_id = self.frame_id
         target.point.x, target.point.y, target.point.z = x, y, z
         self.target_pub.publish(target)
 
-        v2v = PoseStamped()
-        v2v.header.stamp = stamp
-        v2v.header.frame_id = self.frame_id
-        v2v.pose.position.x, v2v.pose.position.y, v2v.pose.position.z = x, y, z
-        v2v.pose.orientation.w = 1.0
-        self.v2v_pub.publish(v2v)
+        # V2V target: transform into the shared world frame so the vehicle,
+        # localized in the same map, can navigate to it directly.
+        self._publish_v2v(x, y, z)
 
         hl = Marker()
         hl.header.stamp = stamp
@@ -129,6 +137,34 @@ class ClusterSelectNode(Node):
         hl.color = ColorRGBA(r=0.0, g=1.0, b=0.2, a=0.7)
         hl.lifetime.sec = 1
         self.highlight_pub.publish(hl)
+
+    def _publish_v2v(self, x, y, z):
+        pt = PointStamped()
+        pt.header.stamp = Time().to_msg()  # latest available transform
+        pt.header.frame_id = self.frame_id
+        pt.point.x, pt.point.y, pt.point.z = x, y, z
+
+        if self.output_frame and self.output_frame != self.frame_id:
+            try:
+                tf = self.tf_buffer.lookup_transform(
+                    self.output_frame, self.frame_id, Time(),
+                    timeout=Duration(seconds=0.1))
+                pt = do_transform_point(pt, tf)
+            except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                    tf2_ros.ExtrapolationException) as e:
+                self.get_logger().warn(
+                    f'No {self.output_frame}<-{self.frame_id} transform; '
+                    f'skipping V2V publish ({e})', throttle_duration_sec=3.0)
+                return
+
+        v2v = PoseStamped()
+        v2v.header.stamp = self.get_clock().now().to_msg()
+        v2v.header.frame_id = pt.header.frame_id
+        v2v.pose.position.x = pt.point.x
+        v2v.pose.position.y = pt.point.y
+        v2v.pose.position.z = pt.point.z
+        v2v.pose.orientation.w = 1.0
+        self.v2v_pub.publish(v2v)
 
 
 def main(args=None):

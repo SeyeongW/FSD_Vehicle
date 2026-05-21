@@ -21,10 +21,31 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     serial_port = LaunchConfiguration('serial_port')
+    output_frame = LaunchConfiguration('output_frame')
+    # Station LiDAR pose in the shared map (measure once; x y z yaw pitch roll).
+    station_xyz = [LaunchConfiguration(k) for k in ('station_x', 'station_y', 'station_z')]
+    station_rpy = [LaunchConfiguration(k) for k in ('station_yaw', 'station_pitch', 'station_roll')]
 
     return LaunchDescription([
         DeclareLaunchArgument('serial_port', default_value='/dev/ttyUSB1',
                               description='SIYI A8 mini gimbal serial port'),
+        DeclareLaunchArgument('output_frame', default_value='map',
+                              description='Shared world frame for V2V target poses'),
+        DeclareLaunchArgument('station_x', default_value='0.0'),
+        DeclareLaunchArgument('station_y', default_value='0.0'),
+        DeclareLaunchArgument('station_z', default_value='0.0'),
+        DeclareLaunchArgument('station_yaw', default_value='0.0'),
+        DeclareLaunchArgument('station_pitch', default_value='0.0'),
+        DeclareLaunchArgument('station_roll', default_value='0.0'),
+
+        # Where the (stationary) control LiDAR sits in the shared map.
+        # Replace the defaults with the measured pose via launch args.
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='map_to_lidar_static_tf',
+            arguments=station_xyz + station_rpy + ['map', 'unilidar_lidar'],
+        ),
 
         Node(
             package='ugv_lidar_detection',
@@ -64,6 +85,7 @@ def generate_launch_description():
             parameters=[{
                 'click_gate': 1.5,
                 'lost_timeout': 1.0,
+                'output_frame': output_frame,
             }],
         ),
         Node(
