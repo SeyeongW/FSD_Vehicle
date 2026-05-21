@@ -41,12 +41,17 @@ class LidarDetectorNode(Node):
         self.get_logger().info(f'Lidar Object Detection Node started. Listening to {cloud_topic}')
 
     def cloud_callback(self, msg):
-        # 1. Read points from PointCloud2 message
-        # Extract x, y, z
-        cloud_gen = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
-        points = np.array(list(cloud_gen))
+        # 1. Read points as an (N, 3) float array.
+        # read_points_numpy returns a 2D ndarray; the older read_points returns
+        # a structured 1D array, so fall back by stacking fields.
+        try:
+            points = pc2.read_points_numpy(
+                msg, field_names=("x", "y", "z"), skip_nans=True)
+        except AttributeError:
+            arr = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
+            points = np.column_stack([arr["x"], arr["y"], arr["z"]])
 
-        if len(points) == 0:
+        if points.ndim != 2 or points.shape[0] == 0:
             return
 
         # 2. Preprocess: Downsample and Filter Ground (Z-axis thresholding)
