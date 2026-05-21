@@ -23,16 +23,21 @@ class LidarDetectorNode(Node):
         self.declare_parameter('max_range', 15.0)     # Drop clusters farther than this (m)
 
         # Background subtraction (for a STATIONARY lidar): learn voxels that are
-        # consistently occupied (walls/floor) and keep only "new" points.
+        # repeatedly occupied (walls/floor) and keep only "new" points.
+        # The L1 has a non-repetitive scan (each frame hits different points),
+        # so we accumulate hits over time and expire by "last seen" rather than
+        # decaying every frame -- otherwise the map never densifies.
         self.declare_parameter('use_background_subtraction', True)
-        self.declare_parameter('bg_voxel_size', 0.2)   # voxel edge (m)
-        self.declare_parameter('bg_threshold', 8)      # frames occupied -> background
-        self.declare_parameter('bg_cap', 20)           # max occupancy score
+        self.declare_parameter('bg_voxel_size', 0.2)    # voxel edge (m)
+        self.declare_parameter('bg_threshold', 4)       # hits -> counts as background
+        self.declare_parameter('bg_cap', 30)            # max occupancy score
+        self.declare_parameter('bg_expire_frames', 60)  # drop voxel if unseen this long
 
         cloud_topic = self.get_parameter('pointcloud_topic').value
 
-        # Background occupancy model: voxel (ix,iy,iz) -> persistence score
+        # Background model: voxel (ix,iy,iz) -> [score, last_seen_frame]
         self.bg = {}
+        self.frame_count = 0
 
         # Subscriptions and Publishers
         # LiDAR drivers publish point clouds with best-effort (sensor_data) QoS;
@@ -184,23 +189,26 @@ class LidarDetectorNode(Node):
         vsize = float(self.get_parameter('bg_voxel_size').value)
         thresh = int(self.get_parameter('bg_threshold').value)
         cap = int(self.get_parameter('bg_cap').value)
+        expire = int(self.get_parameter('bg_expire_frames').value)
+
+        self.frame_count += 1
+        now = self.frame_count
 
         keys = np.floor(pts / vsize).astype(np.int32)
         key_tuples = [tuple(k) for k in keys]
         occupied = set(key_tuples)
 
-        # Reinforce occupied voxels.
+        # Accumulate hits (cap) and stamp last-seen for occupied voxels.
         for v in occupied:
-            self.bg[v] = min(self.bg.get(v, 0) + 1, cap)
-        # Decay voxels not seen this frame.
+            score = self.bg[v][0] if v in self.bg else 0
+            self.bg[v] = [min(score + 1, cap), now]
+        # Expire voxels not seen for a while (keeps the map dynamic).
         for v in list(self.bg.keys()):
-            if v not in occupied:
-                self.bg[v] -= 1
-                if self.bg[v] <= 0:
-                    del self.bg[v]
+            if now - self.bg[v][1] > expire:
+                del self.bg[v]
 
-        # Foreground = voxel still below the background threshold.
-        mask = np.array([self.bg.get(v, 0) < thresh for v in key_tuples], dtype=bool)
+        # Foreground = voxel hit too few times to be background yet.
+        mask = np.array([self.bg.get(v, [0])[0] < thresh for v in key_tuples], dtype=bool)
         return pts[mask]
 
     def _publish_map(self, header):
@@ -208,7 +216,7 @@ class LidarDetectorNode(Node):
         thresh = int(self.get_parameter('bg_threshold').value)
         vsize = float(self.get_parameter('bg_voxel_size').value)
         centers = [((kx + 0.5) * vsize, (ky + 0.5) * vsize, (kz + 0.5) * vsize)
-                   for (kx, ky, kz), score in self.bg.items() if score >= thresh]
+                   for (kx, ky, kz), (score, _seen) in self.bg.items() if score >= thresh]
         self.map_pub.publish(pc2.create_cloud_xyz32(header, centers))
 
 
