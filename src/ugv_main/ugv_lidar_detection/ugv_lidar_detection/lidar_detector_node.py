@@ -31,12 +31,20 @@ class LidarDetectorNode(Node):
         self.declare_parameter('bg_voxel_size', 0.2)    # voxel edge (m)
         self.declare_parameter('bg_threshold', 4)       # hits -> counts as background
         self.declare_parameter('bg_cap', 30)            # max occupancy score
-        self.declare_parameter('bg_expire_frames', 60)  # drop voxel if unseen this long
+        self.declare_parameter('bg_expire_frames', 60)  # drop bg voxel if unseen this long
+
+        # Accumulated dense map: stitch static points into a fine voxel grid so
+        # the base map looks like a real (dense) scan, persists in memory, and
+        # adds/removes as the scene changes.
+        self.declare_parameter('map_voxel_size', 0.1)     # map dedup resolution (m)
+        self.declare_parameter('map_expire_frames', 300)  # drop map point if unseen this long
 
         cloud_topic = self.get_parameter('pointcloud_topic').value
 
-        # Background model: voxel (ix,iy,iz) -> [score, last_seen_frame]
+        # Coarse model for static/foreground separation: voxel -> [score, last_seen]
         self.bg = {}
+        # Dense accumulated map: fine voxel -> [x, y, z, last_seen]
+        self.map = {}
         self.frame_count = 0
 
         # Subscriptions and Publishers
@@ -87,10 +95,12 @@ class LidarDetectorNode(Node):
         # Downsample for faster DBSCAN
         filtered_points = filtered_points[::downsample_rate]
 
-        # Background subtraction: keep only points not part of the static scene.
+        # Background subtraction: split static (-> dense map) from foreground.
         if self.get_parameter('use_background_subtraction').value:
-            filtered_points = self._background_filter(filtered_points)
+            fg_mask = self._background_mask(filtered_points)
+            self._accumulate_map(filtered_points[~fg_mask])
             self._publish_map(msg.header)
+            filtered_points = filtered_points[fg_mask]
 
         # Publish the foreground cloud for a clean RViz view (even if empty).
         fg_msg = pc2.create_cloud_xyz32(msg.header,
@@ -175,16 +185,16 @@ class LidarDetectorNode(Node):
         self.marker_pub.publish(marker_array)
         self.detections_pub.publish(pose_array)
 
-    def _background_filter(self, pts):
-        """Keep points whose voxel is NOT consistently occupied (i.e. not the
-        static scene). Updates the occupancy model each call.
+    def _background_mask(self, pts):
+        """Return a boolean mask: True where a point is foreground (a mover/new
+        point), False where it belongs to the static scene.
 
-        Static voxels accumulate score up to bg_cap and become background once
-        score >= bg_threshold; voxels not seen this frame decay so the model
-        adapts and a mover that stops eventually merges into the background.
+        Coarse voxels accumulate hits (cap bg_cap); a voxel hit >= bg_threshold
+        times counts as static background. Voxels unseen for bg_expire_frames are
+        dropped so the model adapts (a mover that stops eventually goes static).
         """
         if len(pts) == 0:
-            return pts
+            return np.zeros(0, dtype=bool)
 
         vsize = float(self.get_parameter('bg_voxel_size').value)
         thresh = int(self.get_parameter('bg_threshold').value)
@@ -196,28 +206,38 @@ class LidarDetectorNode(Node):
 
         keys = np.floor(pts / vsize).astype(np.int32)
         key_tuples = [tuple(k) for k in keys]
-        occupied = set(key_tuples)
 
-        # Accumulate hits (cap) and stamp last-seen for occupied voxels.
-        for v in occupied:
+        for v in set(key_tuples):
             score = self.bg[v][0] if v in self.bg else 0
             self.bg[v] = [min(score + 1, cap), now]
-        # Expire voxels not seen for a while (keeps the map dynamic).
         for v in list(self.bg.keys()):
             if now - self.bg[v][1] > expire:
                 del self.bg[v]
 
-        # Foreground = voxel hit too few times to be background yet.
-        mask = np.array([self.bg.get(v, [0])[0] < thresh for v in key_tuples], dtype=bool)
-        return pts[mask]
+        return np.array([self.bg.get(v, [0])[0] < thresh for v in key_tuples], dtype=bool)
+
+    def _accumulate_map(self, static_pts):
+        """Stitch static points into the dense memorized map (fine voxel dedup),
+        adding new structure and expiring points that vanish for a long time."""
+        fsize = float(self.get_parameter('map_voxel_size').value)
+        expire = int(self.get_parameter('map_expire_frames').value)
+        now = self.frame_count
+
+        if len(static_pts):
+            keys = np.floor(static_pts / fsize).astype(np.int32)
+            for i, k in enumerate(keys):
+                self.map[tuple(k)] = [float(static_pts[i, 0]),
+                                      float(static_pts[i, 1]),
+                                      float(static_pts[i, 2]), now]
+
+        for v in list(self.map.keys()):
+            if now - self.map[v][3] > expire:
+                del self.map[v]
 
     def _publish_map(self, header):
-        """Publish background voxel centers as a dense, stable map cloud."""
-        thresh = int(self.get_parameter('bg_threshold').value)
-        vsize = float(self.get_parameter('bg_voxel_size').value)
-        centers = [((kx + 0.5) * vsize, (ky + 0.5) * vsize, (kz + 0.5) * vsize)
-                   for (kx, ky, kz), (score, _seen) in self.bg.items() if score >= thresh]
-        self.map_pub.publish(pc2.create_cloud_xyz32(header, centers))
+        """Publish the dense accumulated map (actual points, not grid centers)."""
+        pts = [(d[0], d[1], d[2]) for d in self.map.values()]
+        self.map_pub.publish(pc2.create_cloud_xyz32(header, pts))
 
 
 def main(args=None):
