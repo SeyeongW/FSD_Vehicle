@@ -3,7 +3,9 @@
 
 역할:
   - 기존 Waveshare 패키지는 건드리지 않고 Waver 실차 제어 경로만 묶는다.
-  - legacy one-machine 수동/단순 순찰 확인용으로 GUI 리모콘이 직접 /cmd_vel을 낸다.
+  - legacy one-machine 수동/단순 순찰 확인용 launch다.
+  - 기본값에서는 GUI 리모콘이 직접 /cmd_vel을 내지 않는다. 직접 발행은
+    publish_direct_cmd_vel:=true를 명시한 통제된 테스트에서만 사용한다.
   - serial bridge 하나만 /cmd_vel을 WAVE ROVER JSON으로 변환한다.
 
 주의:
@@ -18,6 +20,7 @@ from launch.actions import DeclareLaunchArgument, LogInfo
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -29,6 +32,7 @@ def generate_launch_description():
     reconnect_interval = LaunchConfiguration("reconnect_interval")
     start_serial_bridge = LaunchConfiguration("start_serial_bridge")
     start_remote_panel = LaunchConfiguration("start_remote_panel")
+    publish_direct_cmd_vel = LaunchConfiguration("publish_direct_cmd_vel")
     require_scan = LaunchConfiguration("require_scan")
     min_valid_scan_points = LaunchConfiguration("min_valid_scan_points")
     control_config_file = LaunchConfiguration("control_config_file")
@@ -67,7 +71,8 @@ def generate_launch_description():
         condition=IfCondition(start_serial_bridge),
     )
 
-    # 역할: legacy 한 대 테스트에서는 안전 mux가 없으므로 직접 /cmd_vel을 발행한다.
+    # 역할: 기본 실차 설정에서는 직접 /cmd_vel을 내지 않고 수동 후보 토픽만 발행한다.
+    # 안전 mux 없이 단독 확인이 필요한 경우에만 publish_direct_cmd_vel:=true를 명시한다.
     remote_panel = Node(
         package="ugv_tools",
         executable="waver_remote_panel",
@@ -79,7 +84,7 @@ def generate_launch_description():
                 "cmd_vel_topic": "/cmd_vel",
                 "manual_cmd_vel_topic": "/waver/manual_cmd_vel",
                 "auto_cmd_vel_topic": "/waver/cmd_vel_auto",
-                "publish_direct_cmd_vel": True,
+                "publish_direct_cmd_vel": ParameterValue(publish_direct_cmd_vel, value_type=bool),
                 "auto_mode_strategy": "legacy_subprocess",
                 "auto_command": "ros2 run ugv_tools waver_gazebo_patrol",
                 "manual_override_returns_to_auto": False,
@@ -103,6 +108,7 @@ def generate_launch_description():
             DeclareLaunchArgument("reconnect_interval", default_value="1.0"),
             DeclareLaunchArgument("start_serial_bridge", default_value="false"),
             DeclareLaunchArgument("start_remote_panel", default_value="true"),
+            DeclareLaunchArgument("publish_direct_cmd_vel", default_value="false"),
             DeclareLaunchArgument("require_scan", default_value="true"),
             DeclareLaunchArgument("min_valid_scan_points", default_value="40"),
             DeclareLaunchArgument("control_config_file", default_value=default_control_config),
@@ -116,6 +122,12 @@ def generate_launch_description():
                 msg=(
                     "Waver real control: start_serial_bridge is false by default. "
                     "Set true only after stopping ugv_driver/app.py on the same serial port."
+                )
+            ),
+            LogInfo(
+                msg=(
+                    "Waver real control: publish_direct_cmd_vel is false by default. "
+                    "For Nav2/mission use the waver_patrol backend plus waver_operator_panel."
                 )
             ),
             serial_bridge,

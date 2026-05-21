@@ -32,13 +32,23 @@ but it cannot prove actual vehicle speed.
 
 ## Install And Build
 
-If this zip restored `waver_patrol` under the archived folder, recover it into the actual colcon
-source space first:
+This local workspace currently builds the Waver package from the FSD_Vehicle source tree:
+
+```text
+~/ros2_ws/src/FSD_Vehicle/src/waver_patrol
+```
+
+If another copy exists at `~/ros2_ws/src/waver_patrol`, keep only one build-visible copy. The
+safe local option is to leave the files in place and add `COLCON_IGNORE` to the extra copy, instead
+of deleting it. Duplicate `waver_patrol` packages will stop `colcon` before the robot can be tested.
+
+If this zip restored `waver_patrol` only under the archived folder, recover it into the actual
+colcon source space first:
 
 ```bash
 cd /home/chotaehyun/ros2_ws
 mkdir -p src
-rsync -a _waver_archived_non_ugv_tools_20260519/src/waver_patrol/ src/waver_patrol/
+rsync -a _waver_archived_non_ugv_tools_20260519/src/waver_patrol/ src/FSD_Vehicle/src/waver_patrol/
 ```
 
 Do not move or symlink the `FSD_Vehicle` trees while doing this; duplicate packages can break
@@ -47,7 +57,7 @@ Do not move or symlink the `FSD_Vehicle` trees while doing this; duplicate packa
 ```bash
 cd /home/chotaehyun/ros2_ws
 source /opt/ros/humble/setup.bash
-rosdep install -i --from-paths src/waver_patrol --rosdistro humble -y
+rosdep install -i --from-paths src/FSD_Vehicle/src/waver_patrol --rosdistro humble -y
 colcon build --packages-select waver_patrol --symlink-install
 source install/setup.bash
 ```
@@ -62,6 +72,16 @@ needed upstream packages from one chosen source tree only.
 ```bash
 ros2 run waver_patrol inspect_stack
 ```
+
+Real-robot preflight check, after starting the Waver launch but before enabling serial:
+
+```bash
+bash ~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/waver_real_preflight_check.sh
+```
+
+The script does not publish motion commands. It verifies that exactly one build-visible
+`waver_patrol` exists, checks `/cmd_vel` ownership, samples safety/sensor topics, and lists serial
+process conflicts. If `/cmd_vel` has more than one publisher, do not run the robot.
 
 ## Stop
 
@@ -102,7 +122,7 @@ ros2 launch waver_patrol waver_localization.launch.py map:=/path/to/map.yaml use
 
 ```bash
 ros2 launch waver_patrol waver_nav2.launch.py use_localization:=amcl use_localplan:=dwa use_rviz:=true
-ros2 launch waver_patrol waver_patrol.launch.py waypoints:=src/waver_patrol/waypoints/patrol_outdoor_demo.yaml use_rviz:=true
+ros2 launch waver_patrol waver_patrol.launch.py waypoints:=src/FSD_Vehicle/src/waver_patrol/waypoints/patrol_outdoor_demo.yaml use_rviz:=true
 ```
 
 Important command-path rule: enable only one base-control path. If existing `ugv_nav` or
@@ -244,7 +264,7 @@ outdoor patrol needs coordinates verified against the actual map/localization or
 
 ## Final Real-Robot Safety Checklist
 
-1. Confirm `src/waver_patrol` exists.
+1. Confirm exactly one build-visible `waver_patrol` exists, preferably `src/FSD_Vehicle/src/waver_patrol`.
 2. Build with `colcon build --packages-select waver_patrol --symlink-install`.
 3. Confirm `/cmd_vel` publisher is only `safety_cmd_mux_node`.
 4. Confirm `ugv_driver` and `serial_cmd_vel_bridge` are not both running.
@@ -466,7 +486,7 @@ ros2 launch waver_patrol waver_gazebo_nav2_radar_bird_mission.launch.py \
 ```bash
 cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
-rosdep install -i --from-paths src/waver_patrol --rosdistro humble -y
+rosdep install -i --from-paths src/FSD_Vehicle/src/waver_patrol --rosdistro humble -y
 colcon build --packages-select waver_patrol --symlink-install
 source install/setup.bash
 ```
@@ -554,7 +574,7 @@ head -n 5 ~/ros2_ws/waver_experiments/*/experiment_summary.csv
 Raw rosbag recording:
 
 ```bash
-~/ros2_ws/src/waver_patrol/scripts/record_waver_experiment_bag.sh
+~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/record_waver_experiment_bag.sh
 ```
 
 ### Research References Used
@@ -588,7 +608,7 @@ commands go through `auto_behavior_mux_node`, then `safety_cmd_mux_node`, and on
 ```bash
 cd /home/chotaehyun/ros2_ws
 source /opt/ros/humble/setup.bash
-colcon build --paths src/waver_patrol src/FSD_Vehicle/src/ugv_main/ugv_gazebo \
+colcon build --paths src/FSD_Vehicle/src/waver_patrol src/FSD_Vehicle/src/ugv_main/ugv_gazebo \
   --packages-select waver_patrol ugv_gazebo --symlink-install
 source install/setup.bash
 
@@ -634,7 +654,7 @@ ros2 topic echo /waver/livox_scan_adapter_state
 ## Tests
 
 ```bash
-cd /home/chotaehyun/ros2_ws/src/waver_patrol
+cd /home/chotaehyun/ros2_ws/src/FSD_Vehicle/src/waver_patrol
 pytest -q
 cd /home/chotaehyun/ros2_ws
 colcon test --packages-select waver_patrol

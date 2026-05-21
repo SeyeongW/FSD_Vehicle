@@ -298,13 +298,23 @@ class MissionPatrolManagerNode(Node):
         self.sound_request_pub.publish(Bool(data=False))
         self.set_state(MissionState.EMERGENCY_STOPPED, reason)
 
-    def send_nav_goal(self, goal: PoseStamped, goal_type: NavGoalType, state: MissionState) -> None:
+    def send_nav_goal(
+        self,
+        goal: PoseStamped,
+        goal_type: NavGoalType,
+        state: MissionState,
+        *,
+        reset_retries: bool = True,
+    ) -> None:
         if self.active_goal_type == goal_type and self.active_goal_pose is not None:
             return
         self.active_goal_type = goal_type
         self.active_goal_pose = goal
         self.goal_start_time = self._now()
-        self.goal_retry_count = 0
+        # 역할: 새 임무 목표가 시작될 때만 retry count를 초기화한다.
+        # Nav2 failure retry 중에는 카운터를 유지해야 max_goal_retries 초과 시 안전하게 멈춘다.
+        if reset_retries:
+            self.goal_retry_count = 0
         goal.header.stamp = self.get_clock().now().to_msg()
         self.active_goal_pub.publish(goal)
         self.set_state(state, f"goal_type={goal_type.value}")
@@ -378,7 +388,7 @@ class MissionPatrolManagerNode(Node):
                 state = self.state
                 self.active_goal_type = NavGoalType.NONE
                 self.goal_handle = None
-                self.send_nav_goal(pose, goal_type, state)
+                self.send_nav_goal(pose, goal_type, state, reset_retries=False)
                 return
         self.goal_handle = None
         self.active_goal_type = NavGoalType.NONE
