@@ -49,6 +49,9 @@ class LidarDetectorNode(Node):
         self.detections_pub = self.create_publisher(PoseArray, '/lidar/detections', 10)
         # Foreground (non-background) points for a clean RViz view.
         self.foreground_pub = self.create_publisher(PointCloud2, '/lidar/foreground', 10)
+        # Accumulated static structure (background voxel centers) -- a dense,
+        # stable, SLAM-like map that updates as the scene changes.
+        self.map_pub = self.create_publisher(PointCloud2, '/lidar/map', 10)
 
         self.get_logger().info(f'Lidar Object Detection Node started. Listening to {cloud_topic}')
 
@@ -82,6 +85,7 @@ class LidarDetectorNode(Node):
         # Background subtraction: keep only points not part of the static scene.
         if self.get_parameter('use_background_subtraction').value:
             filtered_points = self._background_filter(filtered_points)
+            self._publish_map(msg.header)
 
         # Publish the foreground cloud for a clean RViz view (even if empty).
         fg_msg = pc2.create_cloud_xyz32(msg.header,
@@ -198,6 +202,14 @@ class LidarDetectorNode(Node):
         # Foreground = voxel still below the background threshold.
         mask = np.array([self.bg.get(v, 0) < thresh for v in key_tuples], dtype=bool)
         return pts[mask]
+
+    def _publish_map(self, header):
+        """Publish background voxel centers as a dense, stable map cloud."""
+        thresh = int(self.get_parameter('bg_threshold').value)
+        vsize = float(self.get_parameter('bg_voxel_size').value)
+        centers = [((kx + 0.5) * vsize, (ky + 0.5) * vsize, (kz + 0.5) * vsize)
+                   for (kx, ky, kz), score in self.bg.items() if score >= thresh]
+        self.map_pub.publish(pc2.create_cloud_xyz32(header, centers))
 
 
 def main(args=None):
