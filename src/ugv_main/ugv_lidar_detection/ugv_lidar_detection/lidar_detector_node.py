@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import PointCloud2
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point, Pose, PoseArray
@@ -24,11 +25,13 @@ class LidarDetectorNode(Node):
         cloud_topic = self.get_parameter('pointcloud_topic').value
 
         # Subscriptions and Publishers
+        # LiDAR drivers publish point clouds with best-effort (sensor_data) QoS;
+        # subscribe with the matching profile or no messages arrive.
         self.subscription = self.create_subscription(
             PointCloud2,
             cloud_topic,
             self.cloud_callback,
-            10
+            qos_profile_sensor_data
         )
         self.marker_pub = self.create_publisher(MarkerArray, '/lidar/detected_objects', 10)
         # Centroid poses consumed by the LiDAR-camera fusion node.
