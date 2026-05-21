@@ -22,7 +22,17 @@ class LidarDetectorNode(Node):
         self.declare_parameter('downsample_rate', 5)  # Use every Nth point to speed up
         self.declare_parameter('max_range', 15.0)     # Drop clusters farther than this (m)
 
+        # Background subtraction (for a STATIONARY lidar): learn voxels that are
+        # consistently occupied (walls/floor) and keep only "new" points.
+        self.declare_parameter('use_background_subtraction', True)
+        self.declare_parameter('bg_voxel_size', 0.2)   # voxel edge (m)
+        self.declare_parameter('bg_threshold', 8)      # frames occupied -> background
+        self.declare_parameter('bg_cap', 20)           # max occupancy score
+
         cloud_topic = self.get_parameter('pointcloud_topic').value
+
+        # Background occupancy model: voxel (ix,iy,iz) -> persistence score
+        self.bg = {}
 
         # Subscriptions and Publishers
         # LiDAR drivers publish point clouds with best-effort (sensor_data) QoS;
@@ -37,6 +47,8 @@ class LidarDetectorNode(Node):
         # Centroid poses consumed by the LiDAR-camera fusion node.
         # Frame == msg.header.frame_id (typically unilidar_lidar).
         self.detections_pub = self.create_publisher(PoseArray, '/lidar/detections', 10)
+        # Foreground (non-background) points for a clean RViz view.
+        self.foreground_pub = self.create_publisher(PointCloud2, '/lidar/foreground', 10)
 
         self.get_logger().info(f'Lidar Object Detection Node started. Listening to {cloud_topic}')
 
@@ -67,13 +79,25 @@ class LidarDetectorNode(Node):
         # Downsample for faster DBSCAN
         filtered_points = filtered_points[::downsample_rate]
 
-        if len(filtered_points) < 10:
-            return
+        # Background subtraction: keep only points not part of the static scene.
+        if self.get_parameter('use_background_subtraction').value:
+            filtered_points = self._background_filter(filtered_points)
+
+        # Publish the foreground cloud for a clean RViz view (even if empty).
+        fg_msg = pc2.create_cloud_xyz32(msg.header,
+                                        filtered_points.tolist() if len(filtered_points) else [])
+        self.foreground_pub.publish(fg_msg)
 
         # 3. Clustering using DBSCAN
-        eps = self.get_parameter('cluster_eps').value
         min_samples = self.get_parameter('cluster_min_samples').value
-        
+        if len(filtered_points) < min_samples:
+            # Nothing to cluster -> publish empty detections so downstream clears.
+            empty = PoseArray()
+            empty.header = msg.header
+            self.detections_pub.publish(empty)
+            return
+
+        eps = self.get_parameter('cluster_eps').value
         clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(filtered_points)
         labels = clustering.labels_
 
@@ -141,6 +165,40 @@ class LidarDetectorNode(Node):
 
         self.marker_pub.publish(marker_array)
         self.detections_pub.publish(pose_array)
+
+    def _background_filter(self, pts):
+        """Keep points whose voxel is NOT consistently occupied (i.e. not the
+        static scene). Updates the occupancy model each call.
+
+        Static voxels accumulate score up to bg_cap and become background once
+        score >= bg_threshold; voxels not seen this frame decay so the model
+        adapts and a mover that stops eventually merges into the background.
+        """
+        if len(pts) == 0:
+            return pts
+
+        vsize = float(self.get_parameter('bg_voxel_size').value)
+        thresh = int(self.get_parameter('bg_threshold').value)
+        cap = int(self.get_parameter('bg_cap').value)
+
+        keys = np.floor(pts / vsize).astype(np.int32)
+        key_tuples = [tuple(k) for k in keys]
+        occupied = set(key_tuples)
+
+        # Reinforce occupied voxels.
+        for v in occupied:
+            self.bg[v] = min(self.bg.get(v, 0) + 1, cap)
+        # Decay voxels not seen this frame.
+        for v in list(self.bg.keys()):
+            if v not in occupied:
+                self.bg[v] -= 1
+                if self.bg[v] <= 0:
+                    del self.bg[v]
+
+        # Foreground = voxel still below the background threshold.
+        mask = np.array([self.bg.get(v, 0) < thresh for v in key_tuples], dtype=bool)
+        return pts[mask]
+
 
 def main(args=None):
     rclpy.init(args=args)
