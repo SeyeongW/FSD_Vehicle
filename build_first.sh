@@ -45,11 +45,6 @@ if [ ! -d "livox_ros_driver2" ]; then
     git clone https://github.com/Livox-SDK/livox_ros_driver2.git
 fi
 
-if [ ! -d "livox_laser_simulation_RO2" ]; then
-    echo ">> Cloning livox_laser_simulation_RO2..."
-    git clone https://github.com/zigobeast/livox_laser_simulation_RO2.git
-fi
-
 cd "$WS_ROOT"
 
 # 1. 외부 패키지 빌드 (ugv_else, livox 등)
@@ -64,17 +59,16 @@ colcon build --packages-select \
     rf2o_laser_odometry \
     robot_pose_publisher \
     teb_msgs teb_local_planner \
-    vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server \
-    ros2_livox_simulation livox_ros_driver2 \
+    livox_ros_driver2 \
     unitree_lidar_ros2 \
     ugv_base_node ugv_interface \
     --cmake-args -DHUMBLE_ROS=humble
 
 # 2. 메인 패키지 빌드
 colcon build --packages-select \
-    ugv_bringup ugv_chat_ai ugv_description ugv_gazebo \
-    ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app ugv_lidar_detection \
-    livox_ros_driver2 livox_laser_simulation_RO2 \
+    ugv_bringup ugv_description \
+    ugv_nav ugv_slam ugv_tools ugv_vision ugv_lidar_detection \
+    pcd_cluster_pkg pcd_to_scan_pkg plane_fit_pkg \
     --symlink-install
 
 # 3. 환경 설정 (.bashrc에 추가)

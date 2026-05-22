@@ -19,14 +19,14 @@ colcon build --packages-select \
     rf2o_laser_odometry \
     robot_pose_publisher \
     teb_msgs teb_local_planner \
-    vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server \
-    ros2_livox_simulation livox_ros_driver2 \
+    livox_ros_driver2 \
     ugv_base_node ugv_interface \
     --cmake-args -DHUMBLE_ROS=humble
 
 colcon build --packages-select \
-    ugv_bringup ugv_chat_ai ugv_description ugv_gazebo \
-    ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app \
+    ugv_bringup ugv_description \
+    ugv_nav ugv_slam ugv_tools ugv_vision ugv_lidar_detection \
+    pcd_cluster_pkg pcd_to_scan_pkg plane_fit_pkg \
     --symlink-install
 
 source install/setup.bash
