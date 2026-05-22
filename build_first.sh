@@ -29,16 +29,6 @@ if [ ! -d "Livox-SDK2" ]; then
     cd "$WS_ROOT/src"
 fi
 
-if [ ! -d "unilidar_sdk" ]; then
-    echo ">> Cloning unilidar_sdk (Unitree L1 4D LiDAR ROS2 driver)..."
-    # L1 = unilidar_sdk (L2는 unilidar_sdk2). ROS2 패키지 CMakeLists가
-    # ../../../unitree_lidar_sdk/lib/${CMAKE_SYSTEM_PROCESSOR} 의 프리컴파일
-    # 정적 라이브러리를 직접 링크하므로 별도 make install 불필요.
-    # arm64(Pi 5)는 lib/aarch64 가 포함되어 있음.
-    git clone https://github.com/unitreerobotics/unilidar_sdk.git
-    # 같은 repo 안의 ROS1 패키지는 colcon 빌드에서 제외 (ROS2 워크스페이스 충돌 방지)
-    touch unilidar_sdk/unitree_lidar_ros/COLCON_IGNORE
-fi
 
 if [ ! -d "livox_ros_driver2" ]; then
     echo ">> Cloning livox_ros_driver2..."
@@ -60,7 +50,6 @@ colcon build --packages-select \
     robot_pose_publisher \
     teb_msgs teb_local_planner \
     livox_ros_driver2 \
-    unitree_lidar_ros2 \
     ugv_base_node ugv_interface \
     --cmake-args -DHUMBLE_ROS=humble
 
