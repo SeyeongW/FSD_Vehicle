@@ -55,6 +55,10 @@ def generate_launch_description():
     mission_command_topic = LaunchConfiguration("mission_command_topic")
     operator_command_topic = LaunchConfiguration("operator_command_topic")
     publish_direct_cmd_vel = LaunchConfiguration("publish_direct_cmd_vel")
+    allow_subprocess_launches = LaunchConfiguration("allow_subprocess_launches")
+    allow_mapping_launches = LaunchConfiguration("allow_mapping_launches")
+    allow_map_save_commands = LaunchConfiguration("allow_map_save_commands")
+    allow_localization_launches = LaunchConfiguration("allow_localization_launches")
     demo_script = LaunchConfiguration("demo_script")
     demo_close_on_finish = LaunchConfiguration("demo_close_on_finish")
     default_control_config = PathJoinSubstitution(
@@ -111,6 +115,18 @@ def generate_launch_description():
                 "map_apply_state_topic": map_apply_state_topic,
                 "mission_command_topic": mission_command_topic,
                 "operator_command_topic": operator_command_topic,
+                "allow_subprocess_launches": ParameterValue(
+                    allow_subprocess_launches, value_type=bool
+                ),
+                "allow_mapping_launches": ParameterValue(
+                    allow_mapping_launches, value_type=bool
+                ),
+                "allow_map_save_commands": ParameterValue(
+                    allow_map_save_commands, value_type=bool
+                ),
+                "allow_localization_launches": ParameterValue(
+                    allow_localization_launches, value_type=bool
+                ),
                 "demo_script": demo_script,
                 "demo_close_on_finish": demo_close_on_finish,
             },
@@ -126,7 +142,13 @@ def generate_launch_description():
             DeclareLaunchArgument("max_patrol_radius_m", default_value="3.0"),
             DeclareLaunchArgument("auto_mode_strategy", default_value="mission_nav2"),
             DeclareLaunchArgument("auto_launch_command", default_value=""),
-            DeclareLaunchArgument("mapping_launch_command", default_value=""),
+            DeclareLaunchArgument(
+                "mapping_launch_command",
+                default_value=(
+                    "ros2 launch waver_patrol waver_mapping_backend.launch.py "
+                    "backend:=gazebo_live use_rviz:=false"
+                ),
+            ),
             DeclareLaunchArgument("map_save_command", default_value=""),
             DeclareLaunchArgument("localization_launch_command", default_value=""),
             DeclareLaunchArgument("map_topic", default_value="/map"),
@@ -150,6 +172,10 @@ def generate_launch_description():
             DeclareLaunchArgument("mission_command_topic", default_value="/waver/mission_command"),
             DeclareLaunchArgument("operator_command_topic", default_value="/waver/operator_command"),
             DeclareLaunchArgument("publish_direct_cmd_vel", default_value="false"),
+            DeclareLaunchArgument("allow_subprocess_launches", default_value="false"),
+            DeclareLaunchArgument("allow_mapping_launches", default_value="true"),
+            DeclareLaunchArgument("allow_map_save_commands", default_value="true"),
+            DeclareLaunchArgument("allow_localization_launches", default_value="false"),
             DeclareLaunchArgument("demo_script", default_value=""),
             DeclareLaunchArgument("demo_close_on_finish", default_value="false"),
             DeclareLaunchArgument(
@@ -160,7 +186,9 @@ def generate_launch_description():
                 msg=(
                     "Waver operator panel: visual remote only. It publishes "
                     "/waver/manual_cmd_vel and /waver/mode; final /cmd_vel must come "
-                    "from safety_cmd_mux_node on the Jetson backend."
+                    "from safety_cmd_mux_node on the Jetson backend. Gazebo launch "
+                    "commands are blocked from this panel; the SLAM mapping button may "
+                    "start only the configured mapping backend."
                 )
             ),
             remote_panel,

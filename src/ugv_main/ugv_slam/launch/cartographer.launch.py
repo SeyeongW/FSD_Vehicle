@@ -13,6 +13,16 @@ def generate_launch_description():
     # Declare launch argument for whether to launch RViz2
     use_rviz_arg = DeclareLaunchArgument('use_rviz', default_value='false',
                                      description='Whether to launch RViz2')                              
+    start_lidar_bringup_arg = DeclareLaunchArgument(
+        'start_lidar_bringup',
+        default_value='true',
+        description='Start real LiDAR/base bringup. Set false when Gazebo already publishes /scan and TF.',
+    )
+    start_robot_pose_publisher_arg = DeclareLaunchArgument(
+        'start_robot_pose_publisher',
+        default_value='true',
+        description='Start robot_pose_publisher helper. Set false when another launch already owns TF.',
+    )
                                      
     # Include launch description for bringing up the lidar
     bringup_lidar_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
@@ -21,13 +31,16 @@ def generate_launch_description():
         launch_arguments={
             'use_rviz': LaunchConfiguration('use_rviz'),
             'rviz_config': 'slam_2d',
-        }.items()
+        }.items(),
+        condition=IfCondition(LaunchConfiguration('start_lidar_bringup')),
     )
             
     # Include launch description for robot pose publisher
     robot_pose_publisher_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
         [os.path.join(get_package_share_directory('robot_pose_publisher'), 'launch'),
          '/robot_pose_publisher_launch.py'])
+    ,
+        condition=IfCondition(LaunchConfiguration('start_robot_pose_publisher')),
     ) 
         
     # Include launch description for cartographer
@@ -39,6 +52,8 @@ def generate_launch_description():
     # Return launch description
     return LaunchDescription([
         use_rviz_arg,
+        start_lidar_bringup_arg,
+        start_robot_pose_publisher_arg,
         bringup_lidar_launch,
         robot_pose_publisher_launch,
         cartographer_launch

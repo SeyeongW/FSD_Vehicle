@@ -1,0 +1,84 @@
+from __future__ import annotations
+
+import os
+
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo
+from launch.conditions import LaunchConfigurationEquals
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
+
+
+def generate_launch_description() -> LaunchDescription:
+    waver_share = get_package_share_directory("waver_patrol")
+    ugv_share = get_package_share_directory("ugv_gazebo")
+    default_source_map = os.path.join(ugv_share, "maps", "map.yaml")
+    real_mapping_launch = os.path.join(waver_share, "launch", "waver_mapping_2d.launch.py")
+
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "backend",
+                default_value="gazebo_live",
+                description="gazebo_live, cartographer, or gmapping",
+            ),
+            DeclareLaunchArgument("source_map_yaml", default_value=default_source_map),
+            DeclareLaunchArgument("use_rviz", default_value="false"),
+            DeclareLaunchArgument("start_lidar_bringup", default_value="false"),
+            DeclareLaunchArgument("start_robot_pose_publisher", default_value="false"),
+            DeclareLaunchArgument("reveal_duration_sec", default_value="12.0"),
+            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws/maps"),
+            DeclareLaunchArgument("save_basename", default_value="waver_latest_map"),
+            LogInfo(
+                msg=(
+                    "Waver mapping backend: no Gazebo process is started here. "
+                    "Use backend:=gazebo_live for UI/save/apply workflow validation, "
+                    "or backend:=cartographer/gmapping for real SLAM."
+                )
+            ),
+            Node(
+                package="waver_patrol",
+                executable="gazebo_live_mapping_node",
+                name="gazebo_live_mapping_node",
+                output="screen",
+                condition=LaunchConfigurationEquals("backend", "gazebo_live"),
+                parameters=[
+                    {
+                        "map_yaml": LaunchConfiguration("source_map_yaml"),
+                        "reveal_duration_sec": ParameterValue(
+                            LaunchConfiguration("reveal_duration_sec"),
+                            value_type=float,
+                        ),
+                        "save_dir": LaunchConfiguration("save_dir"),
+                        "save_basename": LaunchConfiguration("save_basename"),
+                        "auto_start": True,
+                        "auto_save_on_complete": True,
+                        "auto_apply_on_save": True,
+                    }
+                ],
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(real_mapping_launch),
+                launch_arguments={
+                    "algorithm": "cartographer",
+                    "use_rviz": LaunchConfiguration("use_rviz"),
+                    "start_lidar_bringup": LaunchConfiguration("start_lidar_bringup"),
+                    "start_robot_pose_publisher": LaunchConfiguration("start_robot_pose_publisher"),
+                }.items(),
+                condition=LaunchConfigurationEquals("backend", "cartographer"),
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(real_mapping_launch),
+                launch_arguments={
+                    "algorithm": "gmapping",
+                    "use_rviz": LaunchConfiguration("use_rviz"),
+                    "start_lidar_bringup": LaunchConfiguration("start_lidar_bringup"),
+                    "start_robot_pose_publisher": LaunchConfiguration("start_robot_pose_publisher"),
+                }.items(),
+                condition=LaunchConfigurationEquals("backend", "gmapping"),
+            ),
+        ]
+    )

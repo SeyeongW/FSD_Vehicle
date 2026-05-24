@@ -164,6 +164,10 @@ class WaverRemoteNode(Node):
         self.declare_parameter("slow_down_distance_m", 1.2)
         self.declare_parameter("min_valid_scan_points", 40)
         self.declare_parameter("publish_direct_cmd_vel", False)
+        self.declare_parameter("allow_subprocess_launches", False)
+        self.declare_parameter("allow_mapping_launches", True)
+        self.declare_parameter("allow_map_save_commands", True)
+        self.declare_parameter("allow_localization_launches", False)
         self.declare_parameter("manual_override_returns_to_auto", True)
         self.declare_parameter("auto_mode_strategy", "mission_nav2")
         self.declare_parameter("auto_launch_command", "")
@@ -196,6 +200,9 @@ class WaverRemoteNode(Node):
         self.last_angular_limit_publish = -1.0
         self.last_speed_limit_publish_time = 0.0
         self.publish_direct_cmd_vel = bool(self.get_parameter("publish_direct_cmd_vel").value)
+        self.allow_subprocess_launches = bool(
+            self.get_parameter("allow_subprocess_launches").value
+        )
         self.final_cmd_vel_topic = str(self.get_parameter("cmd_vel_topic").value)
         self.manual_cmd_vel_topic = str(self.get_parameter("manual_cmd_vel_topic").value)
         self.cmd_output_topic = (
@@ -721,6 +728,16 @@ class WaverRemoteNode(Node):
                 self.state.auto_status = "AUTO backend missing command"
             self.set_mode("AUTO")
             return
+        if not self.allow_subprocess_launches:
+            self.get_logger().warn(
+                "Blocked AUTO legacy subprocess launch. This operator panel is in "
+                "UI-only mode; pass allow_subprocess_launches:=true only for an "
+                "explicit test session."
+            )
+            with self.lock:
+                self.state.auto_status = "AUTO subprocess blocked: UI-only mode"
+            self.set_mode("AUTO")
+            return
 
         command = shlex.split(command_text)
         require_scan = str(bool(self.get_parameter("auto_require_scan").value)).lower()
@@ -809,7 +826,7 @@ class WaverRemoteNode(Node):
                 self.state.auto_status = "mapping mode: waiting live /map"
                 self.state.map_apply_state = "SLAM_LIVE requested"
             self.start_optional_process("mapping_launch_command", "mapping", "mapping_process")
-            self.set_mode("STANDBY")
+            self.set_mode("MAPPING")
         elif normalized == "SAVE_MAP":
             with self.lock:
                 self.state.auto_status = "save map requested"
@@ -832,11 +849,52 @@ class WaverRemoteNode(Node):
         elif normalized == "CLEAR_EMERGENCY_STOP":
             self.reset_estop()
 
+    def subprocess_allowed_for(self, label: str) -> bool:
+        if label == "mapping":
+            return bool(self.get_parameter("allow_mapping_launches").value)
+        if label == "localization":
+            return bool(self.get_parameter("allow_localization_launches").value)
+        if label == "map save":
+            return bool(self.get_parameter("allow_map_save_commands").value)
+        return self.allow_subprocess_launches
+
+    @staticmethod
+    def command_starts_gazebo(command: str) -> bool:
+        blocked_tokens = (
+            "gzserver",
+            "gzclient",
+            " gazebo ",
+            "gazebo_ros",
+            "ugv_gazebo",
+            "waver_airport_full_demo.launch.py",
+            "gazebo_mapping_mode.launch.py",
+            "gazebo_moving_object_trial.launch.py",
+            "gazebo_pre_real_validation.launch.py",
+            "waver_gazebo_bird_autonomy.launch.py",
+            "waver_gazebo_nav2_radar_bird_mission.launch.py",
+        )
+        padded = f" {command.lower()} "
+        return any(token in padded for token in blocked_tokens)
+
     def start_optional_process(self, parameter_name: str, label: str, attr_name: str) -> None:
         command = str(self.get_parameter(parameter_name).value).strip()
         if not command:
             with self.lock:
                 self.state.auto_status = f"{label}: command publish only"
+            return
+        if not self.subprocess_allowed_for(label):
+            self.get_logger().warn(
+                f"Blocked {label} subprocess command in UI-only mode: {command}"
+            )
+            with self.lock:
+                self.state.auto_status = f"{label}: subprocess blocked (UI-only)"
+            return
+        if self.command_starts_gazebo(command):
+            self.get_logger().warn(
+                f"Blocked {label} command because the operator panel must not start Gazebo: {command}"
+            )
+            with self.lock:
+                self.state.auto_status = f"{label}: Gazebo launch blocked"
             return
         proc = getattr(self, attr_name, None)
         if proc is not None and proc.poll() is None:
@@ -859,6 +917,20 @@ class WaverRemoteNode(Node):
         if not command:
             with self.lock:
                 self.state.auto_status = f"{label}: command publish only"
+            return
+        if not self.subprocess_allowed_for(label):
+            self.get_logger().warn(
+                f"Blocked {label} one-shot command in UI-only mode: {command}"
+            )
+            with self.lock:
+                self.state.auto_status = f"{label}: command blocked (UI-only)"
+            return
+        if self.command_starts_gazebo(command):
+            self.get_logger().warn(
+                f"Blocked {label} command because the operator panel must not start Gazebo: {command}"
+            )
+            with self.lock:
+                self.state.auto_status = f"{label}: Gazebo command blocked"
             return
         env = os.environ.copy()
         proc = subprocess.Popen(command, shell=True, executable="/bin/bash", env=env)
