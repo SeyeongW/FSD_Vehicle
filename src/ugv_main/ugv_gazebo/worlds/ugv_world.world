@@ -11,6 +11,11 @@
 
     <gravity>0 0 -9.8</gravity>
     <include><uri>model://sun</uri></include>
+    <include>
+      <uri>model://bird</uri>
+      <name>bird_test_target</name>
+      <pose>2.0 0.0 3.2 0 0 0</pose>
+    </include>
 
     <physics type="ode">
       <max_step_size>0.001</max_step_size>

@@ -167,6 +167,9 @@ class WaverRemoteNode(Node):
         self.declare_parameter("manual_override_returns_to_auto", True)
         self.declare_parameter("auto_mode_strategy", "mission_nav2")
         self.declare_parameter("auto_launch_command", "")
+        self.declare_parameter("mapping_launch_command", "")
+        self.declare_parameter("map_save_command", "")
+        self.declare_parameter("localization_launch_command", "")
         self.declare_parameter("auto_command", "")
         self.declare_parameter("auto_param_file", "")
         self.declare_parameter("auto_waypoint_file", "")
@@ -183,6 +186,8 @@ class WaverRemoteNode(Node):
         self.state = state
         self.lock = lock
         self.auto_process: Optional[subprocess.Popen] = None
+        self.mapping_process: Optional[subprocess.Popen] = None
+        self.localization_process: Optional[subprocess.Popen] = None
         self.last_mode_publish = ""
         self.last_mode_publish_time = 0.0
         self.last_estop_publish = False
@@ -801,15 +806,21 @@ class WaverRemoteNode(Node):
         elif normalized == "START_MAPPING":
             with self.lock:
                 self.state.map_display_mode = "SLAM_LIVE"
-                self.state.auto_status = "mapping requested: live /map"
+                self.state.auto_status = "mapping mode: waiting live /map"
+                self.state.map_apply_state = "SLAM_LIVE requested"
+            self.start_optional_process("mapping_launch_command", "mapping", "mapping_process")
             self.set_mode("STANDBY")
         elif normalized == "SAVE_MAP":
             with self.lock:
                 self.state.auto_status = "save map requested"
+                self.state.map_apply_state = "SAVE_MAP requested"
+            self.run_one_shot_command("map_save_command", "map save")
         elif normalized in {"LOAD_MAP", "START_LOCALIZATION"}:
             with self.lock:
                 self.state.map_display_mode = "MAP_FIXED"
                 self.state.auto_status = "fixed map/localization requested"
+                self.state.map_apply_state = "MAP_FIXED requested"
+            self.start_optional_process("localization_launch_command", "localization", "localization_process")
         elif normalized in {"PAUSE_PATROL", "MANUAL_MODE"}:
             self.set_mode("MANUAL" if normalized == "MANUAL_MODE" else "STANDBY")
         elif normalized == "RETURN_HOME":
@@ -820,6 +831,39 @@ class WaverRemoteNode(Node):
             self.emergency_stop()
         elif normalized == "CLEAR_EMERGENCY_STOP":
             self.reset_estop()
+
+    def start_optional_process(self, parameter_name: str, label: str, attr_name: str) -> None:
+        command = str(self.get_parameter(parameter_name).value).strip()
+        if not command:
+            with self.lock:
+                self.state.auto_status = f"{label}: command publish only"
+            return
+        proc = getattr(self, attr_name, None)
+        if proc is not None and proc.poll() is None:
+            with self.lock:
+                self.state.auto_status = f"{label}: already running pid {proc.pid}"
+            return
+        env = os.environ.copy()
+        new_proc = subprocess.Popen(
+            command,
+            shell=True,
+            executable="/bin/bash",
+            env=env,
+        )
+        setattr(self, attr_name, new_proc)
+        with self.lock:
+            self.state.auto_status = f"{label}: started pid {new_proc.pid}"
+
+    def run_one_shot_command(self, parameter_name: str, label: str) -> None:
+        command = str(self.get_parameter(parameter_name).value).strip()
+        if not command:
+            with self.lock:
+                self.state.auto_status = f"{label}: command publish only"
+            return
+        env = os.environ.copy()
+        proc = subprocess.Popen(command, shell=True, executable="/bin/bash", env=env)
+        with self.lock:
+            self.state.auto_status = f"{label}: started pid {proc.pid}"
 
     def publish_tick(self) -> None:
         # 역할: 20Hz로 현재 모드에 맞는 수동 후보/legacy direct 명령을 발행한다.
@@ -1067,6 +1111,9 @@ class WaverRemotePanel:
         frame = self.tk.Frame(self.root, bg="#0b1117")
         frame.grid(row=3, column=0, sticky="ew", padx=12, pady=4)
         buttons = [
+            ("SLAM MAPPING", "START_MAPPING", "#0277bd"),
+            ("SAVE MAP", "SAVE_MAP", "#00695c"),
+            ("APPLY FIXED MAP", "START_LOCALIZATION", "#455a64"),
             ("START PATROL", "START_PATROL", "#2e7d32"),
             ("PAUSE", "PAUSE_PATROL", "#546e7a"),
             ("RESUME", "RESUME_PATROL", "#00838f"),
@@ -1316,9 +1363,9 @@ class WaverRemotePanel:
             ("CLEAR", "CLEAR_EMERGENCY_STOP", "#6a1b9a"),
             ("TARGET", "TARGET_TEST", "#ef6c00"),
             ("SOUND", "SOUND_TEST", "#ad1457"),
-            ("MAP", "START_MAPPING", "#0277bd"),
-            ("SAVE", "SAVE_MAP", "#00695c"),
-            ("LOCALIZE", "START_LOCALIZATION", "#455a64"),
+            ("SLAM\nMAP", "START_MAPPING", "#0277bd"),
+            ("SAVE\nMAP", "SAVE_MAP", "#00695c"),
+            ("FIXED\nMAP", "START_LOCALIZATION", "#455a64"),
             ("TRIAL ON", "GAZEBO_TRIAL_START", "#558b2f"),
             ("TRIAL OFF", "GAZEBO_TRIAL_STOP", "#795548"),
             ("MANUAL", "MANUAL_MODE", "#1565c0"),
@@ -1757,13 +1804,16 @@ class WaverRemotePanel:
                 (700, lambda: self.node.send_operator_command("START_PATROL")),
                 (1700, lambda: self.node.send_operator_command("PAUSE_PATROL")),
                 (2700, lambda: self.node.send_operator_command("RESUME_PATROL")),
-                (3700, lambda: self.node.send_operator_command("TARGET_TEST")),
-                (4700, lambda: self.node.send_operator_command("SOUND_TEST")),
-                (5700, lambda: self.node.send_operator_command("RETURN_HOME")),
-                (6700, lambda: self.node.send_operator_command("STOP")),
-                (7700, lambda: self.node.send_operator_command("EMERGENCY_STOP")),
-                (8700, lambda: self.node.send_operator_command("CLEAR_EMERGENCY_STOP")),
-                (9800, self.close_if_demo_requested),
+                (3700, lambda: self.node.send_operator_command("START_MAPPING")),
+                (4700, lambda: self.node.send_operator_command("SAVE_MAP")),
+                (5700, lambda: self.node.send_operator_command("START_LOCALIZATION")),
+                (6700, lambda: self.node.send_operator_command("TARGET_TEST")),
+                (7700, lambda: self.node.send_operator_command("SOUND_TEST")),
+                (8700, lambda: self.node.send_operator_command("RETURN_HOME")),
+                (9700, lambda: self.node.send_operator_command("STOP")),
+                (10700, lambda: self.node.send_operator_command("EMERGENCY_STOP")),
+                (11700, lambda: self.node.send_operator_command("CLEAR_EMERGENCY_STOP")),
+                (12800, self.close_if_demo_requested),
             ]
         else:
             self.node.get_logger().warn(f"Unknown demo_script={script!r}; ignoring")

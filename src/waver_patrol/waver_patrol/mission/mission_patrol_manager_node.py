@@ -86,6 +86,7 @@ class MissionPatrolManagerNode(Node):
         self.declare_parameter("resume_policy", "RETURN_TO_INTERRUPTED_WAYPOINT")
         self.declare_parameter("target_mission_timeout_sec", 120.0)
         self.declare_parameter("target_goal_tolerance_xy", 0.5)
+        self.declare_parameter("object_goal_stale_timeout_sec", 3.0)
         self.declare_parameter("target_re_detection_timeout_sec", 20.0)
         self.declare_parameter("target_classification_timeout_sec", 15.0)
         self.declare_parameter("bird_confidence_threshold", 0.70)
@@ -97,6 +98,8 @@ class MissionPatrolManagerNode(Node):
         self.declare_parameter("cancel_timeout_sec", 2.0)
         self.declare_parameter("max_goal_retries", 2)
         self.declare_parameter("recovery_retry_count", 2)
+        self.declare_parameter("skip_blocked_waypoint_on_failure", True)
+        self.declare_parameter("max_consecutive_patrol_goal_failures", 3)
         self.declare_parameter("sim_nav_goal_arrived_topic", "/waver/sim_nav_goal_arrived")
         self.declare_parameter("enable_sim_nav_goal_arrival", False)
         self.declare_parameter("ignore_new_target_during_mission", True)
@@ -136,6 +139,8 @@ class MissionPatrolManagerNode(Node):
         self.goal_start_time = 0.0
         self.state_enter_time = self._now()
         self.goal_retry_count = 0
+        self.consecutive_patrol_failures = 0
+        self.consecutive_target_failures = 0
         self.mission_id = 0
         self.target_mission_id = 0
         self.post_target_resume_cooldown_until = 0.0
@@ -287,6 +292,18 @@ class MissionPatrolManagerNode(Node):
     def object_goal_callback(self, msg: PoseStamped) -> None:
         # 역할: radar/3D LiDAR가 같은 객체 좌표를 반복 발행해도 target mission, sound task,
         # interrupted waypoint 복귀 중에는 새 목표로 재진입하지 않는다.
+        if self.object_goal_stale(msg):
+            self.publish_event(
+                "TARGET_IGNORED_STALE_GOAL",
+                f"frame={msg.header.frame_id or '<empty>'} age_sec>{float(self.get_parameter('object_goal_stale_timeout_sec').value):.2f}",
+            )
+            return
+        expected_frame = str(self.get_parameter("global_frame").value)
+        if msg.header.frame_id and msg.header.frame_id != expected_frame:
+            self.publish_event(
+                "TARGET_GOAL_FRAME_WARNING",
+                f"frame={msg.header.frame_id} expected={expected_frame}",
+            )
         if self.target_interrupt_blocked():
             remaining = max(0.0, self.post_target_resume_cooldown_until - self._now())
             self.publish_event("TARGET_IGNORED_TARGET_LOCK", f"remaining_sec={remaining:.2f} state={self.state.value}")
@@ -509,10 +526,13 @@ class MissionPatrolManagerNode(Node):
         self.goal_handle = None
         self.active_goal_type = NavGoalType.NONE
         if goal_type == NavGoalType.PATROL:
+            self.consecutive_patrol_failures = 0
             self.set_state(MissionState.PATROL_DWELL, self.current_waypoint().name)
         elif goal_type == NavGoalType.RADAR_TARGET:
+            self.consecutive_target_failures = 0
             self.set_state(MissionState.TARGET_REACHED, "target_goal_reached")
         elif goal_type == NavGoalType.RETURN_TO_INTERRUPTED_WAYPOINT:
+            self.consecutive_target_failures = 0
             if self.interrupted_index is not None:
                 self.current_index = self.interrupted_index
             self.start_post_target_resume_cooldown("interrupted_waypoint_reached")
@@ -522,6 +542,7 @@ class MissionPatrolManagerNode(Node):
 
     def handle_goal_failure(self, reason: str) -> None:
         self.publish_event("NAV2_GOAL_FAILED", reason)
+        failed_goal_type = self.active_goal_type
         if self.goal_retry_count < int(self.get_parameter("max_goal_retries").value):
             self.goal_retry_count += 1
             if self.active_goal_pose is not None:
@@ -534,6 +555,35 @@ class MissionPatrolManagerNode(Node):
                 return
         self.goal_handle = None
         self.active_goal_type = NavGoalType.NONE
+        self.active_goal_pose = None
+        if failed_goal_type == NavGoalType.RADAR_TARGET:
+            self.consecutive_target_failures += 1
+            self.sound_request_pub.publish(Bool(data=False))
+            self.start_post_target_resume_cooldown(f"target_goal_failed {reason}")
+            self.publish_event(
+                "TARGET_MISSION_ABORTED_RESUME_PATROL",
+                f"reason={reason} consecutive_target_failures={self.consecutive_target_failures}",
+            )
+            self.set_state(MissionState.RESUME_PATROL, f"target_goal_failed {reason}")
+            return
+        if failed_goal_type == NavGoalType.RETURN_TO_INTERRUPTED_WAYPOINT:
+            self.consecutive_target_failures += 1
+            self.start_post_target_resume_cooldown(f"return_to_interrupted_failed {reason}")
+            self.publish_event("RETURN_TO_INTERRUPTED_FAILED_RESUME_PATROL", reason)
+            self.set_state(MissionState.RESUME_PATROL, f"return_failed {reason}")
+            return
+        if failed_goal_type == NavGoalType.PATROL:
+            self.consecutive_patrol_failures += 1
+            if bool(self.get_parameter("skip_blocked_waypoint_on_failure").value):
+                max_failures = int(self.get_parameter("max_consecutive_patrol_goal_failures").value)
+                if self.consecutive_patrol_failures < max_failures:
+                    failed_index = self.current_index
+                    self.advance_waypoint()
+                    self.publish_event(
+                        "PATROL_WAYPOINT_SKIPPED_AFTER_FAILURE",
+                        f"failed_index={failed_index} reason={reason} consecutive_patrol_failures={self.consecutive_patrol_failures}",
+                    )
+                    return
         self.set_state(MissionState.NAV2_FAILED, reason)
 
     def check_goal_timeout(self) -> None:
@@ -585,6 +635,18 @@ class MissionPatrolManagerNode(Node):
             return True
         self.target_interrupt_locked = False
         return False
+
+    def object_goal_stale(self, msg: PoseStamped) -> bool:
+        # 역할: 오래된 target goal이 뒤늦게 들어와 순찰을 끊는 것을 막는다.
+        # stamp가 0이면 legacy/test publisher로 보고 허용한다.
+        stamp_sec = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
+        if stamp_sec <= 0.0:
+            return False
+        now = self._now()
+        if now <= 0.0:
+            return False
+        age = now - stamp_sec
+        return age > float(self.get_parameter("object_goal_stale_timeout_sec").value)
 
     def start_post_target_resume_cooldown(self, reason: str) -> None:
         duration = max(0.0, float(self.get_parameter("post_target_resume_cooldown_sec").value))

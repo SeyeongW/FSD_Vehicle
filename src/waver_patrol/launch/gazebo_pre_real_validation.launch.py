@@ -54,7 +54,7 @@ def generate_launch_description() -> LaunchDescription:
                     "world_file": LaunchConfiguration("world_file"),
                     "robot_entity": "ugv_rover",
                     "robot_sdf_file": LaunchConfiguration("robot_sdf_file"),
-                    "spawn_target": "true",
+                    "spawn_target": "false",
                     "spawn_ugv_bird_single": "false",
                     "spawn_ugv_bird_swarm": "false",
                     "enable_ugv_bird_manager": "false",

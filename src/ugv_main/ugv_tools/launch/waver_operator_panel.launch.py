@@ -31,6 +31,9 @@ def generate_launch_description():
     max_patrol_radius_m = LaunchConfiguration("max_patrol_radius_m")
     auto_mode_strategy = LaunchConfiguration("auto_mode_strategy")
     auto_launch_command = LaunchConfiguration("auto_launch_command")
+    mapping_launch_command = LaunchConfiguration("mapping_launch_command")
+    map_save_command = LaunchConfiguration("map_save_command")
+    localization_launch_command = LaunchConfiguration("localization_launch_command")
     map_topic = LaunchConfiguration("map_topic")
     map_display_mode = LaunchConfiguration("map_display_mode")
     amcl_pose_topic = LaunchConfiguration("amcl_pose_topic")
@@ -77,6 +80,9 @@ def generate_launch_description():
                 "manual_override_returns_to_auto": True,
                 "auto_mode_strategy": auto_mode_strategy,
                 "auto_launch_command": auto_launch_command,
+                "mapping_launch_command": mapping_launch_command,
+                "map_save_command": map_save_command,
+                "localization_launch_command": localization_launch_command,
                 "lidar_required": require_scan,
                 "auto_require_scan": require_scan,
                 "min_valid_scan_points": min_valid_scan_points,
@@ -120,6 +126,9 @@ def generate_launch_description():
             DeclareLaunchArgument("max_patrol_radius_m", default_value="3.0"),
             DeclareLaunchArgument("auto_mode_strategy", default_value="mission_nav2"),
             DeclareLaunchArgument("auto_launch_command", default_value=""),
+            DeclareLaunchArgument("mapping_launch_command", default_value=""),
+            DeclareLaunchArgument("map_save_command", default_value=""),
+            DeclareLaunchArgument("localization_launch_command", default_value=""),
             DeclareLaunchArgument("map_topic", default_value="/map"),
             DeclareLaunchArgument("map_display_mode", default_value="auto"),
             DeclareLaunchArgument("amcl_pose_topic", default_value="/amcl_pose"),

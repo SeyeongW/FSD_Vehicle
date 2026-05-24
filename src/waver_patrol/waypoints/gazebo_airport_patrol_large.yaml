@@ -1,10 +1,12 @@
 frame_id: "map"
-route_name: "gazebo_airport_patrol_large"
+route_name: "gazebo_airport_patrol_3m_square"
 loop: true
-experiment_tags: ["gazebo", "ugv_world", "large_waypoint", "dynamic_obstacle", "elevated_target"]
+experiment_tags: ["gazebo", "ugv_world", "3m_square_patrol", "dynamic_obstacle", "elevated_target"]
 
-# Gazebo airport-world patrol coordinates. These are 3x larger than the
-# compact smoke-test route in gazebo_moving_object_trial.yaml.
+# Gazebo airport-world patrol coordinates.
+# The route forms a 3 m x 3 m square centered around the start pose:
+#   southwest -> southeast -> northeast -> northwest -> loop.
+# Keep this small until SLAM/localization and safety mux are verified.
 home:
   name: "home"
   x: 0.0
@@ -13,27 +15,33 @@ home:
 
 charge:
   name: "charge"
-  x: 0.0
+  x: -1.5
   y: -1.5
   yaw_deg: 180.0
 
 waypoints:
-  - name: "airport_wp_1"
-    x: 2.4
-    y: 0.0
+  - name: "square_sw"
+    x: -1.5
+    y: -1.5
     yaw_deg: 0.0
     dwell_s: 1.0
     task: ["observe"]
-  - name: "airport_wp_2"
-    x: 2.4
-    y: 1.5
+  - name: "square_se"
+    x: 1.5
+    y: -1.5
     yaw_deg: 90.0
     dwell_s: 1.0
     task: ["observe"]
-  - name: "airport_wp_3"
-    x: 0.3
+  - name: "square_ne"
+    x: 1.5
     y: 1.5
     yaw_deg: 180.0
+    dwell_s: 1.0
+    task: ["observe"]
+  - name: "square_nw"
+    x: -1.5
+    y: 1.5
+    yaw_deg: -90.0
     dwell_s: 1.0
     task: ["observe"]
 

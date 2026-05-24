@@ -4,11 +4,13 @@ import glob as _glob
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
+    DeclareLaunchArgument,
     IncludeLaunchDescription,
     ExecuteProcess,
     SetEnvironmentVariable,
     TimerAction,
 )
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
@@ -34,6 +36,7 @@ def _find_script(filename: str, pkg_share: str) -> str:
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('ugv_gazebo')
+    ugv_description_parent = os.path.dirname(get_package_share_directory('ugv_description'))
 
     launch_file_dir = os.path.join(pkg_share, 'launch', 'bringup')
     world = os.path.join(pkg_share, 'worlds', 'ugv_world.world')
@@ -46,6 +49,10 @@ def generate_launch_description():
     print(f'[bringup] ugv_manager.py  -> {ugv_manager_py}')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+    use_gui = LaunchConfiguration('use_gui', default='true')
+    spawn_bird = LaunchConfiguration('spawn_bird', default='false')
+    enable_bird_manager = LaunchConfiguration('enable_bird_manager', default='false')
+    enable_ugv_manager = LaunchConfiguration('enable_ugv_manager', default='false')
 
     gazebo_model_database_uri = SetEnvironmentVariable(
         name='GAZEBO_MODEL_DATABASE_URI',
@@ -54,7 +61,21 @@ def generate_launch_description():
 
     gazebo_model_path = SetEnvironmentVariable(
         name='GAZEBO_MODEL_PATH',
-        value=os.path.join(pkg_share, 'models') + ':' + os.environ.get('GAZEBO_MODEL_PATH', '')
+        value=(
+            os.path.join(pkg_share, 'models') + ':'
+            + ugv_description_parent + ':'
+            + os.environ.get('GAZEBO_MODEL_PATH', '')
+        )
+    )
+
+    gazebo_resource_path = SetEnvironmentVariable(
+        name='GAZEBO_RESOURCE_PATH',
+        value=(
+            os.path.join(pkg_share, 'worlds') + ':'
+            + os.path.join(pkg_share, 'models') + ':'
+            + '/usr/share/gazebo-11:/usr/share/gazebo:'
+            + os.environ.get('GAZEBO_RESOURCE_PATH', '')
+        )
     )
 
     gzserver_cmd = ExecuteProcess(
@@ -70,7 +91,8 @@ def generate_launch_description():
 
     gzclient_cmd = ExecuteProcess(
         cmd=['gzclient'],
-        output='screen'
+        output='screen',
+        condition=IfCondition(use_gui),
     )
 
     robot_state_publisher_cmd = IncludeLaunchDescription(
@@ -94,6 +116,7 @@ def generate_launch_description():
     # bird_single만 스폰
     spawn_bird_single_cmd = TimerAction(
         period=4.0,
+        condition=IfCondition(spawn_bird),
         actions=[
             ExecuteProcess(
                 cmd=[
@@ -173,6 +196,7 @@ def generate_launch_description():
 
     run_bird_manager_cmd = TimerAction(
         period=8.5,
+        condition=IfCondition(enable_bird_manager),
         actions=[
             ExecuteProcess(
                 cmd=['python3', bird_manager_py],
@@ -184,6 +208,7 @@ def generate_launch_description():
 
     run_ugv_manager_cmd = TimerAction(
         period=10.0,
+        condition=IfCondition(enable_ugv_manager),
         actions=[
             ExecuteProcess(
                 cmd=['python3', ugv_manager_py],
@@ -194,8 +219,14 @@ def generate_launch_description():
     )
 
     ld = LaunchDescription()
+    ld.add_action(DeclareLaunchArgument('use_sim_time', default_value='true'))
+    ld.add_action(DeclareLaunchArgument('use_gui', default_value='true'))
+    ld.add_action(DeclareLaunchArgument('spawn_bird', default_value='false'))
+    ld.add_action(DeclareLaunchArgument('enable_bird_manager', default_value='false'))
+    ld.add_action(DeclareLaunchArgument('enable_ugv_manager', default_value='false'))
     ld.add_action(gazebo_model_database_uri)
     ld.add_action(gazebo_model_path)
+    ld.add_action(gazebo_resource_path)
     ld.add_action(gzserver_cmd)
     ld.add_action(gzclient_cmd)
     ld.add_action(robot_state_publisher_cmd)

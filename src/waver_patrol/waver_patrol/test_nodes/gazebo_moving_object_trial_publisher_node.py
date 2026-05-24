@@ -51,6 +51,9 @@ class GazeboMovingObjectTrialPublisherNode(Node):
         self.declare_parameter("gazebo_entity_name", "bird_test_target")
         self.declare_parameter("move_gazebo_entity", True)
         self.declare_parameter("gazebo_entity_move_delay_sec", 5.0)
+        self.declare_parameter("start_on_mission_command", False)
+        self.declare_parameter("mission_command_topic", "/waver/mission_command")
+        self.declare_parameter("start_commands", ["START_PATROL", "AUTO_MODE", "GAZEBO_TRIAL_START"])
         self.declare_parameter("publish_fake_camera_after_sec", 12.0)
         self.declare_parameter("fake_class_name", "bird")
         self.declare_parameter("fake_confidence", 0.92)
@@ -60,6 +63,19 @@ class GazeboMovingObjectTrialPublisherNode(Node):
         self.camera_state_pub = self.create_publisher(String, str(self.get_parameter("camera_state_topic").value), 10)
         self.class_pub = self.create_publisher(String, str(self.get_parameter("external_class_topic").value), 10)
         self.conf_pub = self.create_publisher(Float32, str(self.get_parameter("external_confidence_topic").value), 10)
+        self.start_commands = {
+            str(command).strip().upper()
+            for command in list(self.get_parameter("start_commands").value)
+            if str(command).strip()
+        }
+        self.wait_for_start_command = bool(self.get_parameter("start_on_mission_command").value)
+        self.trajectory_started = not self.wait_for_start_command
+        self.create_subscription(
+            String,
+            str(self.get_parameter("mission_command_topic").value),
+            self.command_callback,
+            10,
+        )
         # 역할: Gazebo가 이미 실행 중인 상태에서 이 노드만 나중에 붙으면
         # use_sim_time clock이 0이 아닌 값으로 시작한다. 첫 tick에서 mission 시작
         # 시각을 잡아야 target이 첫 프레임부터 종료점으로 점프하지 않는다.
@@ -71,8 +87,20 @@ class GazeboMovingObjectTrialPublisherNode(Node):
         self.create_timer(1.0 / max(float(self.get_parameter("timer_hz").value), 1.0), self.tick)
         self.get_logger().warn("Gazebo moving object trial publisher is simulation-only")
 
+    def command_callback(self, msg: String) -> None:
+        command = msg.data.strip().upper()
+        if command not in self.start_commands:
+            return
+        self.trajectory_started = True
+        self.start_time = self._now()
+        self.path = self._trial_path(int(self.get_parameter("trial_id").value))
+        self.state_pub.publish(String(data=f"TRIAL_TARGET_STARTED command={command}"))
+
     def tick(self) -> None:
         now = self._now()
+        if not self.trajectory_started:
+            self.state_pub.publish(String(data="WAITING_FOR_PATROL_START"))
+            return
         if self.start_time is None:
             self.start_time = now
         t = now - self.start_time

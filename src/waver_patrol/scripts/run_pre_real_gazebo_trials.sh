@@ -15,6 +15,7 @@ REQUIRED_SUCCESSES="${REQUIRED_SUCCESSES:-3}"
 MAX_WAIT_SEC="${MAX_WAIT_SEC:-150}"
 USE_GUI="${USE_GUI:-false}"
 RECORD_BAG="${RECORD_BAG:-false}"
+ENABLE_TRIAL_LOGGER="${ENABLE_TRIAL_LOGGER:-false}"
 TARGET_MIN_HEIGHT_M="${TARGET_MIN_HEIGHT_M:-3.0}"
 MIN_DYNAMIC_MOTION_M="${MIN_DYNAMIC_MOTION_M:-0.2}"
 MIN_DYNAMIC_VELOCITY_MPS="${MIN_DYNAMIC_VELOCITY_MPS:-0.05}"
@@ -101,7 +102,7 @@ if [ "$RUN_MODE" = "single_session" ]; then
     record_bag:=false \
     output_root:='$OUTPUT_ROOT' \
     enable_cluster_node:=false \
-    enable_trial_logger:=false \
+    enable_trial_logger:='$ENABLE_TRIAL_LOGGER' \
     target_z:='$TARGET_Z'" >"$log_path" 2>&1 &
   launch_pid=$!
 
@@ -154,7 +155,7 @@ for trial_id in $TRIALS; do
     record_bag:='$RECORD_BAG' \
     output_root:='$OUTPUT_ROOT' \
     enable_cluster_node:=false \
-    enable_trial_logger:=false \
+    enable_trial_logger:='$ENABLE_TRIAL_LOGGER' \
     target_z:='$TARGET_Z'" >"$log_path" 2>&1 &
   launch_pid=$!
 

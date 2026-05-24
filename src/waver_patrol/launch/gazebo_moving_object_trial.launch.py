@@ -141,7 +141,20 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("target_motion_duration_sec", default_value="8.0"),
             DeclareLaunchArgument("target_z", default_value="3.2"),
             DeclareLaunchArgument("target_gazebo_move_delay_sec", default_value="8.0"),
+            DeclareLaunchArgument(
+                "target_start_on_mission_command",
+                default_value="false",
+                description=(
+                    "When true, the Gazebo elevated target waits for START_PATROL/AUTO_MODE "
+                    "before publishing its moving cluster trajectory."
+                ),
+            ),
             DeclareLaunchArgument("gazebo_sim_max_linear_speed", default_value="1.0"),
+            DeclareLaunchArgument(
+                "gazebo_goal_tolerance_m",
+                default_value="0.85",
+                description="Gazebo-only simple-nav tolerance. Real robot Nav2 tolerances are configured separately.",
+            ),
             DeclareLaunchArgument("post_target_resume_cooldown_sec", default_value="12.0"),
             SetEnvironmentVariable(name="GAZEBO_MODEL_DATABASE_URI", value=""),
             SetEnvironmentVariable(name="LIBGL_ALWAYS_SOFTWARE", value="1"),
@@ -388,8 +401,12 @@ def generate_launch_description() -> LaunchDescription:
                         "use_sim_time": True,
                         "max_linear_speed": ParameterValue(LaunchConfiguration("gazebo_sim_max_linear_speed"), value_type=float),
                         "max_angular_speed": 1.0,
-                        "goal_tolerance_m": 0.45,
+                        "goal_tolerance_m": ParameterValue(
+                            LaunchConfiguration("gazebo_goal_tolerance_m"),
+                            value_type=float,
+                        ),
                         "yaw_tolerance_rad": 0.75,
+                        "goal_timeout_sec": 240.0,
                         "dynamic_obstacle_topic": LaunchConfiguration("dynamic_obstacle_topic"),
                         "enable_dynamic_obstacle_avoidance": ParameterValue(
                             LaunchConfiguration("enable_simple_nav2_avoidance"),
@@ -446,6 +463,10 @@ def generate_launch_description() -> LaunchDescription:
                         "gazebo_entity_move_delay_sec": ParameterValue(
                             LaunchConfiguration("target_gazebo_move_delay_sec"),
                             value_type=float,
+                        ),
+                        "start_on_mission_command": ParameterValue(
+                            LaunchConfiguration("target_start_on_mission_command"),
+                            value_type=bool,
                         ),
                         "frame_id": "map",
                     }

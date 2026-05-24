@@ -1,10 +1,10 @@
 frame_id: "map"
-route_name: "waver_bird_patrol"
+route_name: "waver_3m_square_patrol"
 loop: true
-experiment_tags: ["bird_deterrence", "radar_guided", "nav2_patrol"]
+experiment_tags: ["bird_deterrence", "radar_guided", "nav2_patrol", "3m_square_patrol"]
 
-# These are example map-frame coordinates. Measure and edit them for the real
-# test site after mapping/localization are stable.
+# 3 m x 3 m map-frame square around the start pose. Measure and edit these
+# coordinates after real SLAM/localization are stable at the field.
 home:
   name: "home"
   x: 0.0
@@ -13,27 +13,33 @@ home:
 
 charge:
   name: "charge"
-  x: 0.0
-  y: -1.0
+  x: -1.5
+  y: -1.5
   yaw_deg: 180.0
 
 waypoints:
-  - name: "wp_1"
-    x: 1.0
-    y: 0.0
+  - name: "square_sw"
+    x: -1.5
+    y: -1.5
     yaw_deg: 0.0
     dwell_s: 2.0
     task: ["observe"]
-  - name: "wp_2"
-    x: 2.0
-    y: 1.0
+  - name: "square_se"
+    x: 1.5
+    y: -1.5
     yaw_deg: 90.0
     dwell_s: 2.0
     task: ["observe"]
-  - name: "wp_3"
-    x: 0.5
-    y: 2.0
+  - name: "square_ne"
+    x: 1.5
+    y: 1.5
     yaw_deg: 180.0
+    dwell_s: 2.0
+    task: ["observe"]
+  - name: "square_nw"
+    x: -1.5
+    y: 1.5
+    yaw_deg: -90.0
     dwell_s: 2.0
     task: ["observe"]
 
