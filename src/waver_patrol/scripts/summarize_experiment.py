@@ -17,7 +17,7 @@ def count_rows(path: str) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("run_dir", help="~/ros2_ws/waver_experiments/<run>")
+    parser.add_argument("run_dir", help="~/ros2_ws/experiments_result/<run>")
     args = parser.parse_args()
     run_dir = os.path.expanduser(args.run_dir)
     for name in sorted(f for f in os.listdir(run_dir) if f.endswith(".csv")):

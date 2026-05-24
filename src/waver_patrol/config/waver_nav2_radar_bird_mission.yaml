@@ -57,6 +57,38 @@ target_goal_manager_node:
     target_hold_sec: 1.0
     target_lost_timeout_sec: 2.0
     goal_yaw_policy: "FACE_TARGET"
+    lidar_objects_topic: "/waver/lidar_objects"
+    lidar_detections_topic: "/lidar/detections"
+    lidar_objects_map_topic: "/waver/lidar_objects_map"
+    # Raw cluster coordinates are accepted only after internal tf2 transform;
+    # map/odom transformed coordinates remain the preferred mission input.
+    subscribe_raw_lidar_objects: false
+    subscribe_lidar_objects_map: false
+
+moving_object_motion_filter_node:
+  ros__parameters:
+    input_topic: "/waver/lidar_objects_map"
+    raw_input_topic: "/waver/lidar_objects"
+    target_min_height_m: 3.0
+    target_max_height_m: 30.0
+    height_reference_frame: "map"
+    fallback_height_reference_frame: "odom"
+    ground_z_offset_m: 0.0
+    require_z_valid: true
+    require_height_filter: true
+    require_dynamic_filter: true
+    min_dynamic_motion_m: 0.2
+    min_dynamic_velocity_mps: 0.05
+    min_sample_motion_epsilon_m: 0.005
+    min_tracking_duration_sec: 1.0
+    max_tracking_duration_sec: 20.0
+    require_consecutive_dynamic_frames: 5
+    static_motion_tolerance_m: 0.25
+    high_yaw_rate_mode: "strict_validation"
+    angular_velocity_threshold_radps: 0.25
+    max_target_distance_m: 10.0
+    min_target_distance_m: 0.3
+    z_source_mode: "pointcloud"
 
 livox_pointcloud_to_scan_node:
   ros__parameters:
@@ -110,6 +142,7 @@ safety_cmd_mux_node:
     scan_topic: "/scan"
     mode_default: "AUTO"
     require_scan: true
+    ignore_scan_when_require_scan_false: false
     scan_stale_s: 0.5
     hard_stop_distance_m: 0.45
     slow_down_distance_m: 1.2
@@ -164,7 +197,7 @@ sound_alert_stub:
 experiment_data_logger_node:
   ros__parameters:
     experiment_name: "waver_radar_guided_bird_deterrence"
-    output_root: "~/ros2_ws/waver_experiments"
+    output_root: "~/ros2_ws/experiments_result"
     csv_flush_interval_sec: 1.0
     write_rosbag_command_file: true
     log_odom: true

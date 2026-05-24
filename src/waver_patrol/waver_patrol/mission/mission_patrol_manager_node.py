@@ -103,6 +103,7 @@ class MissionPatrolManagerNode(Node):
         self.declare_parameter("update_target_if_closer", False)
         self.declare_parameter("update_target_if_higher_priority", True)
         self.declare_parameter("target_update_cooldown_sec", 5.0)
+        self.declare_parameter("post_target_resume_cooldown_sec", 8.0)
         self.declare_parameter("frame_id", "map")
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("global_frame", "map")
@@ -135,6 +136,8 @@ class MissionPatrolManagerNode(Node):
         self.goal_retry_count = 0
         self.mission_id = 0
         self.target_mission_id = 0
+        self.post_target_resume_cooldown_until = 0.0
+        self.target_interrupt_locked = False
 
         self.state_pub = self.create_publisher(String, "/waver/mission_state", 10)
         self.event_pub = self.create_publisher(String, "/waver/mission_event", 10)
@@ -170,7 +173,12 @@ class MissionPatrolManagerNode(Node):
     def object_goal_callback(self, msg: PoseStamped) -> None:
         # 역할: radar/3D LiDAR가 같은 객체 좌표를 반복 발행해도 target mission, sound task,
         # interrupted waypoint 복귀 중에는 새 목표로 재진입하지 않는다.
+        if self.target_interrupt_blocked():
+            remaining = max(0.0, self.post_target_resume_cooldown_until - self._now())
+            self.publish_event("TARGET_IGNORED_TARGET_LOCK", f"remaining_sec={remaining:.2f} state={self.state.value}")
+            return
         if self.target_mission_active() and bool(self.get_parameter("ignore_new_target_during_mission").value):
+            self.target_interrupt_locked = True
             self.publish_event("TARGET_IGNORED", f"already_in_target_mission state={self.state.value}")
             return
         self.object_goal = msg
@@ -203,12 +211,19 @@ class MissionPatrolManagerNode(Node):
         if self.state == MissionState.HOLD_AT_HOME:
             return
         if self.object_goal_active and self.object_goal is not None:
-            if self.target_mission_active() and bool(self.get_parameter("ignore_new_target_during_mission").value):
+            if self.target_interrupt_blocked():
+                remaining = max(0.0, self.post_target_resume_cooldown_until - self._now())
                 self.object_goal_active = False
+                self.object_goal = None
+                self.publish_event("TARGET_IGNORED_TARGET_LOCK", f"remaining_sec={remaining:.2f} state={self.state.value}")
+            elif self.target_mission_active() and bool(self.get_parameter("ignore_new_target_during_mission").value):
+                self.object_goal_active = False
+                self.object_goal = None
+                self.target_interrupt_locked = True
                 self.publish_event("TARGET_IGNORED_ACTIVE_MISSION", f"state={self.state.value}")
+            else:
+                self.start_target_mission()
                 return
-            self.start_target_mission()
-            return
         if self.state in {MissionState.TARGET_REACHED, MissionState.TARGET_REDETECTION_WAIT, MissionState.TARGET_CLASSIFICATION_WAIT}:
             self.handle_target_confirmation()
             return
@@ -236,20 +251,31 @@ class MissionPatrolManagerNode(Node):
     def start_target_mission(self) -> None:
         if self.object_goal is None:
             return
+        if self.target_interrupt_blocked():
+            remaining = max(0.0, self.post_target_resume_cooldown_until - self._now())
+            self.object_goal_active = False
+            self.object_goal = None
+            self.publish_event("TARGET_IGNORED_TARGET_LOCK", f"remaining_sec={remaining:.2f} state={self.state.value}")
+            return
         if self.target_mission_active() and bool(self.get_parameter("ignore_new_target_during_mission").value):
             # 역할: radar/object 후보가 계속 들어와도 현재 Nav2 target goal을 반복 cancel하지 않는다.
             # 실차에서 goal spam은 회피/재계획 안정성을 해치므로 sound/return까지 현재 target mission을 유지한다.
             self.object_goal_active = False
+            self.object_goal = None
+            self.target_interrupt_locked = True
             self.publish_event("TARGET_IGNORED_ACTIVE_MISSION", f"state={self.state.value}")
             return
+        goal = self.object_goal
         if self.active_goal_type != NavGoalType.RADAR_TARGET:
             self.interrupted_index = self.current_index
             self.interrupted_goal = self.current_waypoint().pose if self.route.waypoints else None
             self.target_mission_id += 1
             self.publish_event("PATROL_INTERRUPTED_BY_RADAR_TARGET", f"target_mission_id={self.target_mission_id}")
+        self.target_interrupt_locked = True
         self.object_goal_active = False
+        self.object_goal = None
         self.cancel_active_goal("target_mission_interrupt")
-        self.send_nav_goal(self.object_goal, NavGoalType.RADAR_TARGET, MissionState.TARGET_NAVIGATING)
+        self.send_nav_goal(goal, NavGoalType.RADAR_TARGET, MissionState.TARGET_NAVIGATING)
 
     def handle_target_confirmation(self) -> None:
         elapsed = self._now() - self.state_enter_time
@@ -277,6 +303,7 @@ class MissionPatrolManagerNode(Node):
 
     def return_to_interrupted_waypoint(self) -> None:
         if self.interrupted_goal is None:
+            self.start_post_target_resume_cooldown("no_interrupted_goal")
             self.set_state(MissionState.RESUME_PATROL, "no_interrupted_goal")
             return
         self.send_nav_goal(
@@ -374,6 +401,7 @@ class MissionPatrolManagerNode(Node):
         elif goal_type == NavGoalType.RETURN_TO_INTERRUPTED_WAYPOINT:
             if self.interrupted_index is not None:
                 self.current_index = self.interrupted_index
+            self.start_post_target_resume_cooldown("interrupted_waypoint_reached")
             self.set_state(MissionState.RESUME_PATROL, "interrupted_waypoint_reached")
         elif goal_type == NavGoalType.BATTERY_RETURN:
             self.set_state(MissionState.HOLD_AT_HOME, "battery_return_arrived")
@@ -425,6 +453,33 @@ class MissionPatrolManagerNode(Node):
         # 이 구간에서 반복 radar 좌표가 들어와도 현재 임무를 깨지 않아야 순찰 복귀가 보장된다.
         return self.active_goal_type == NavGoalType.RADAR_TARGET or self.state in TARGET_MISSION_STATES
 
+    def in_post_target_resume_cooldown(self) -> bool:
+        # 역할: target mission 완료 직후 같은 객체가 계속 publish되어 즉시 재진입하는 것을 막는다.
+        # 실차에서는 이 시간 동안 순찰 재개/경로 재생성이 먼저 일어나므로 target spam에 덜 흔들린다.
+        return self._now() < self.post_target_resume_cooldown_until
+
+    def target_interrupt_blocked(self) -> bool:
+        # 역할: target mission을 원자적 구간으로 잠근다.
+        # radar/LiDAR object goal topic이 계속 true를 발행해도 목표 접근, 음향 task, 순찰 복귀 사이를 끊지 않는다.
+        if not self.target_interrupt_locked:
+            return False
+        if self.target_mission_active():
+            return True
+        if self.in_post_target_resume_cooldown():
+            return True
+        if self.active_goal_type == NavGoalType.RADAR_TARGET:
+            return True
+        self.target_interrupt_locked = False
+        return False
+
+    def start_post_target_resume_cooldown(self, reason: str) -> None:
+        duration = max(0.0, float(self.get_parameter("post_target_resume_cooldown_sec").value))
+        self.post_target_resume_cooldown_until = self._now() + duration
+        self.target_interrupt_locked = True
+        self.object_goal_active = False
+        self.object_goal = None
+        self.publish_event("POST_TARGET_RESUME_COOLDOWN", f"{reason} duration_sec={duration:.2f}")
+
     def advance_waypoint(self) -> None:
         self.current_index += 1
         if self.current_index >= len(self.route.waypoints):
@@ -470,10 +525,16 @@ def main(args: list[str] | None = None) -> None:
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception as exc:
+        if rclpy.ok() and "context is not valid" not in str(exc):
+            raise
     finally:
         if rclpy.ok():
-            node.cancel_active_goal("shutdown")
-            node.sound_request_pub.publish(Bool(data=False))
+            try:
+                node.cancel_active_goal("shutdown")
+                node.sound_request_pub.publish(Bool(data=False))
+            except Exception:
+                pass
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

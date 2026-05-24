@@ -1,0 +1,39 @@
+Panels:
+  - Class: rviz_common/Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+    - Class: rviz_default_plugins/RobotModel
+      Name: RobotModel
+      Enabled: true
+    - Class: rviz_default_plugins/LaserScan
+      Name: Scan
+      Enabled: true
+      Topic:
+        Value: /scan
+    - Class: rviz_default_plugins/Path
+      Name: GlobalPlan
+      Enabled: true
+      Topic:
+        Value: /plan
+    - Class: rviz_default_plugins/MarkerArray
+      Name: MovingObjectsMap
+      Enabled: true
+      Topic:
+        Value: /waver/moving_objects_map_marker
+    - Class: rviz_default_plugins/MarkerArray
+      Name: MovingObjectTrack
+      Enabled: true
+      Topic:
+        Value: /waver/moving_object_track_marker
+  Global Options:
+    Fixed Frame: map
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/SetInitialPose
+    - Class: rviz_default_plugins/SetGoal
+  Value: true

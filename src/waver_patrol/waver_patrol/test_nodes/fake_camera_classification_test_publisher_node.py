@@ -18,9 +18,11 @@ class FakeCameraClassificationTestPublisherNode(Node):
         self.declare_parameter("publish_after_sec", 6.0)
         self.declare_parameter("publish_active", True)
         self.declare_parameter("active_topic", "/waver/aerial_target_active")
+        self.declare_parameter("camera_state_topic", "/waver/camera_detection_state")
         self.class_pub = self.create_publisher(String, str(self.get_parameter("class_topic").value), 10)
         self.conf_pub = self.create_publisher(Float32, str(self.get_parameter("confidence_topic").value), 10)
         self.active_pub = self.create_publisher(Bool, str(self.get_parameter("active_topic").value), 10)
+        self.camera_state_pub = self.create_publisher(String, str(self.get_parameter("camera_state_topic").value), 10)
         self.start = self.get_clock().now().nanoseconds * 1e-9
         self.create_timer(0.5, self.tick)
 
@@ -32,6 +34,7 @@ class FakeCameraClassificationTestPublisherNode(Node):
             # 역할: Gazebo/desk test에서 카메라가 목표를 다시 잡은 상황을 흉내 낸다.
             # 실차 launch에서는 이 test publisher를 켜지 않는다.
             self.active_pub.publish(Bool(data=True))
+        self.camera_state_pub.publish(String(data="DETECTED tracking_state=TRACKING source=fake_camera"))
         self.class_pub.publish(String(data=str(self.get_parameter("target_class").value)))
         self.conf_pub.publish(Float32(data=float(self.get_parameter("confidence").value)))
 

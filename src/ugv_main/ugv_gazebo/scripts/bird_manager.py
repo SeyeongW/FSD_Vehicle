@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
 import math
+import os
 import random
 from dataclasses import dataclass
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.utilities import ok as rclpy_ok
 from gazebo_msgs.srv import SetEntityState, GetEntityState
@@ -168,6 +170,16 @@ class BirdManager(Node):
             BirdConfig('bird_swarm_4', True, 2.5, 0.75, 4.5, 22.0, 7.0),
             BirdConfig('bird_swarm_5', True, 2.5, 0.75, 4.5, 22.0, 7.0),
         ]
+        active_birds = {
+            name.strip()
+            for name in os.environ.get('BIRD_MANAGER_ACTIVE_BIRDS', '').split(',')
+            if name.strip()
+        }
+        if active_birds:
+            # 역할: Gazebo trial에서 spawn하지 않은 객체를 조회해 에러 로그가 쌓이지 않게 한다.
+            self.birds = [bird for bird in self.birds if bird.name in active_birds]
+            if not self.birds:
+                self.birds = [BirdConfig('bird_single', False, 3.0, 0.75, 7.0, 0.0, 0.0)]
 
         self.runtime = {bird.name: BirdRuntime() for bird in self.birds}
 
@@ -618,25 +630,32 @@ class BirdManager(Node):
         return (vx, vy, vz)
 
     def publish_detection(self, pos):
+        # 역할: Gazebo trial 종료 순간 context가 닫혀도 테스트용 bird manager가
+        # traceback을 남기지 않도록 publish 경로를 방어한다.
+        if not rclpy_ok():
+            return
         visible_msg = Bool()
         pose_msg = PoseStamped()
         pose_msg.header.stamp = self.get_clock().now().to_msg()
         pose_msg.header.frame_id = 'world'
 
-        if pos is None:
-            visible_msg.data = False
+        try:
+            if pos is None:
+                visible_msg.data = False
+                self.bird_visible_pub.publish(visible_msg)
+                self.bird_pose_pub.publish(pose_msg)
+                return
+
+            visible_msg.data = True
+            pose_msg.pose.position.x = pos[0]
+            pose_msg.pose.position.y = pos[1]
+            pose_msg.pose.position.z = pos[2]
+            pose_msg.pose.orientation.w = 1.0
+
             self.bird_visible_pub.publish(visible_msg)
             self.bird_pose_pub.publish(pose_msg)
+        except Exception:
             return
-
-        visible_msg.data = True
-        pose_msg.pose.position.x = pos[0]
-        pose_msg.pose.position.y = pos[1]
-        pose_msg.pose.position.z = pos[2]
-        pose_msg.pose.orientation.w = 1.0
-
-        self.bird_visible_pub.publish(visible_msg)
-        self.bird_pose_pub.publish(pose_msg)
 
     def publish_nearest_bird(self):
         if not self.current_states:
@@ -681,7 +700,9 @@ def main(args=None):
     node = BirdManager()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
+        # 역할: launch 종료나 Gazebo trial cleanup 때 생기는 정상 shutdown을
+        # traceback/exit code 1로 남기지 않아 반복 실험 로그를 깨끗하게 유지한다.
         pass
     finally:
         try:

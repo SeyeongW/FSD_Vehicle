@@ -6,6 +6,7 @@
 build/
 install/
 log/
+.colcon/
 
 # Python
 __pycache__/
@@ -43,3 +44,12 @@ map_points.txt
 
 # Gazebo 임시 파일
 .gazebo/
+
+# Waver experiment artifacts
+experiments_result/
+waver_experiments/
+waver_experiments*/
+bags/
+**/rosbag/
+*.db3
+*.mcap

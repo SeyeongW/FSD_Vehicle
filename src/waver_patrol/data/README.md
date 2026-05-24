@@ -1,7 +1,7 @@
 # Waver Experiment Data
 
 `experiment_data_logger_node` creates one run folder per experiment under
-`~/ros2_ws/waver_experiments/<timestamp>_<experiment_name>/`.
+`~/ros2_ws/experiments_result/<timestamp>_<experiment_name>/`.
 
 Each run contains:
 

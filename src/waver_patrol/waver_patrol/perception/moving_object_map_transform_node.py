@@ -30,6 +30,22 @@ class TransformResult:
     reason: str = ""
 
 
+def _copy_pose_stamped(msg: PoseStamped, frame_id: str) -> PoseStamped:
+    # 역할: source frame이 target frame과 같아도 원본 메시지 객체 참조를 그대로 넘기지 않는다.
+    # downstream tracker가 과거 pose를 deque에 보관하므로 독립 객체로 복사해야 정적 물체가 흔들리지 않는다.
+    out = PoseStamped()
+    out.header = msg.header
+    out.header.frame_id = frame_id
+    out.pose.position.x = float(msg.pose.position.x)
+    out.pose.position.y = float(msg.pose.position.y)
+    out.pose.position.z = float(msg.pose.position.z)
+    out.pose.orientation.x = float(msg.pose.orientation.x)
+    out.pose.orientation.y = float(msg.pose.orientation.y)
+    out.pose.orientation.z = float(msg.pose.orientation.z)
+    out.pose.orientation.w = float(msg.pose.orientation.w)
+    return out
+
+
 class MovingObjectMapTransformNode(Node):
     """Transform moving LiDAR object coordinates into the shared SLAM frame.
 
@@ -165,11 +181,7 @@ class MovingObjectMapTransformNode(Node):
         if not source_frame or not target_frame:
             return None
         if source_frame == target_frame:
-            out = PoseStamped()
-            out.header = msg.header
-            out.header.frame_id = target_frame
-            out.pose = msg.pose
-            return out
+            return _copy_pose_stamped(msg, target_frame)
         if self.tf_buffer is None or do_transform_pose_stamped is None:
             return None
         try:
@@ -278,6 +290,9 @@ def main(args: list[str] | None = None) -> None:
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception as exc:
+        if rclpy.ok() and "context is not valid" not in str(exc):
+            raise
     finally:
         node.destroy_node()
         if rclpy.ok():

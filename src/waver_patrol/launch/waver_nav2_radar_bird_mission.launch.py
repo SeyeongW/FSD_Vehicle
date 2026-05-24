@@ -91,7 +91,16 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("start_serial_bridge", default_value="false"),
             DeclareLaunchArgument("include_existing_ugv_driver", default_value="false"),
             DeclareLaunchArgument("require_scan", default_value="true"),
+            DeclareLaunchArgument("ignore_scan_when_require_scan_false", default_value="false"),
+            DeclareLaunchArgument("safety_max_linear_speed", default_value="0.18"),
+            DeclareLaunchArgument("safety_max_angular_speed", default_value="0.45"),
             DeclareLaunchArgument("default_mode", default_value="AUTO"),
+            DeclareLaunchArgument("target_classification_timeout_sec", default_value="15.0"),
+            DeclareLaunchArgument("mission_sound_task_timeout_sec", default_value="15.0"),
+            DeclareLaunchArgument("sound_task_duration_sec", default_value="5.0"),
+            DeclareLaunchArgument("sound_alert_cooldown_sec", default_value="10.0"),
+            DeclareLaunchArgument("sound_done_latch_sec", default_value="1.2"),
+            DeclareLaunchArgument("post_target_resume_cooldown_sec", default_value="8.0"),
             DeclareLaunchArgument("enable_sim_nav_goal_arrival", default_value="false"),
             DeclareLaunchArgument("enable_livox_scan_adapter", default_value="false"),
             DeclareLaunchArgument("enable_pointcloud_lidar_objects", default_value="false"),
@@ -235,6 +244,18 @@ def generate_launch_description() -> LaunchDescription:
                         "waypoint_file": waypoint_file,
                         "use_nav2": ParameterValue(use_nav2, value_type=bool),
                         "default_mode": default_mode,
+                        "target_classification_timeout_sec": ParameterValue(
+                            LaunchConfiguration("target_classification_timeout_sec"),
+                            value_type=float,
+                        ),
+                        "sound_task_timeout_sec": ParameterValue(
+                            LaunchConfiguration("mission_sound_task_timeout_sec"),
+                            value_type=float,
+                        ),
+                        "post_target_resume_cooldown_sec": ParameterValue(
+                            LaunchConfiguration("post_target_resume_cooldown_sec"),
+                            value_type=float,
+                        ),
                         "enable_sim_nav_goal_arrival": ParameterValue(
                             LaunchConfiguration("enable_sim_nav_goal_arrival"),
                             value_type=bool,
@@ -264,7 +285,23 @@ def generate_launch_description() -> LaunchDescription:
                 name="sound_alert_stub",
                 output="screen",
                 condition=IfCondition(LaunchConfiguration("enable_sound_stub")),
-                parameters=common,
+                parameters=[
+                    *common,
+                    {
+                        "sound_task_duration_sec": ParameterValue(
+                            LaunchConfiguration("sound_task_duration_sec"),
+                            value_type=float,
+                        ),
+                        "alert_cooldown_sec": ParameterValue(
+                            LaunchConfiguration("sound_alert_cooldown_sec"),
+                            value_type=float,
+                        ),
+                        "done_latch_sec": ParameterValue(
+                            LaunchConfiguration("sound_done_latch_sec"),
+                            value_type=float,
+                        ),
+                    },
+                ],
             ),
             Node(
                 package="waver_patrol",
@@ -276,6 +313,12 @@ def generate_launch_description() -> LaunchDescription:
                     *common,
                     {
                         "require_scan": ParameterValue(require_scan, value_type=bool),
+                        "ignore_scan_when_require_scan_false": ParameterValue(
+                            LaunchConfiguration("ignore_scan_when_require_scan_false"),
+                            value_type=bool,
+                        ),
+                        "max_linear_speed": ParameterValue(LaunchConfiguration("safety_max_linear_speed"), value_type=float),
+                        "max_angular_speed": ParameterValue(LaunchConfiguration("safety_max_angular_speed"), value_type=float),
                         "mode_default": default_mode,
                         "nav2_cmd_topic": "/waver/cmd_vel_nav2",
                         "cmd_vel_auto_topic": "",

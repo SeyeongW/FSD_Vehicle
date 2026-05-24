@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <!-- 역할: Waver height-based elevated dynamic target mission trial 전용 평지 world다.
+       기존 waver_flat.world의 front_test_box는 safety smoke test용이라
+       target mission navigation을 물리적으로 막을 수 있어 여기서는 제외한다. -->
+  <world name="waver_moving_object_trial">
+    <plugin name="gazebo_ros_state" filename="libgazebo_ros_state.so"/>
+
+    <include>
+      <uri>model://sun</uri>
+    </include>
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+  </world>
+</sdf>

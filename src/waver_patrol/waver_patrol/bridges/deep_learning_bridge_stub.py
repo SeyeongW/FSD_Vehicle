@@ -84,10 +84,18 @@ def main(args: list[str] | None = None) -> None:
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception as exc:
+        # 역할: launch shutdown 순간 rclpy wait set context가 먼저 닫히며 생기는
+        # 정상 종료성 예외는 traceback 없이 흘려보낸다.
+        if rclpy.ok() and "context is not valid" not in str(exc):
+            raise
     finally:
         if rclpy.ok():
-            node.bird_pub.publish(Bool(data=False))
-            node.state_pub.publish(String(data="SHUTDOWN"))
+            try:
+                node.bird_pub.publish(Bool(data=False))
+                node.state_pub.publish(String(data="SHUTDOWN"))
+            except Exception:
+                pass
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

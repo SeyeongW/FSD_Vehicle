@@ -197,9 +197,15 @@ def main(args: list[str] | None = None) -> None:
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception as exc:
+        if rclpy.ok() and "context is not valid" not in str(exc):
+            raise
     finally:
         if rclpy.ok():
-            node.active_pub.publish(Bool(data=False))
+            try:
+                node.active_pub.publish(Bool(data=False))
+            except Exception:
+                pass
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

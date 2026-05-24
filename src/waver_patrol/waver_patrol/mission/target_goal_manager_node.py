@@ -56,6 +56,12 @@ class TargetGoalManagerNode(Node):
         self.declare_parameter("target_hold_sec", 1.0)
         self.declare_parameter("target_lost_timeout_sec", 2.0)
         self.declare_parameter("goal_yaw_policy", "FACE_TARGET")
+        self.declare_parameter("lidar_objects_topic", "/waver/lidar_objects")
+        self.declare_parameter("lidar_detections_topic", "/lidar/detections")
+        self.declare_parameter("lidar_objects_map_topic", "/waver/lidar_objects_map")
+        self.declare_parameter("elevated_dynamic_targets_topic", "/waver/elevated_dynamic_targets")
+        self.declare_parameter("subscribe_raw_lidar_objects", False)
+        self.declare_parameter("subscribe_lidar_objects_map", False)
 
         self.goal_pub = self.create_publisher(PoseStamped, "/waver/object_mission_goal", 10)
         self.active_pub = self.create_publisher(Bool, "/waver/object_mission_goal_active", 10)
@@ -79,8 +85,32 @@ class TargetGoalManagerNode(Node):
         self.create_subscription(PointStamped, "/waver/aerial_target", self.aerial_point_callback, 10)
         self.create_subscription(Bool, "/waver/aerial_target_active", lambda m: setattr(self, "aerial_active", bool(m.data)), 10)
         self.create_subscription(PointStamped, "/waver/object_point", self.object_point_callback, 10)
-        self.create_subscription(PoseArray, "/waver/lidar_objects", self.lidar_objects_callback, 10)
-        self.create_subscription(PoseArray, "/lidar/detections", self.lidar_objects_callback, 10)
+        self.create_subscription(
+            PoseArray,
+            str(self.get_parameter("elevated_dynamic_targets_topic").value),
+            self.elevated_dynamic_targets_callback,
+            10,
+        )
+        if bool(self.get_parameter("subscribe_raw_lidar_objects").value):
+            self.create_subscription(
+                PoseArray,
+                str(self.get_parameter("lidar_objects_topic").value),
+                self.lidar_objects_callback,
+                10,
+            )
+            self.create_subscription(
+                PoseArray,
+                str(self.get_parameter("lidar_detections_topic").value),
+                self.lidar_objects_callback,
+                10,
+            )
+        if bool(self.get_parameter("subscribe_lidar_objects_map").value):
+            self.create_subscription(
+                PoseArray,
+                str(self.get_parameter("lidar_objects_map_topic").value),
+                self.lidar_objects_callback,
+                10,
+            )
         self.create_subscription(Bool, "/waver/bird_confirmed", lambda m: setattr(self, "bird_confirmed", bool(m.data)), 10)
         self.create_timer(0.5, self.timeout_tick)
 
@@ -100,6 +130,29 @@ class TargetGoalManagerNode(Node):
         pose.pose.position = msg.point
         pose.pose.orientation.w = 1.0
         self.accept_candidate(Candidate(pose, "object_point", moving=True, bird_confirmed=self.bird_confirmed))
+
+    def elevated_dynamic_targets_callback(self, msg: PoseArray) -> None:
+        # 역할: height>=3m AND ego-motion-compensated dynamic 필터를 통과한 객체만 mission goal 후보로 받는다.
+        # raw /waver/lidar_objects는 최종 target 판단에 쓰지 않고, 이 토픽이 mission trigger의 우선 입력이다.
+        if not msg.poses:
+            return
+        best: Candidate | None = None
+        best_depth = math.inf
+        for pose in msg.poses:
+            stamped = PoseStamped()
+            stamped.header = msg.header
+            stamped.pose = pose
+            depth = math.hypot(pose.position.x, pose.position.y)
+            if depth < best_depth:
+                best_depth = depth
+                best = Candidate(
+                    stamped,
+                    "elevated_dynamic_target",
+                    moving=True,
+                    bird_confirmed=self.bird_confirmed,
+                )
+        if best is not None:
+            self.accept_candidate(best)
 
     def lidar_objects_callback(self, msg: PoseArray) -> None:
         best: Candidate | None = None
@@ -216,9 +269,17 @@ def main(args: list[str] | None = None) -> None:
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception as exc:
+        # 역할: launch shutdown 경계에서 rclpy wait set이 먼저 닫히는 경우가 있다.
+        # 이때 남는 context-invalid 예외는 정상 종료로 처리하고, 그 외 예외는 보존한다.
+        if rclpy.ok() and "context is not valid" not in str(exc):
+            raise
     finally:
         if rclpy.ok():
-            node.active_pub.publish(Bool(data=False))
+            try:
+                node.active_pub.publish(Bool(data=False))
+            except Exception:
+                pass
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

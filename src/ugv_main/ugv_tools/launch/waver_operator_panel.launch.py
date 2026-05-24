@@ -16,6 +16,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -30,6 +31,28 @@ def generate_launch_description():
     max_patrol_radius_m = LaunchConfiguration("max_patrol_radius_m")
     auto_mode_strategy = LaunchConfiguration("auto_mode_strategy")
     auto_launch_command = LaunchConfiguration("auto_launch_command")
+    map_topic = LaunchConfiguration("map_topic")
+    map_display_mode = LaunchConfiguration("map_display_mode")
+    amcl_pose_topic = LaunchConfiguration("amcl_pose_topic")
+    global_path_topic = LaunchConfiguration("global_path_topic")
+    local_path_topic = LaunchConfiguration("local_path_topic")
+    active_nav_goal_topic = LaunchConfiguration("active_nav_goal_topic")
+    object_mission_goal_topic = LaunchConfiguration("object_mission_goal_topic")
+    lidar_objects_map_topic = LaunchConfiguration("lidar_objects_map_topic")
+    elevated_dynamic_target_topic = LaunchConfiguration("elevated_dynamic_target_topic")
+    current_waypoint_topic = LaunchConfiguration("current_waypoint_topic")
+    patrol_status_topic = LaunchConfiguration("patrol_status_topic")
+    mission_state_topic = LaunchConfiguration("mission_state_topic")
+    safety_state_topic = LaunchConfiguration("safety_state_topic")
+    height_filter_debug_topic = LaunchConfiguration("height_filter_debug_topic")
+    camera_detection_status_topic = LaunchConfiguration("camera_detection_status_topic")
+    sound_mission_status_topic = LaunchConfiguration("sound_mission_status_topic")
+    gazebo_trial_state_topic = LaunchConfiguration("gazebo_trial_state_topic")
+    mission_command_topic = LaunchConfiguration("mission_command_topic")
+    operator_command_topic = LaunchConfiguration("operator_command_topic")
+    publish_direct_cmd_vel = LaunchConfiguration("publish_direct_cmd_vel")
+    demo_script = LaunchConfiguration("demo_script")
+    demo_close_on_finish = LaunchConfiguration("demo_close_on_finish")
     default_control_config = PathJoinSubstitution(
         [ugv_tools_share, "config", "waver_4wd_control.yaml"]
     )
@@ -49,7 +72,7 @@ def generate_launch_description():
                 "cmd_vel_topic": "/cmd_vel",
                 "manual_cmd_vel_topic": "/waver/manual_cmd_vel",
                 "auto_cmd_vel_topic": "/waver/cmd_vel_nav2",
-                "publish_direct_cmd_vel": False,
+                "publish_direct_cmd_vel": ParameterValue(publish_direct_cmd_vel, value_type=bool),
                 "manual_override_returns_to_auto": True,
                 "auto_mode_strategy": auto_mode_strategy,
                 "auto_launch_command": auto_launch_command,
@@ -61,6 +84,27 @@ def generate_launch_description():
                 "auto_waypoint_file": waypoint_file,
                 "auto_waypoints_csv": auto_waypoints_csv,
                 "auto_max_patrol_radius_m": max_patrol_radius_m,
+                "map_topic": map_topic,
+                "map_display_mode": map_display_mode,
+                "amcl_pose_topic": amcl_pose_topic,
+                "global_path_topic": global_path_topic,
+                "local_path_topic": local_path_topic,
+                "active_nav_goal_topic": active_nav_goal_topic,
+                "object_mission_goal_topic": object_mission_goal_topic,
+                "lidar_objects_map_topic": lidar_objects_map_topic,
+                "elevated_dynamic_target_topic": elevated_dynamic_target_topic,
+                "current_waypoint_topic": current_waypoint_topic,
+                "patrol_status_topic": patrol_status_topic,
+                "mission_state_topic": mission_state_topic,
+                "safety_state_topic": safety_state_topic,
+                "height_filter_debug_topic": height_filter_debug_topic,
+                "camera_detection_status_topic": camera_detection_status_topic,
+                "sound_mission_status_topic": sound_mission_status_topic,
+                "gazebo_trial_state_topic": gazebo_trial_state_topic,
+                "mission_command_topic": mission_command_topic,
+                "operator_command_topic": operator_command_topic,
+                "demo_script": demo_script,
+                "demo_close_on_finish": demo_close_on_finish,
             },
         ],
     )
@@ -74,6 +118,28 @@ def generate_launch_description():
             DeclareLaunchArgument("max_patrol_radius_m", default_value="3.0"),
             DeclareLaunchArgument("auto_mode_strategy", default_value="mission_nav2"),
             DeclareLaunchArgument("auto_launch_command", default_value=""),
+            DeclareLaunchArgument("map_topic", default_value="/map"),
+            DeclareLaunchArgument("map_display_mode", default_value="auto"),
+            DeclareLaunchArgument("amcl_pose_topic", default_value="/amcl_pose"),
+            DeclareLaunchArgument("global_path_topic", default_value="/plan"),
+            DeclareLaunchArgument("local_path_topic", default_value="/local_plan"),
+            DeclareLaunchArgument("active_nav_goal_topic", default_value="/waver/active_nav_goal"),
+            DeclareLaunchArgument("object_mission_goal_topic", default_value="/waver/object_mission_goal"),
+            DeclareLaunchArgument("lidar_objects_map_topic", default_value="/waver/lidar_objects_map"),
+            DeclareLaunchArgument("elevated_dynamic_target_topic", default_value="/waver/elevated_dynamic_targets"),
+            DeclareLaunchArgument("current_waypoint_topic", default_value="/waver/current_waypoint"),
+            DeclareLaunchArgument("patrol_status_topic", default_value="/waver/patrol_status"),
+            DeclareLaunchArgument("mission_state_topic", default_value="/waver/mission_state"),
+            DeclareLaunchArgument("safety_state_topic", default_value="/waver/safety_state"),
+            DeclareLaunchArgument("height_filter_debug_topic", default_value="/waver/height_filter_debug"),
+            DeclareLaunchArgument("camera_detection_status_topic", default_value="/waver/classification_state"),
+            DeclareLaunchArgument("sound_mission_status_topic", default_value="/waver/sound_mission_status"),
+            DeclareLaunchArgument("gazebo_trial_state_topic", default_value="/waver/gazebo_trial_state"),
+            DeclareLaunchArgument("mission_command_topic", default_value="/waver/mission_command"),
+            DeclareLaunchArgument("operator_command_topic", default_value="/waver/operator_command"),
+            DeclareLaunchArgument("publish_direct_cmd_vel", default_value="false"),
+            DeclareLaunchArgument("demo_script", default_value=""),
+            DeclareLaunchArgument("demo_close_on_finish", default_value="false"),
             DeclareLaunchArgument(
                 "auto_waypoints_csv",
                 default_value="",

@@ -565,10 +565,10 @@ ros2 topic pub /waver/external_target_confidence std_msgs/msg/Float32 "{data: 0.
 CSV output:
 
 ```bash
-ls -R ~/ros2_ws/waver_experiments
-head -n 5 ~/ros2_ws/waver_experiments/*/mission_events.csv
-head -n 5 ~/ros2_ws/waver_experiments/*/radar_targets.csv
-head -n 5 ~/ros2_ws/waver_experiments/*/experiment_summary.csv
+ls -R ~/ros2_ws/experiments_result
+head -n 5 ~/ros2_ws/experiments_result/*/mission_events.csv
+head -n 5 ~/ros2_ws/experiments_result/*/radar_targets.csv
+head -n 5 ~/ros2_ws/experiments_result/*/experiment_summary.csv
 ```
 
 Raw rosbag recording:
@@ -650,6 +650,130 @@ ros2 topic echo /waver/livox_scan_adapter_state
 ```
 
 `ros2 topic info -v /cmd_vel` must show exactly one publisher: `safety_cmd_mux_node`.
+
+## Gazebo Elevated-Dynamic Mission Trials
+
+For the paper-style pre-real-robot validation, use the Gazebo moving-object trial
+pipeline. It keeps the existing FSD/Waver package structure and adds only Waver
+adapters:
+
+- simulated cluster center: `/waver/lidar_objects`
+- tf2 map/odom output: `/waver/lidar_objects_map`
+- elevated dynamic filter: height >= `target_min_height_m` and map/odom compensated motion
+- mission target goal: `/waver/object_mission_goal`
+- CSV summary: `~/ros2_ws/experiments_result/gazebo_trial_*`
+
+Run one GUI trial:
+
+```bash
+cd ~/ros2_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch waver_patrol gazebo_moving_object_trial.launch.py \
+  trial_id:=1 \
+  target_min_height_m:=3.0 \
+  min_dynamic_motion_m:=0.2 \
+  target_z:=3.2 \
+  world_file:=~/ros2_ws/install/ugv_gazebo/share/ugv_gazebo/worlds/ugv_world.world \
+  use_gui:=true \
+  enable_cluster_node:=true \
+  enable_experiment_logger:=true \
+  record_bag:=false
+```
+
+If `world_file` is omitted, the launch uses the existing
+`ugv_gazebo/worlds/ugv_world.world` by default. The Waver clean world remains
+only as a fallback/debug world, not as the normal trial world.
+
+Run the required three headless trials:
+
+```bash
+cd ~/ros2_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+bash src/FSD_Vehicle/src/waver_patrol/scripts/run_gazebo_mission_trials.sh
+```
+
+Analyze results:
+
+```bash
+python3 src/FSD_Vehicle/src/waver_patrol/scripts/analyze_gazebo_trials.py \
+  --input_dir ~/ros2_ws/experiments_result \
+  --output_dir ~/ros2_ws/experiments_result/results
+```
+
+Detailed scenario, CSV schema, rosbag notes, and the real-robot gate are in
+`docs/gazebo_moving_object_trials.md`. Large rosbag/log directories must stay
+out of Git.
+
+## Pre-Real Validation Gate
+
+For the final simulation gate before any real Waver field run, use the pre-real
+wrappers. They use the existing `ugv_gazebo/worlds/ugv_world.world` and the
+`ugv_rover` model.
+
+```bash
+cd ~/ros2_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch waver_patrol gazebo_pre_real_validation.launch.py \
+  trial_id:=1 \
+  scenario:=elevated_dynamic_straight \
+  target_min_height_m:=3.0 \
+  min_dynamic_motion_m:=0.2 \
+  min_dynamic_velocity_mps:=0.05 \
+  target_z:=3.2 \
+  use_gui:=true \
+  enable_cluster_node:=true \
+  enable_fake_camera_detection:=true \
+  enable_experiment_logger:=true \
+  record_bag:=false
+```
+
+Height-based H1/H2/H3 gate:
+
+```bash
+bash ~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/run_pre_real_gazebo_trials.sh
+```
+
+The report is written to:
+
+```text
+~/ros2_ws/experiments_result/results/pre_real_validation_report.md
+```
+
+Remote visualization:
+
+```bash
+ros2 launch waver_patrol remote_visualization.launch.py \
+  rviz_config:=~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/rviz/pre_real_gazebo_validation.rviz \
+  require_scan:=false
+```
+
+The `ugv_tools` visual remote panel displays `/map`, `/amcl_pose` or `/odom`,
+`/plan`, `/local_plan`, current waypoint, active goals, `/waver/lidar_objects_map`,
+and `/waver/elevated_dynamic_targets`. Robot-relative frames such as `base_link`
+are projected into fixed odom/map view before drawing, so turning the vehicle
+does not rotate the map. The target filter does **not** use
+"3 m traveled" as the target rule. Waver targets are:
+
+- `object_height_m >= target_min_height_m`, default `3.0 m`
+- `z_valid=true`
+- dynamic in map/odom after ego-motion compensation
+- not just apparent raw LiDAR-frame motion caused by Waver yaw rotation
+
+`/scan` is still safety-only because 2D LaserScan has no z channel. Real elevated
+target validation needs PointCloud2/depth/stereo/custom 3D detections, while
+Gazebo tests may use 3D model-state/fake PoseArray data.
+
+Additional handover and UI documentation:
+
+- `docs/external_research_summary.md`
+- `docs/ugv_tools_operator_map_ui.md`
+- `docs/slam_nav2_map_path_visualization.md`
+- `docs/real_vehicle_preflight_checklist.md`
+- `docs/final_handover_summary.md`
 
 ## Tests
 

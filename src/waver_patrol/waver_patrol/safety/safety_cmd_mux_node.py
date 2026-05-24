@@ -48,6 +48,7 @@ class SafetyCmdMuxNode(Node):
         self.declare_parameter("cmd_vel_out_topic", "/cmd_vel")
         self.declare_parameter("safety_state_topic", "/waver/safety_state")
         self.declare_parameter("require_scan", True)
+        self.declare_parameter("ignore_scan_when_require_scan_false", False)
         self.declare_parameter("stop_on_adapter_degraded", True)
         self.declare_parameter("scan_stale_s", 0.5)
         self.declare_parameter("front_sector_deg", 55.0)
@@ -196,6 +197,8 @@ class SafetyCmdMuxNode(Node):
         return self.auto_cmd, "AUTO_PASS", False
 
     def _scan_state(self, now: float, selected: tuple[Twist, str, bool]) -> str:
+        if self._scan_disabled_for_test():
+            return "SCAN_DISABLED_TEST_ONLY"
         if self._adapter_degraded():
             return "SCAN_ADAPTER_DEGRADED_STOP"
         if self.scan.last_time == 0.0 or now - self.scan.last_time > float(self.get_parameter("scan_stale_s").value):
@@ -233,7 +236,11 @@ class SafetyCmdMuxNode(Node):
     def _limit(self, cmd: Twist) -> Twist:
         max_linear = min(float(self.get_parameter("max_linear_speed").value), self.speed_limit)
         max_angular = min(float(self.get_parameter("max_angular_speed").value), self.angular_speed_limit)
-        if cmd.linear.x > 0.0 and self.scan.front_min <= float(self.get_parameter("slow_down_distance_m").value):
+        if (
+            not self._scan_disabled_for_test()
+            and cmd.linear.x > 0.0
+            and self.scan.front_min <= float(self.get_parameter("slow_down_distance_m").value)
+        ):
             max_linear = min(max_linear, 0.06)
         return make_twist(
             clamp(float(cmd.linear.x), -max_linear, max_linear),
@@ -251,6 +258,12 @@ class SafetyCmdMuxNode(Node):
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9
 
+    def _scan_disabled_for_test(self) -> bool:
+        return (
+            not bool(self.get_parameter("require_scan").value)
+            and bool(self.get_parameter("ignore_scan_when_require_scan_false").value)
+        )
+
 
 def main(args: list[str] | None = None) -> None:
     rclpy.init(args=args)
@@ -259,10 +272,16 @@ def main(args: list[str] | None = None) -> None:
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception as exc:
+        if rclpy.ok() and "context is not valid" not in str(exc):
+            raise
     finally:
         if rclpy.ok():
-            for _ in range(5):
-                node.cmd_pub.publish(stop_twist())
+            try:
+                for _ in range(5):
+                    node.cmd_pub.publish(stop_twist())
+            except Exception:
+                pass
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
