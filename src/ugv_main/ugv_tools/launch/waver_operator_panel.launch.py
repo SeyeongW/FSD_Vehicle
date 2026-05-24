@@ -48,6 +48,7 @@ def generate_launch_description():
     camera_detection_status_topic = LaunchConfiguration("camera_detection_status_topic")
     sound_mission_status_topic = LaunchConfiguration("sound_mission_status_topic")
     gazebo_trial_state_topic = LaunchConfiguration("gazebo_trial_state_topic")
+    map_apply_state_topic = LaunchConfiguration("map_apply_state_topic")
     mission_command_topic = LaunchConfiguration("mission_command_topic")
     operator_command_topic = LaunchConfiguration("operator_command_topic")
     publish_direct_cmd_vel = LaunchConfiguration("publish_direct_cmd_vel")
@@ -101,6 +102,7 @@ def generate_launch_description():
                 "camera_detection_status_topic": camera_detection_status_topic,
                 "sound_mission_status_topic": sound_mission_status_topic,
                 "gazebo_trial_state_topic": gazebo_trial_state_topic,
+                "map_apply_state_topic": map_apply_state_topic,
                 "mission_command_topic": mission_command_topic,
                 "operator_command_topic": operator_command_topic,
                 "demo_script": demo_script,
@@ -135,6 +137,7 @@ def generate_launch_description():
             DeclareLaunchArgument("camera_detection_status_topic", default_value="/waver/classification_state"),
             DeclareLaunchArgument("sound_mission_status_topic", default_value="/waver/sound_mission_status"),
             DeclareLaunchArgument("gazebo_trial_state_topic", default_value="/waver/gazebo_trial_state"),
+            DeclareLaunchArgument("map_apply_state_topic", default_value="/waver/map_apply_state"),
             DeclareLaunchArgument("mission_command_topic", default_value="/waver/mission_command"),
             DeclareLaunchArgument("operator_command_topic", default_value="/waver/operator_command"),
             DeclareLaunchArgument("publish_direct_cmd_vel", default_value="false"),

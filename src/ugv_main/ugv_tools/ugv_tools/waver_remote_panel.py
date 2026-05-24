@@ -57,6 +57,7 @@ class PanelState:
     odom_x: float = 0.0
     odom_y: float = 0.0
     pose_source: str = "odom"
+    robot_trace: list[tuple[float, float]] = field(default_factory=list)
     patrol_state: str = "not started"
     mission_state: str = "unknown"
     safety_state: str = "unknown"
@@ -69,6 +70,7 @@ class PanelState:
     camera_state: str = "unknown"
     sound_state: str = "unknown"
     gazebo_trial_state: str = "unknown"
+    map_apply_state: str = "unknown"
     height_filter_debug: str = "unknown"
     auto_status: str = "stopped"
     odom_yaw: float = 0.0
@@ -136,6 +138,7 @@ class WaverRemoteNode(Node):
         self.declare_parameter("camera_detection_status_topic", "/waver/classification_state")
         self.declare_parameter("sound_mission_status_topic", "/waver/sound_mission_status")
         self.declare_parameter("gazebo_trial_state_topic", "/waver/gazebo_trial_state")
+        self.declare_parameter("map_apply_state_topic", "/waver/map_apply_state")
         self.declare_parameter("battery_state_text_topic", "/waver/battery_state_text")
         self.declare_parameter("target_class_topic", "/waver/target_class")
         self.declare_parameter("target_confidence_topic", "/waver/target_confidence")
@@ -383,6 +386,12 @@ class WaverRemoteNode(Node):
         )
         self.create_subscription(
             String,
+            str(self.get_parameter("map_apply_state_topic").value),
+            lambda msg: self.set_text_state("map_apply_state", msg.data),
+            10,
+        )
+        self.create_subscription(
+            String,
             str(self.get_parameter("battery_state_text_topic").value),
             lambda msg: self.set_text_state("battery_state", msg.data),
             10,
@@ -447,19 +456,33 @@ class WaverRemoteNode(Node):
         if time.monotonic() - self.last_amcl_pose_time < 1.0:
             return
         with self.lock:
-            self.state.odom_x = float(msg.pose.pose.position.x)
-            self.state.odom_y = float(msg.pose.pose.position.y)
+            x = float(msg.pose.pose.position.x)
+            y = float(msg.pose.pose.position.y)
+            self.state.odom_x = x
+            self.state.odom_y = y
             self.state.odom_yaw = yaw_from_quaternion(msg.pose.pose.orientation)
             self.state.pose_source = "odom"
+            self.append_robot_trace_locked(x, y)
 
     def amcl_pose_callback(self, msg: PoseWithCovarianceStamped) -> None:
         # 역할: 저장 map 기반 Patrol Mode에서는 /amcl_pose를 우선 사용해 map-fixed UI를 맞춘다.
         self.last_amcl_pose_time = time.monotonic()
         with self.lock:
-            self.state.odom_x = float(msg.pose.pose.position.x)
-            self.state.odom_y = float(msg.pose.pose.position.y)
+            x = float(msg.pose.pose.position.x)
+            y = float(msg.pose.pose.position.y)
+            self.state.odom_x = x
+            self.state.odom_y = y
             self.state.odom_yaw = yaw_from_quaternion(msg.pose.pose.orientation)
             self.state.pose_source = "amcl_pose"
+            self.append_robot_trace_locked(x, y)
+
+    def append_robot_trace_locked(self, x: float, y: float) -> None:
+        trace = self.state.robot_trace
+        if trace and math.hypot(x - trace[-1][0], y - trace[-1][1]) < 0.03:
+            return
+        trace.append((x, y))
+        if len(trace) > 1200:
+            del trace[: len(trace) - 1200]
 
     def map_callback(self, msg: OccupancyGrid) -> None:
         # 역할: RViz를 따로 보지 않아도 리모콘 안에서 2D SLAM/map 점유 영역을 확인한다.
@@ -775,6 +798,18 @@ class WaverRemoteNode(Node):
             self.state.auto_status = f"operator command: {normalized}"
         if normalized in {"START_PATROL", "RESUME_PATROL", "AUTO_MODE", "GAZEBO_TRIAL_START"}:
             self.start_auto()
+        elif normalized == "START_MAPPING":
+            with self.lock:
+                self.state.map_display_mode = "SLAM_LIVE"
+                self.state.auto_status = "mapping requested: live /map"
+            self.set_mode("STANDBY")
+        elif normalized == "SAVE_MAP":
+            with self.lock:
+                self.state.auto_status = "save map requested"
+        elif normalized in {"LOAD_MAP", "START_LOCALIZATION"}:
+            with self.lock:
+                self.state.map_display_mode = "MAP_FIXED"
+                self.state.auto_status = "fixed map/localization requested"
         elif normalized in {"PAUSE_PATROL", "MANUAL_MODE"}:
             self.set_mode("MANUAL" if normalized == "MANUAL_MODE" else "STANDBY")
         elif normalized == "RETURN_HOME":
@@ -963,6 +998,7 @@ class WaverRemotePanel:
         self.camera_var = tk.StringVar(value="camera: unknown")
         self.sound_var = tk.StringVar(value="sound: unknown")
         self.trial_var = tk.StringVar(value="trial: unknown")
+        self.map_apply_var = tk.StringVar(value="map apply: unknown")
         self.auto_var = tk.StringVar(value="auto: stopped")
         self.hazard_var = tk.StringVar(value="scan: unknown")
         self.auto_cmd_var = tk.StringVar(value="nav2 cmd: 0.00 m/s, 0.00 rad/s")
@@ -1027,18 +1063,19 @@ class WaverRemotePanel:
         )
 
     def build_mode_buttons(self) -> None:
-        # 역할: MANUAL/AUTO/STOP/E-STOP 같은 상위 모드 전환 버튼을 만든다.
+        # 역할: mission backend가 실제로 해석하는 핵심 command만 노출한다.
         frame = self.tk.Frame(self.root, bg="#0b1117")
         frame.grid(row=3, column=0, sticky="ew", padx=12, pady=4)
         buttons = [
-            ("MANUAL", self.node.set_mode, "MANUAL", "#1565c0"),
-            ("AUTO START", self.node.start_auto, None, "#2e7d32"),
-            ("AUTO STOP", self.node.stop_motion, True, "#546e7a"),
-            ("STOP", self.node.stop_motion, True, "#f9a825"),
-            ("E-STOP", self.node.emergency_stop, None, "#b71c1c"),
-            ("RESET", self.node.reset_estop, None, "#6a1b9a"),
+            ("START PATROL", "START_PATROL", "#2e7d32"),
+            ("PAUSE", "PAUSE_PATROL", "#546e7a"),
+            ("RESUME", "RESUME_PATROL", "#00838f"),
+            ("RETURN HOME", "RETURN_HOME", "#5e35b1"),
+            ("STOP", "STOP", "#f9a825"),
+            ("E-STOP", "EMERGENCY_STOP", "#b71c1c"),
+            ("RESET", "CLEAR_EMERGENCY_STOP", "#6a1b9a"),
         ]
-        for index, (text, callback, argument, color) in enumerate(buttons):
+        for index, (text, command, color) in enumerate(buttons):
             button = self.tk.Button(
                 frame,
                 text=text,
@@ -1047,13 +1084,10 @@ class WaverRemotePanel:
                 activebackground=color,
                 font=("Sans", 11, "bold"),
                 height=3,
+                command=lambda cmd=command: self.node.send_operator_command(cmd),
             )
-            if argument is None:
-                button.configure(command=callback)
-            else:
-                button.configure(command=lambda cb=callback, arg=argument: cb(arg))
-            button.grid(row=index // 3, column=index % 3, sticky="nsew", padx=4, pady=4)
-        for column in range(3):
+            button.grid(row=index // 4, column=index % 4, sticky="nsew", padx=4, pady=4)
+        for column in range(4):
             frame.grid_columnconfigure(column, weight=1)
 
     def build_body(self) -> None:
@@ -1068,9 +1102,9 @@ class WaverRemotePanel:
         body.grid_columnconfigure(0, weight=3)
         body.grid_columnconfigure(1, weight=2)
         body.grid_rowconfigure(0, weight=1)
+        self.build_map_view()
         self.build_direction_pad()
         self.build_speed_controls()
-        self.build_map_view()
         self.build_status()
 
     def build_direction_pad(self) -> None:
@@ -1188,7 +1222,7 @@ class WaverRemotePanel:
         frame.pack(fill="both", expand=True, pady=(12, 0))
         self.map_canvas = self.tk.Canvas(
             frame,
-            height=440,
+            height=560,
             bg="#0d151c",
             highlightthickness=1,
             highlightbackground="#37474f",
@@ -1198,6 +1232,7 @@ class WaverRemotePanel:
         legend.pack(fill="x", padx=8, pady=(0, 4))
         for text, color in [
             ("map obstacle", "#90a4ae"),
+            ("waver trail", "#ffd54f"),
             ("global path", "#42a5f5"),
             ("local path", "#66bb6a"),
             ("robot", "#ef5350"),
@@ -1232,20 +1267,14 @@ class WaverRemotePanel:
         frame = self.tk.Frame(self.right_panel, bg="#0b1117")
         frame.pack(fill="both", expand=True)
         self.hazard_label = None
-        self.build_command_buttons(frame)
         cards = [
             ("FINAL CMD", self.cmd_var),
             ("MISSION", self.mission_var),
             ("SAFETY MUX", self.safety_var),
             ("ODOM", self.odom_var),
+            ("MAP APPLY", self.map_apply_var),
             ("PATROL", self.patrol_var),
-            ("RADAR", self.radar_var),
-            ("OBJECT GOAL", self.object_goal_var),
             ("TARGET", self.target_var),
-            ("CAMERA", self.camera_var),
-            ("SOUND", self.sound_var),
-            ("TRIAL", self.trial_var),
-            ("BATTERY", self.battery_var),
             ("AUTO BACKEND", self.auto_var),
             ("NAV2 CANDIDATE", self.auto_cmd_var),
             ("SCAN SAFETY", self.hazard_var),
@@ -1255,8 +1284,8 @@ class WaverRemotePanel:
             if variable is self.hazard_var:
                 self.hazard_label = label
         help_text = (
-            "Keyboard: Arrow/WASD override, Space/K stop, E emergency, R reset, "
-            "P auto. AUTO 중 override 후 키를 떼면 Nav2 경로로 복귀."
+            "Keyboard: Arrow/WASD manual override, Space/K stop, E emergency, "
+            "R reset, P start patrol. 지도는 고정이고 Waver 화살표만 회전."
         )
         self.tk.Label(
             frame,
@@ -1416,6 +1445,7 @@ class WaverRemotePanel:
             map_origin_y = self.state.map_origin_y
             occupied = list(self.state.map_occupied)
             robot = (self.state.odom_x, self.state.odom_y, self.state.odom_yaw)
+            robot_trace = list(self.state.robot_trace)
             global_path = list(self.state.global_path)
             local_path = list(self.state.local_path)
             global_path_frame = self.state.global_path_frame
@@ -1437,6 +1467,7 @@ class WaverRemotePanel:
 
         points_for_bounds = (
             [(robot[0], robot[1])]
+            + robot_trace
             + global_path
             + local_path
             + lidar_objects
@@ -1512,6 +1543,7 @@ class WaverRemotePanel:
                 font=("Sans", 12, "bold"),
             )
 
+        self.draw_polyline(canvas, robot_trace, w2c, "#ffd54f", 2)
         self.draw_polyline(canvas, global_path, w2c, "#42a5f5", 3)
         self.draw_polyline(canvas, local_path, w2c, "#66bb6a", 3)
 
@@ -1768,6 +1800,7 @@ class WaverRemotePanel:
             camera = self.state.camera_state
             sound = self.state.sound_state
             trial = self.state.gazebo_trial_state
+            map_apply = self.state.map_apply_state
             height_filter = self.state.height_filter_debug
             auto = self.state.auto_status
             auto_linear = self.state.latest_auto_linear
@@ -1809,6 +1842,7 @@ class WaverRemotePanel:
         self.camera_var.set(f"camera: {camera}")
         self.sound_var.set(f"sound: {sound}")
         self.trial_var.set(f"trial: {trial}")
+        self.map_apply_var.set(f"map apply: {map_apply}")
         self.auto_var.set(f"auto: {auto}")
         self.auto_cmd_var.set(
             f"nav2 candidate: {auto_linear:+.2f} m/s, {auto_angular:+.2f} rad/s, "

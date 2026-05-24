@@ -111,6 +111,18 @@ MIN_DYNAMIC_VELOCITY_MPS=0.05 \
 bash ~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/run_pre_real_gazebo_trials.sh
 ```
 
+Paper-ready export:
+
+```bash
+python3 ~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/prepare_paper_results.py \
+  --input-dir ~/ros2_ws/experiments_result \
+  --output-root ~/ros2_ws/experiments_result/paper_ready
+```
+
+Use `~/ros2_ws/experiments_result/paper_ready/latest/` for report writing.  It
+contains selected H1/H2/H3 tables, UI validation tables, summary metrics, plots,
+and a Markdown paper summary without copying rosbag databases.
+
 UI validation:
 
 ```bash

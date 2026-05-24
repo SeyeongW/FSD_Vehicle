@@ -113,6 +113,9 @@ def generate_launch_description() -> LaunchDescription:
                 ),
             ),
             DeclareLaunchArgument("enable_gazebo_map_path_visualizer", default_value="true"),
+            DeclareLaunchArgument("dynamic_obstacle_topic", default_value="/waver/dynamic_obstacle_map"),
+            DeclareLaunchArgument("enable_dynamic_obstacle_detour", default_value="false"),
+            DeclareLaunchArgument("enable_simple_nav2_avoidance", default_value="false"),
             DeclareLaunchArgument("map_yaml", default_value=default_map_yaml),
             DeclareLaunchArgument("enable_mission_stack", default_value="false"),
             DeclareLaunchArgument("enable_simple_nav2_cmd_sim", default_value="false"),
@@ -365,6 +368,11 @@ def generate_launch_description() -> LaunchDescription:
                         "odom_topic": "/odom",
                         "active_goal_topic": "/waver/active_nav_goal",
                         "current_waypoint_topic": "/waver/current_waypoint",
+                        "dynamic_obstacle_topic": LaunchConfiguration("dynamic_obstacle_topic"),
+                        "enable_dynamic_obstacle_detour": ParameterValue(
+                            LaunchConfiguration("enable_dynamic_obstacle_detour"),
+                            value_type=bool,
+                        ),
                     }
                 ],
             ),
@@ -381,6 +389,11 @@ def generate_launch_description() -> LaunchDescription:
                         "max_angular_speed": 1.0,
                         "goal_tolerance_m": 0.45,
                         "yaw_tolerance_rad": 0.75,
+                        "dynamic_obstacle_topic": LaunchConfiguration("dynamic_obstacle_topic"),
+                        "enable_dynamic_obstacle_avoidance": ParameterValue(
+                            LaunchConfiguration("enable_simple_nav2_avoidance"),
+                            value_type=bool,
+                        ),
                     }
                 ],
             ),

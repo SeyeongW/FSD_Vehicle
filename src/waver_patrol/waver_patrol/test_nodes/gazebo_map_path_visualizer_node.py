@@ -6,7 +6,7 @@ from pathlib import Path
 
 import rclpy
 import yaml
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PointStamped, PoseStamped
 from nav_msgs.msg import OccupancyGrid, Odometry, Path as NavPath
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -38,6 +38,11 @@ class GazeboMapPathVisualizerNode(Node):
         self.declare_parameter("odom_topic", "/odom")
         self.declare_parameter("active_goal_topic", "/waver/active_nav_goal")
         self.declare_parameter("current_waypoint_topic", "/waver/current_waypoint")
+        self.declare_parameter("dynamic_obstacle_topic", "/waver/dynamic_obstacle_map")
+        self.declare_parameter("enable_dynamic_obstacle_detour", False)
+        self.declare_parameter("avoidance_corridor_radius_m", 0.55)
+        self.declare_parameter("avoidance_offset_m", 0.85)
+        self.declare_parameter("obstacle_timeout_sec", 0.8)
         self.declare_parameter("publish_rate_hz", 2.0)
         self.declare_parameter("local_path_length_m", 1.2)
         self.declare_parameter("local_path_points", 16)
@@ -67,6 +72,8 @@ class GazeboMapPathVisualizerNode(Node):
 
         self.odom: Odometry | None = None
         self.goal: PoseStamped | None = None
+        self.obstacle: PointStamped | None = None
+        self.last_obstacle_time = 0.0
         self.map_msg = self.load_map(str(self.get_parameter("map_yaml").value))
 
         self.create_subscription(
@@ -87,6 +94,12 @@ class GazeboMapPathVisualizerNode(Node):
             self.goal_callback,
             10,
         )
+        self.create_subscription(
+            PointStamped,
+            str(self.get_parameter("dynamic_obstacle_topic").value),
+            self.obstacle_callback,
+            10,
+        )
         rate = max(float(self.get_parameter("publish_rate_hz").value), 0.2)
         self.create_timer(1.0 / rate, self.publish_tick)
         self.get_logger().warn("gazebo_map_path_visualizer_node is Gazebo/test visualization only")
@@ -98,6 +111,10 @@ class GazeboMapPathVisualizerNode(Node):
     def goal_callback(self, msg: PoseStamped) -> None:
         # 역할: mission/Nav2 목표를 path 끝점으로 사용한다.
         self.goal = msg
+
+    def obstacle_callback(self, msg: PointStamped) -> None:
+        self.obstacle = msg
+        self.last_obstacle_time = self._now()
 
     def publish_tick(self) -> None:
         now = self.get_clock().now().to_msg()
@@ -129,10 +146,49 @@ class GazeboMapPathVisualizerNode(Node):
             gx = sx + math.cos(yaw) * 2.0
             gy = sy + math.sin(yaw) * 2.0
         count = max(int(self.get_parameter("global_path_points").value), 2)
-        for i in range(count):
-            ratio = i / float(count - 1)
-            msg.poses.append(self.pose_stamped(stamp, sx + (gx - sx) * ratio, sy + (gy - sy) * ratio, "map"))
+        waypoints = self.detour_waypoints(sx, sy, gx, gy)
+        if len(waypoints) == 2:
+            for i in range(count):
+                ratio = i / float(count - 1)
+                msg.poses.append(self.pose_stamped(stamp, sx + (gx - sx) * ratio, sy + (gy - sy) * ratio, "map"))
+        else:
+            first = max(2, count // 2)
+            second = max(2, count - first)
+            (sx, sy), (mx, my), (gx, gy) = waypoints
+            for i in range(first):
+                ratio = i / float(first - 1)
+                msg.poses.append(self.pose_stamped(stamp, sx + (mx - sx) * ratio, sy + (my - sy) * ratio, "map"))
+            for i in range(1, second):
+                ratio = i / float(second - 1)
+                msg.poses.append(self.pose_stamped(stamp, mx + (gx - mx) * ratio, my + (gy - my) * ratio, "map"))
         return msg
+
+    def detour_waypoints(self, sx: float, sy: float, gx: float, gy: float) -> list[tuple[float, float]]:
+        if not bool(self.get_parameter("enable_dynamic_obstacle_detour").value):
+            return [(sx, sy), (gx, gy)]
+        if self.obstacle is None or self._now() - self.last_obstacle_time > float(self.get_parameter("obstacle_timeout_sec").value):
+            return [(sx, sy), (gx, gy)]
+        ox = float(self.obstacle.point.x)
+        oy = float(self.obstacle.point.y)
+        vx = gx - sx
+        vy = gy - sy
+        length = math.hypot(vx, vy)
+        if length < 1e-3:
+            return [(sx, sy), (gx, gy)]
+        wx = ox - sx
+        wy = oy - sy
+        along = (wx * vx + wy * vy) / length
+        lateral = abs(vx * wy - vy * wx) / length
+        if along < 0.0 or along > length or lateral > float(self.get_parameter("avoidance_corridor_radius_m").value):
+            return [(sx, sy), (gx, gy)]
+        nx = -vy / length
+        ny = vx / length
+        side = -1.0 if (vx * wy - vy * wx) > 0.0 else 1.0
+        offset = float(self.get_parameter("avoidance_offset_m").value)
+        return [(sx, sy), (ox + side * nx * offset, oy + side * ny * offset), (gx, gy)]
+
+    def _now(self) -> float:
+        return self.get_clock().now().nanoseconds * 1e-9
 
     def make_local_path(self, stamp) -> NavPath:
         # 역할: 차체 앞쪽 짧은 local preview를 map frame에 표시한다.

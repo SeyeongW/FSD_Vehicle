@@ -37,7 +37,29 @@ experiments_result/
     mission_success_plot.png
     pre_real_safety_gate_result.png
     final_pass_fail_report.md
+  paper_ready/
+    latest -> paper_<timestamp>/
+    paper_<timestamp>/
+      tables/
+        height_target_trials_selected.csv
+        height_target_trials_all.csv
+        ui_visualization_selected.csv
+        ui_visualization_all.csv
+        paper_metrics.csv
+      figures/
+        paper_target_height_by_trial.png
+        paper_target_validity_by_trial.png
+        paper_ui_success_by_trial.png
+      reports/
+        paper_results_summary.md
+      raw_selected/
+        *_experiment_summary.csv
+      source_manifest.csv
 ```
+
+`results/` is a convenience folder for recent merged analysis.  For thesis or
+paper writing, use `paper_ready/latest/` because it separates final selected
+tables, figures, and report from raw repeated trial folders.
 
 ## Required Height Columns
 
@@ -91,3 +113,19 @@ ros2 bag record /tf /tf_static /map /odom /plan /local_plan /cmd_vel \
 ```
 
 Do not commit `.db3`, `.mcap`, or `rosbag/` directories.
+
+## Paper-Ready Export
+
+After running H1/H2/H3 and UI checks, generate the cleaned paper package:
+
+```bash
+python3 ~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/prepare_paper_results.py \
+  --input-dir ~/ros2_ws/experiments_result \
+  --output-root ~/ros2_ws/experiments_result/paper_ready
+```
+
+The script keeps all raw trials local, selects the latest row for each scenario
+(`H1_elevated_dynamic`, `H2_elevated_static`, `H3_low_altitude_dynamic`) and each
+UI trial, and writes paper metrics such as height filtering accuracy, target
+precision/recall, false positive rates, UI success rate, and target mission
+trigger success rate.

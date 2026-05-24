@@ -107,6 +107,8 @@ class MissionPatrolManagerNode(Node):
         self.declare_parameter("frame_id", "map")
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("global_frame", "map")
+        self.declare_parameter("mission_command_topic", "/waver/mission_command")
+        self.declare_parameter("mission_reset_topic", "/waver/mission_reset")
 
         share = get_package_share_directory("waver_patrol")
         self.route: MissionRoute = load_route_yaml(str(self.get_parameter("waypoint_file").value), share)
@@ -141,6 +143,7 @@ class MissionPatrolManagerNode(Node):
 
         self.state_pub = self.create_publisher(String, "/waver/mission_state", 10)
         self.event_pub = self.create_publisher(String, "/waver/mission_event", 10)
+        self.mode_pub = self.create_publisher(String, "/waver/mode", 10)
         self.current_wp_pub = self.create_publisher(PoseStamped, "/waver/current_waypoint", 10)
         self.active_goal_pub = self.create_publisher(PoseStamped, "/waver/active_nav_goal", 10)
         self.sound_request_pub = self.create_publisher(Bool, "/waver/sound_alert_request", 10)
@@ -150,7 +153,19 @@ class MissionPatrolManagerNode(Node):
         self.create_subscription(Bool, "/waver/object_mission_goal_active", lambda m: setattr(self, "object_goal_active", bool(m.data)), 10)
         self.create_subscription(Bool, "/waver/return_home_active", lambda m: setattr(self, "return_home_active", bool(m.data)), 10)
         self.create_subscription(PoseStamped, "/waver/return_goal", lambda m: setattr(self, "return_goal", m), 10)
-        self.create_subscription(String, "/waver/mode", lambda m: setattr(self, "mode", m.data.strip().upper()), 10)
+        self.create_subscription(String, "/waver/mode", self.mode_callback, 10)
+        self.create_subscription(
+            String,
+            str(self.get_parameter("mission_command_topic").value),
+            self.mission_command_callback,
+            10,
+        )
+        self.create_subscription(
+            Bool,
+            str(self.get_parameter("mission_reset_topic").value),
+            self.mission_reset_callback,
+            10,
+        )
         self.create_subscription(Bool, "/waver/emergency_stop", lambda m: setattr(self, "estop", bool(m.data)), 10)
         self.create_subscription(Bool, "/waver/external_stop", lambda m: setattr(self, "external_stop", bool(m.data)), 10)
         self.create_subscription(Bool, "/waver/sound_task_done", lambda m: setattr(self, "sound_task_done", bool(m.data)), 10)
@@ -169,6 +184,105 @@ class MissionPatrolManagerNode(Node):
         self.nav_client = ActionClient(self, NavigateToPose, str(self.get_parameter("nav2_action_name").value)) if self.use_nav2 else None
         self.create_timer(0.2, self.tick)
         self.publish_event("STARTUP", "mission_patrol_manager initialized")
+
+    def mode_callback(self, msg: String) -> None:
+        self.mode = msg.data.strip().upper()
+
+    def mission_reset_callback(self, msg: Bool) -> None:
+        if not bool(msg.data):
+            return
+        self.return_home_active = False
+        self.external_stop = False
+        self.object_goal_active = False
+        self.object_goal = None
+        self.target_interrupt_locked = False
+        self.post_target_resume_cooldown_until = 0.0
+        if not self.estop and self.state in {
+            MissionState.HOLD_AT_HOME,
+            MissionState.EMERGENCY_STOPPED,
+            MissionState.NAV2_FAILED,
+            MissionState.SENSOR_STALE_STOP,
+        }:
+            self.set_state(MissionState.IDLE, "mission_reset")
+        self.publish_event("MISSION_RESET", "operator_reset_pulse")
+
+    def mission_command_callback(self, msg: String) -> None:
+        # 역할: ugv_tools 리모콘의 핵심 버튼이 실제 mission manager까지 도달하도록 한다.
+        # UI는 /cmd_vel을 직접 건드리지 않고, 여기서 Nav2 goal/state와 공용 /waver/mode를 제어한다.
+        command = msg.data.strip().upper()
+        if not command:
+            return
+        self.publish_event("MISSION_COMMAND", command)
+
+        if command in {"START_PATROL", "RESUME_PATROL", "AUTO_MODE", "GAZEBO_TRIAL_START"}:
+            self.set_mode("AUTO", command)
+            self.estop = False
+            self.external_stop = False
+            self.return_home_active = False
+            self.object_goal_active = False
+            self.target_interrupt_locked = False
+            self.post_target_resume_cooldown_until = 0.0
+            if self.state in {
+                MissionState.HOLD_AT_HOME,
+                MissionState.EMERGENCY_STOPPED,
+                MissionState.NAV2_FAILED,
+                MissionState.SENSOR_STALE_STOP,
+            }:
+                self.set_state(MissionState.IDLE, command)
+            return
+
+        if command in {"PAUSE_PATROL", "MANUAL_MODE"}:
+            self.set_mode("MANUAL" if command == "MANUAL_MODE" else "STANDBY", command)
+            self.return_home_active = False
+            self.object_goal_active = False
+            self.cancel_active_goal(command)
+            self.sound_request_pub.publish(Bool(data=False))
+            self.set_state(MissionState.IDLE, command)
+            return
+
+        if command in {"STOP", "GAZEBO_TRIAL_STOP"}:
+            self.set_mode("STANDBY", command)
+            self.return_home_active = False
+            self.object_goal_active = False
+            self.cancel_active_goal(command)
+            self.sound_request_pub.publish(Bool(data=False))
+            self.set_state(MissionState.IDLE, command)
+            return
+
+        if command == "RETURN_HOME":
+            self.set_mode("AUTO", command)
+            self.estop = False
+            self.external_stop = False
+            self.return_home_active = True
+            self.object_goal_active = False
+            self.cancel_active_goal(command)
+            self.set_state(MissionState.RESUME_PATROL, command)
+            return
+
+        if command == "EMERGENCY_STOP":
+            self.estop = True
+            self.handle_stop(command)
+            return
+
+        if command == "CLEAR_EMERGENCY_STOP":
+            self.estop = False
+            self.external_stop = False
+            self.set_mode("STANDBY", command)
+            self.return_home_active = False
+            self.object_goal_active = False
+            self.set_state(MissionState.IDLE, command)
+            return
+
+        if command == "SOUND_TEST":
+            self.sound_request_pub.publish(Bool(data=True))
+            self.publish_event("SOUND_TEST_REQUESTED", "sound_alert_request=true")
+            return
+
+        if command == "TARGET_TEST":
+            self.publish_event("TARGET_TEST_REQUESTED", "publish /waver/elevated_dynamic_targets or /waver/object_mission_goal")
+            return
+
+        self.publish_event("MISSION_COMMAND_UNHANDLED", command)
 
     def object_goal_callback(self, msg: PoseStamped) -> None:
         # 역할: radar/3D LiDAR가 같은 객체 좌표를 반복 발행해도 target mission, sound task,
@@ -498,7 +612,18 @@ class MissionPatrolManagerNode(Node):
         self.state_enter_time = self._now()
         self.publish_event("STATE_CHANGE", f"previous={previous.value} next={new_state.value} reason={reason}")
 
+    def set_mode(self, new_mode: str, reason: str) -> None:
+        normalized = new_mode.strip().upper()
+        if not normalized:
+            return
+        previous = self.mode
+        self.mode = normalized
+        self.mode_pub.publish(String(data=normalized))
+        if previous != normalized:
+            self.publish_event("MODE_CHANGE", f"previous={previous} next={normalized} reason={reason}")
+
     def publish_status(self) -> None:
+        self.mode_pub.publish(String(data=self.mode))
         self.state_pub.publish(String(data=f"{self.state.value} mode={self.mode} nav_goal={self.active_goal_type.value}"))
         self.index_pub.publish(Int32(data=int(self.current_index)))
         if self.route.waypoints:

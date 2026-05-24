@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 
 import rclpy
-from geometry_msgs.msg import PoseStamped, Twist
+from geometry_msgs.msg import PointStamped, PoseStamped, Twist
 from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -21,10 +21,11 @@ class SimpleNav2CmdSimNode(Node):
         `/waver/cmd_vel_nav2` 후보 명령을 만든다.
       - 목표 반경에 들어오면 `/waver/sim_nav_goal_arrived=true`를 한 번 발행해
         mission 상태머신이 Nav2 성공 결과를 받은 것처럼 다음 단계로 넘어가게 한다.
+      - Gazebo 동적장애물 smoke test에서는 `/waver/dynamic_obstacle_map`을 받아 임시 detour
+        waypoint를 생성한다. 이는 실제 Nav2 planner 대체가 아니라 UI/path/safety 연결 검증이다.
 
     한계:
-      - 장애물 회피 경로 생성은 실제 Nav2가 담당한다. 이 노드는 단순 P-controller라
-        회피/전역 재계획을 검증하지 않고, safety_cmd_mux의 stop/timeout 경로만 검증한다.
+      - 실차 장애물 회피 경로 생성은 실제 Nav2 planner/controller가 담당한다.
     """
 
     def __init__(self) -> None:
@@ -35,6 +36,11 @@ class SimpleNav2CmdSimNode(Node):
         self.declare_parameter("arrived_topic", "/waver/sim_nav_goal_arrived")
         self.declare_parameter("state_topic", "/waver/sim_nav2_state")
         self.declare_parameter("mode_topic", "/waver/mode")
+        self.declare_parameter("dynamic_obstacle_topic", "/waver/dynamic_obstacle_map")
+        self.declare_parameter("enable_dynamic_obstacle_avoidance", False)
+        self.declare_parameter("avoidance_corridor_radius_m", 0.55)
+        self.declare_parameter("avoidance_offset_m", 0.85)
+        self.declare_parameter("obstacle_timeout_sec", 0.8)
         self.declare_parameter("emergency_stop_topic", "/waver/emergency_stop")
         self.declare_parameter("external_stop_topic", "/waver/external_stop")
         self.declare_parameter("goal_tolerance_m", 0.18)
@@ -52,6 +58,8 @@ class SimpleNav2CmdSimNode(Node):
         self.odom: Odometry | None = None
         self.goal_time = 0.0
         self.last_odom_time = 0.0
+        self.obstacle: PointStamped | None = None
+        self.last_obstacle_time = 0.0
         self.arrived_latched = False
         self.mode = "AUTO"
         self.estop = False
@@ -62,6 +70,12 @@ class SimpleNav2CmdSimNode(Node):
         self.state_pub = self.create_publisher(String, str(self.get_parameter("state_topic").value), 10)
         self.create_subscription(PoseStamped, str(self.get_parameter("active_goal_topic").value), self.goal_callback, 10)
         self.create_subscription(Odometry, str(self.get_parameter("odom_topic").value), self.odom_callback, 10)
+        self.create_subscription(
+            PointStamped,
+            str(self.get_parameter("dynamic_obstacle_topic").value),
+            self.obstacle_callback,
+            10,
+        )
         self.create_subscription(String, str(self.get_parameter("mode_topic").value), lambda m: setattr(self, "mode", m.data.strip().upper()), 10)
         self.create_subscription(Bool, str(self.get_parameter("emergency_stop_topic").value), lambda m: setattr(self, "estop", bool(m.data)), 10)
         self.create_subscription(Bool, str(self.get_parameter("external_stop_topic").value), lambda m: setattr(self, "external_stop", bool(m.data)), 10)
@@ -87,6 +101,10 @@ class SimpleNav2CmdSimNode(Node):
         self.odom = msg
         self.last_odom_time = self._now()
 
+    def obstacle_callback(self, msg: PointStamped) -> None:
+        self.obstacle = msg
+        self.last_obstacle_time = self._now()
+
     def tick(self) -> None:
         now = self._now()
         self.arrived_pub.publish(Bool(data=False))
@@ -105,8 +123,13 @@ class SimpleNav2CmdSimNode(Node):
 
         robot = self.odom.pose.pose
         goal = self.goal.pose
-        dx = float(goal.position.x) - float(robot.position.x)
-        dy = float(goal.position.y) - float(robot.position.y)
+        robot_x = float(robot.position.x)
+        robot_y = float(robot.position.y)
+        goal_x = float(goal.position.x)
+        goal_y = float(goal.position.y)
+        target_x, target_y, avoiding, avoid_detail = self.avoidance_target(robot_x, robot_y, goal_x, goal_y)
+        dx = target_x - robot_x
+        dy = target_y - robot_y
         distance = math.hypot(dx, dy)
         yaw = yaw_from_quaternion(
             float(robot.orientation.x),
@@ -149,14 +172,50 @@ class SimpleNav2CmdSimNode(Node):
         else:
             cmd.linear.x = 0.0
         self.cmd_pub.publish(cmd)
+        state_name = "AVOIDING" if avoiding else "TRACKING"
         self.state_pub.publish(
             String(
                 data=(
-                    f"TRACKING distance={distance:.3f} heading_error={heading_error:.3f} "
-                    f"linear={cmd.linear.x:.3f} angular={cmd.angular.z:.3f}"
+                    f"{state_name} distance={distance:.3f} heading_error={heading_error:.3f} "
+                    f"linear={cmd.linear.x:.3f} angular={cmd.angular.z:.3f} {avoid_detail}"
                 )
             )
         )
+
+    def avoidance_target(
+        self,
+        robot_x: float,
+        robot_y: float,
+        goal_x: float,
+        goal_y: float,
+    ) -> tuple[float, float, bool, str]:
+        if not bool(self.get_parameter("enable_dynamic_obstacle_avoidance").value):
+            return goal_x, goal_y, False, ""
+        if self.obstacle is None or self._now() - self.last_obstacle_time > float(self.get_parameter("obstacle_timeout_sec").value):
+            return goal_x, goal_y, False, "obstacle=none"
+        ox = float(self.obstacle.point.x)
+        oy = float(self.obstacle.point.y)
+        vx = goal_x - robot_x
+        vy = goal_y - robot_y
+        length = math.hypot(vx, vy)
+        if length < 1e-3:
+            return goal_x, goal_y, False, "goal_near"
+        wx = ox - robot_x
+        wy = oy - robot_y
+        along = (wx * vx + wy * vy) / length
+        if along < 0.0 or along > length:
+            return goal_x, goal_y, False, f"obstacle_outside_path along={along:.2f}"
+        cross = abs(vx * wy - vy * wx) / length
+        radius = float(self.get_parameter("avoidance_corridor_radius_m").value)
+        if cross > radius:
+            return goal_x, goal_y, False, f"obstacle_clear lateral={cross:.2f}"
+        nx = -vy / length
+        ny = vx / length
+        side = -1.0 if (vx * wy - vy * wx) > 0.0 else 1.0
+        offset = float(self.get_parameter("avoidance_offset_m").value)
+        detour_x = ox + side * nx * offset
+        detour_y = oy + side * ny * offset
+        return detour_x, detour_y, True, f"obstacle=({ox:.2f},{oy:.2f}) detour=({detour_x:.2f},{detour_y:.2f})"
 
     def publish_stop(self, state: str) -> None:
         self.cmd_pub.publish(Twist())

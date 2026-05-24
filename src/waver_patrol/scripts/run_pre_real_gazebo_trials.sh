@@ -127,6 +127,9 @@ if [ "$RUN_MODE" = "single_session" ]; then
   python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/generate_pre_real_report.py" \
   --results_dir "$OUTPUT_ROOT/$run_name/results" \
     --output "$OUTPUT_ROOT/$run_name/results/final_pass_fail_report.md" || true
+  python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/prepare_paper_results.py" \
+    --input-dir "$OUTPUT_ROOT" \
+    --output-root "$OUTPUT_ROOT/paper_ready" || true
   exit "$validator_rc"
 fi
 
@@ -194,5 +197,8 @@ python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/plot_pre_real_gazebo_resul
 python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/generate_pre_real_report.py" \
   --results_dir "$OUTPUT_ROOT/results" \
   --output "$OUTPUT_ROOT/results/final_pass_fail_report.md" || true
+python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/prepare_paper_results.py" \
+  --input-dir "$OUTPUT_ROOT" \
+  --output-root "$OUTPUT_ROOT/paper_ready" || true
 
 test "$success_count" -ge "$REQUIRED_SUCCESSES"
