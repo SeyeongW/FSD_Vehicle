@@ -1,0 +1,45 @@
+frame_id: "map"
+route_name: "gazebo_airport_patrol_large"
+loop: true
+experiment_tags: ["gazebo", "ugv_world", "large_waypoint", "dynamic_obstacle", "elevated_target"]
+
+# Gazebo airport-world patrol coordinates. These are 3x larger than the
+# compact smoke-test route in gazebo_moving_object_trial.yaml.
+home:
+  name: "home"
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+
+charge:
+  name: "charge"
+  x: 0.0
+  y: -1.5
+  yaw_deg: 180.0
+
+waypoints:
+  - name: "airport_wp_1"
+    x: 2.4
+    y: 0.0
+    yaw_deg: 0.0
+    dwell_s: 1.0
+    task: ["observe"]
+  - name: "airport_wp_2"
+    x: 2.4
+    y: 1.5
+    yaw_deg: 90.0
+    dwell_s: 1.0
+    task: ["observe"]
+  - name: "airport_wp_3"
+    x: 0.3
+    y: 1.5
+    yaw_deg: 180.0
+    dwell_s: 1.0
+    task: ["observe"]
+
+failure_policy:
+  nav2_goal_failed: "RETRY_THEN_SKIP"
+  max_retries_per_goal: 1
+  target_goal_failed: "RETURN_TO_INTERRUPTED_WAYPOINT"
+  battery_critical: "RETURN_CHARGE"
+  emergency_stop: "CANCEL_ALL_GOALS"

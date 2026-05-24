@@ -33,6 +33,7 @@ class GazeboDynamicObstacleNode(Node):
         self.declare_parameter("state_topic", "/waver/gazebo_dynamic_obstacle_state")
         self.declare_parameter("obstacle_point_topic", "/waver/dynamic_obstacle_map")
         self.declare_parameter("obstacle_pose_array_topic", "/waver/lidar_objects_map")
+        self.declare_parameter("publish_obstacle_as_lidar_object", False)
 
         self._gazebo_state_clients = [
             self.create_client(SetEntityState, service_name)
@@ -40,11 +41,13 @@ class GazeboDynamicObstacleNode(Node):
         ]
         self.state_pub = self.create_publisher(String, str(self.get_parameter("state_topic").value), 10)
         self.point_pub = self.create_publisher(PointStamped, str(self.get_parameter("obstacle_point_topic").value), 10)
-        self.pose_array_pub = self.create_publisher(
-            PoseArray,
-            str(self.get_parameter("obstacle_pose_array_topic").value),
-            10,
-        )
+        self.pose_array_pub = None
+        if bool(self.get_parameter("publish_obstacle_as_lidar_object").value):
+            self.pose_array_pub = self.create_publisher(
+                PoseArray,
+                str(self.get_parameter("obstacle_pose_array_topic").value),
+                10,
+            )
         self.start_time = self._now()
         self.warned_waiting = False
         self.create_timer(1.0 / max(float(self.get_parameter("timer_hz").value), 1.0), self.tick)
@@ -83,16 +86,17 @@ class GazeboDynamicObstacleNode(Node):
         point.point.y = state.pose.position.y
         point.point.z = state.pose.position.z
         self.point_pub.publish(point)
-        poses = PoseArray()
-        poses.header.stamp = stamp
-        poses.header.frame_id = "map"
-        pose = Pose()
-        pose.position.x = state.pose.position.x
-        pose.position.y = state.pose.position.y
-        pose.position.z = state.pose.position.z
-        pose.orientation.w = 1.0
-        poses.poses.append(pose)
-        self.pose_array_pub.publish(poses)
+        if self.pose_array_pub is not None:
+            poses = PoseArray()
+            poses.header.stamp = stamp
+            poses.header.frame_id = "map"
+            pose = Pose()
+            pose.position.x = state.pose.position.x
+            pose.position.y = state.pose.position.y
+            pose.position.z = state.pose.position.z
+            pose.orientation.w = 1.0
+            poses.poses.append(pose)
+            self.pose_array_pub.publish(poses)
         self.state_pub.publish(String(data=f"MOVING entity={state.name} x={state.pose.position.x:.2f} y={y:.2f}"))
 
     def _ready_client(self):

@@ -18,13 +18,21 @@ def generate_launch_description() -> LaunchDescription:
     default_world = os.path.join(ugv_share, "worlds", "ugv_world.world")
     default_robot = os.path.join(ugv_share, "models", "ugv_rover", "model.sdf")
     obstacle_sdf = os.path.join(waver_share, "models", "dynamic_obstacle_box", "model.sdf")
+    large_waypoints = os.path.join(waver_share, "waypoints", "gazebo_airport_patrol_large.yaml")
+    default_map = os.path.join(ugv_share, "maps", "map.yaml")
 
     return LaunchDescription(
         [
             DeclareLaunchArgument("use_gui", default_value="true"),
             DeclareLaunchArgument("require_scan", default_value="false"),
+            DeclareLaunchArgument("start_gazebo", default_value="true"),
+            DeclareLaunchArgument("spawn_robot", default_value="true"),
             DeclareLaunchArgument("world_file", default_value=default_world),
             DeclareLaunchArgument("robot_sdf_file", default_value=default_robot),
+            DeclareLaunchArgument("map_yaml", default_value=default_map),
+            DeclareLaunchArgument("waypoint_file", default_value=large_waypoints),
+            DeclareLaunchArgument("spawn_aerial_target", default_value="true"),
+            DeclareLaunchArgument("target_z", default_value="3.2"),
             DeclareLaunchArgument("obstacle_entity", default_value="dynamic_test_box"),
             DeclareLaunchArgument("obstacle_x_m", default_value="0.70"),
             DeclareLaunchArgument("obstacle_y_amplitude_m", default_value="0.65"),
@@ -33,22 +41,28 @@ def generate_launch_description() -> LaunchDescription:
                 PythonLaunchDescriptionSource(trial_launch),
                 launch_arguments={
                     "use_gui": LaunchConfiguration("use_gui"),
+                    "start_gazebo": LaunchConfiguration("start_gazebo"),
                     "world_file": LaunchConfiguration("world_file"),
+                    "map_yaml": LaunchConfiguration("map_yaml"),
                     "robot_entity": "ugv_rover",
                     "robot_sdf_file": LaunchConfiguration("robot_sdf_file"),
-                    "spawn_robot": "true",
-                    "spawn_target": "false",
+                    "target_sdf_file": obstacle_sdf,
+                    "spawn_robot": LaunchConfiguration("spawn_robot"),
+                    "spawn_target": LaunchConfiguration("spawn_aerial_target"),
                     "enable_mission_stack": "true",
                     "enable_simple_nav2_cmd_sim": "true",
                     "enable_simple_nav2_avoidance": "true",
                     "enable_dynamic_obstacle_detour": "true",
                     "enable_gazebo_map_path_visualizer": "true",
-                    "enable_moving_object_motion_filter": "false",
-                    "enable_cluster_node": "false",
+                    "enable_moving_object_motion_filter": "true",
+                    "enable_cluster_node": LaunchConfiguration("spawn_aerial_target"),
+                    "enable_fake_camera_classification": LaunchConfiguration("spawn_aerial_target"),
                     "enable_trial_logger": "false",
                     "record_bag": "false",
                     "require_scan": LaunchConfiguration("require_scan"),
                     "default_mode": "STANDBY",
+                    "target_z": LaunchConfiguration("target_z"),
+                    "waypoint_file": LaunchConfiguration("waypoint_file"),
                     "gazebo_sim_max_linear_speed": "0.25",
                 }.items(),
             ),
