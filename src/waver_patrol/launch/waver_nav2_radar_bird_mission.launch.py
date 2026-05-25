@@ -83,8 +83,8 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_target_goal_manager", default_value="true"),
             DeclareLaunchArgument("enable_safety_cmd_mux", default_value="true"),
             DeclareLaunchArgument("enable_battery_return", default_value="true"),
-            DeclareLaunchArgument("enable_deep_learning_stub", default_value="true"),
-            DeclareLaunchArgument("enable_sound_stub", default_value="true"),
+            DeclareLaunchArgument("enable_deep_learning_stub", default_value="false"),
+            DeclareLaunchArgument("enable_sound_stub", default_value="false"),
             DeclareLaunchArgument("enable_experiment_logger", default_value="true"),
             DeclareLaunchArgument("enable_keyboard_teleop", default_value="false"),
             DeclareLaunchArgument("enable_test_publishers", default_value="false"),
@@ -103,9 +103,11 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("post_target_resume_cooldown_sec", default_value="8.0"),
             DeclareLaunchArgument("enable_sim_nav_goal_arrival", default_value="false"),
             DeclareLaunchArgument("enable_livox_scan_adapter", default_value="false"),
-            DeclareLaunchArgument("enable_pointcloud_lidar_objects", default_value="false"),
-            DeclareLaunchArgument("enable_moving_object_map_transform", default_value="false"),
+            DeclareLaunchArgument("enable_pointcloud_lidar_objects", default_value="true"),
+            DeclareLaunchArgument("enable_moving_object_map_transform", default_value="true"),
+            DeclareLaunchArgument("enable_moving_object_motion_filter", default_value="true"),
             DeclareLaunchArgument("enable_moving_object_goal_relay", default_value="false"),
+            DeclareLaunchArgument("require_robot_pose_for_goal", default_value="true"),
             DeclareLaunchArgument("pointcloud_topic", default_value="/mid360_PointCloud2"),
             DeclareLaunchArgument("moving_object_input_topic", default_value="/waver/lidar_objects"),
             DeclareLaunchArgument("moving_object_input_type", default_value="pose_array"),
@@ -147,6 +149,13 @@ def generate_launch_description() -> LaunchDescription:
                 msg=(
                     "Moving object map transform enabled: LiDAR object coordinates are transformed to map/odom "
                     "data topics. Radar mission command topics remain separate."
+                ),
+            ),
+            LogInfo(
+                condition=IfCondition(LaunchConfiguration("enable_moving_object_motion_filter")),
+                msg=(
+                    "Height-based dynamic target filter enabled: only z-valid objects with height>=3m and "
+                    "map/odom-compensated motion are allowed to trigger object missions."
                 ),
             ),
             ugv_nav_include,
@@ -205,6 +214,32 @@ def generate_launch_description() -> LaunchDescription:
             ),
             Node(
                 package="waver_patrol",
+                executable="moving_object_motion_filter_node",
+                name="moving_object_motion_filter_node",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_moving_object_motion_filter")),
+                parameters=[
+                    *common,
+                    {
+                        "input_topic": ParameterValue(
+                            LaunchConfiguration("moving_object_output_topic"),
+                            value_type=str,
+                        ),
+                        "raw_input_topic": ParameterValue(
+                            LaunchConfiguration("moving_object_input_topic"),
+                            value_type=str,
+                        ),
+                        "target_min_height_m": 3.0,
+                        "min_dynamic_motion_m": 0.2,
+                        "min_dynamic_velocity_mps": 0.05,
+                        "target_point_topic": "/waver/aerial_target",
+                        "target_active_topic": "/waver/aerial_target_active",
+                        "elevated_targets_topic": "/waver/elevated_dynamic_targets",
+                    },
+                ],
+            ),
+            Node(
+                package="waver_patrol",
                 executable="moving_object_goal_relay_node",
                 name="moving_object_goal_relay_node",
                 output="screen",
@@ -230,7 +265,15 @@ def generate_launch_description() -> LaunchDescription:
                 name="target_goal_manager_node",
                 output="screen",
                 condition=IfCondition(LaunchConfiguration("enable_target_goal_manager")),
-                parameters=common,
+                parameters=[
+                    *common,
+                    {
+                        "require_robot_pose_for_goal": ParameterValue(
+                            LaunchConfiguration("require_robot_pose_for_goal"),
+                            value_type=bool,
+                        ),
+                    },
+                ],
             ),
             Node(
                 package="waver_patrol",

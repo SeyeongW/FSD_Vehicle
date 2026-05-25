@@ -39,6 +39,10 @@ class GazeboMovingObjectTrialPublisherNode(Node):
     def __init__(self) -> None:
         super().__init__("gazebo_moving_object_trial_publisher_node")
         self.declare_parameter("trial_id", 1)
+        self.declare_parameter(
+            "scenario_id",
+            0,
+        )
         self.declare_parameter("frame_id", "map")
         self.declare_parameter("output_topic", "/waver/lidar_objects")
         self.declare_parameter("state_topic", "/waver/gazebo_trial_target_state")
@@ -53,7 +57,9 @@ class GazeboMovingObjectTrialPublisherNode(Node):
         self.declare_parameter("gazebo_entity_move_delay_sec", 5.0)
         self.declare_parameter("start_on_mission_command", False)
         self.declare_parameter("mission_command_topic", "/waver/mission_command")
+        self.declare_parameter("mode_topic", "/waver/mode")
         self.declare_parameter("start_commands", ["START_PATROL", "AUTO_MODE", "GAZEBO_TRIAL_START"])
+        self.declare_parameter("start_modes", ["AUTO", "PATROL"])
         self.declare_parameter("publish_fake_camera_after_sec", 12.0)
         self.declare_parameter("fake_class_name", "bird")
         self.declare_parameter("fake_confidence", 0.92)
@@ -68,6 +74,11 @@ class GazeboMovingObjectTrialPublisherNode(Node):
             for command in list(self.get_parameter("start_commands").value)
             if str(command).strip()
         }
+        self.start_modes = {
+            str(mode).strip().upper()
+            for mode in list(self.get_parameter("start_modes").value)
+            if str(mode).strip()
+        }
         self.wait_for_start_command = bool(self.get_parameter("start_on_mission_command").value)
         self.trajectory_started = not self.wait_for_start_command
         self.create_subscription(
@@ -76,11 +87,17 @@ class GazeboMovingObjectTrialPublisherNode(Node):
             self.command_callback,
             10,
         )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("mode_topic").value),
+            self.mode_callback,
+            10,
+        )
         # 역할: Gazebo가 이미 실행 중인 상태에서 이 노드만 나중에 붙으면
         # use_sim_time clock이 0이 아닌 값으로 시작한다. 첫 tick에서 mission 시작
         # 시각을 잡아야 target이 첫 프레임부터 종료점으로 점프하지 않는다.
         self.start_time: float | None = None
-        self.path = self._trial_path(int(self.get_parameter("trial_id").value))
+        self.path = self._trial_path(self._scenario_id())
         self.set_entity_client = None
         if SetEntityState is not None:
             self.set_entity_client = self.create_client(SetEntityState, "/set_entity_state")
@@ -91,10 +108,21 @@ class GazeboMovingObjectTrialPublisherNode(Node):
         command = msg.data.strip().upper()
         if command not in self.start_commands:
             return
+        self.start_trajectory(f"command={command}")
+
+    def mode_callback(self, msg: String) -> None:
+        mode = msg.data.strip().upper()
+        if mode not in self.start_modes:
+            return
+        self.start_trajectory(f"mode={mode}")
+
+    def start_trajectory(self, reason: str) -> None:
+        if self.trajectory_started and self.start_time is not None:
+            return
         self.trajectory_started = True
         self.start_time = self._now()
-        self.path = self._trial_path(int(self.get_parameter("trial_id").value))
-        self.state_pub.publish(String(data=f"TRIAL_TARGET_STARTED command={command}"))
+        self.path = self._trial_path(self._scenario_id())
+        self.state_pub.publish(String(data=f"TRIAL_TARGET_STARTED {reason}"))
 
     def tick(self) -> None:
         now = self._now()
@@ -169,6 +197,12 @@ class GazeboMovingObjectTrialPublisherNode(Node):
         if trial_id == 5:
             return TrialPath(2.0, -2.0, 2.7, -1.4, z)
         return TrialPath(2.0, 0.0, 2.7, 0.0, z)
+
+    def _scenario_id(self) -> int:
+        scenario_id = int(self.get_parameter("scenario_id").value)
+        if scenario_id > 0:
+            return scenario_id
+        return int(self.get_parameter("trial_id").value)
 
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9

@@ -22,8 +22,8 @@ def generate_launch_description() -> LaunchDescription:
         [
             DeclareLaunchArgument(
                 "backend",
-                default_value="gazebo_live",
-                description="gazebo_live, cartographer, or gmapping",
+                default_value="cartographer",
+                description="cartographer, gmapping, or gazebo_live. gazebo_live is simulation-only.",
             ),
             DeclareLaunchArgument("source_map_yaml", default_value=default_source_map),
             DeclareLaunchArgument("use_rviz", default_value="false"),
@@ -41,6 +41,18 @@ def generate_launch_description() -> LaunchDescription:
             ),
             Node(
                 package="waver_patrol",
+                executable="mapping_workflow_manager_node",
+                name="mapping_workflow_manager_node",
+                output="screen",
+                parameters=[
+                    {
+                        "save_dir": LaunchConfiguration("save_dir"),
+                        "save_basename": LaunchConfiguration("save_basename"),
+                    }
+                ],
+            ),
+            Node(
+                package="waver_patrol",
                 executable="gazebo_live_mapping_node",
                 name="gazebo_live_mapping_node",
                 output="screen",
@@ -55,8 +67,8 @@ def generate_launch_description() -> LaunchDescription:
                         "save_dir": LaunchConfiguration("save_dir"),
                         "save_basename": LaunchConfiguration("save_basename"),
                         "auto_start": True,
-                        "auto_save_on_complete": True,
-                        "auto_apply_on_save": True,
+                        "auto_save_on_complete": False,
+                        "auto_apply_on_save": False,
                     }
                 ],
             ),

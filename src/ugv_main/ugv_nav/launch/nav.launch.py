@@ -42,7 +42,8 @@ def launch_setup(context, *args, **kwargs):
     use_localplan = context.launch_configurations['use_localplan']
     
     # Get the localplan config file
-    param_file = get_localplan_config_file(context)
+    param_file_arg = context.launch_configurations.get('params_file', '')
+    param_file = param_file_arg if param_file_arg else get_localplan_config_file(context)
     
     # Get the package share directories for ugv_nav, nav2_bringup, and emcl2
     ugv_nav_dir = get_package_share_directory('ugv_nav')
@@ -50,12 +51,14 @@ def launch_setup(context, *args, **kwargs):
     emcl_dir = get_package_share_directory('emcl2')
 
     # Get the map yaml path
-    map_yaml_path = LaunchConfiguration('map', default=os.path.join(ugv_nav_dir, 'maps', 'map.yaml'))
+    map_arg = context.launch_configurations.get('map', '')
+    map_yaml_path = map_arg if map_arg else os.path.join(ugv_nav_dir, 'maps', 'map.yaml')
     # Get the emcl param file
     emcl_param_file = os.path.join(emcl_dir, 'config', 'emcl2_quick_start.param.yaml')                        
-    # Include the bringup_lidar launch description
+    # Include sensor-only bringup. The legacy ugv_driver writes directly to serial
+    # and must not run in Waver safety-mux profiles.
     bringup_lidar_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ugv_bringup'), 'launch', 'bringup_lidar.launch.py')),
+        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ugv_bringup'), 'launch', 'bringup_lidar_sensors_only.launch.py')),
         launch_arguments={
             'use_rviz': LaunchConfiguration('use_rviz'),
             'rviz_config': 'nav_2d', 
@@ -122,6 +125,9 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_localplan', default_value='teb', description='Choose which localplan to use: dwa,teb'),
         DeclareLaunchArgument('use_localization', default_value='amcl', description='Choose which use_localization to use: amcl,cartographer'),
+        DeclareLaunchArgument('map', default_value='', description='Full path to map yaml file to load'),
+        DeclareLaunchArgument('params_file', default_value='', description='Optional Nav2 params file. Empty selects local planner defaults.'),
+        DeclareLaunchArgument('use_rviz', default_value='false', description='Whether to launch RViz2'),
         OpaqueFunction(function=launch_setup)
     ])
 

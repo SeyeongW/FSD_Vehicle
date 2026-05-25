@@ -61,6 +61,7 @@ def generate_launch_description() -> LaunchDescription:
                     "enable_gazebo_bird_bridge": "false",
                     "enable_cluster_node": LaunchConfiguration("enable_cluster_node"),
                     "enable_fake_camera_classification": LaunchConfiguration("enable_fake_camera_detection"),
+                    "enable_fake_sound": LaunchConfiguration("enable_fake_sound"),
                     "enable_mission_stack": "true",
                     "enable_simple_nav2_cmd_sim": "true",
                     "enable_moving_object_motion_filter": "true",

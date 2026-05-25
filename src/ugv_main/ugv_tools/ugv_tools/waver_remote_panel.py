@@ -98,6 +98,8 @@ class PanelState:
     elevated_targets_frame: str = ""
     current_waypoint: Optional[tuple[float, float]] = None
     current_waypoint_frame: str = ""
+    manual_command_age: float = 999.0
+    keyboard_state: str = "idle"
 
 
 class WaverRemoteNode(Node):
@@ -146,6 +148,7 @@ class WaverRemoteNode(Node):
         self.declare_parameter("mode_topic", "/waver/mode")
         self.declare_parameter("mission_command_topic", "/waver/mission_command")
         self.declare_parameter("operator_command_topic", "/waver/operator_command")
+        self.declare_parameter("keyboard_state_topic", "/waver/operator_keyboard_state")
         self.declare_parameter("emergency_stop_topic", "/waver/emergency_stop")
         self.declare_parameter("mission_reset_topic", "/waver/mission_reset")
         self.declare_parameter("speed_limit_topic", "/waver/speed_limit")
@@ -163,6 +166,7 @@ class WaverRemoteNode(Node):
         self.declare_parameter("hard_stop_distance_m", 0.45)
         self.declare_parameter("slow_down_distance_m", 1.2)
         self.declare_parameter("min_valid_scan_points", 40)
+        self.declare_parameter("profile", "real")
         self.declare_parameter("publish_direct_cmd_vel", False)
         self.declare_parameter("allow_subprocess_launches", False)
         self.declare_parameter("allow_mapping_launches", True)
@@ -199,7 +203,15 @@ class WaverRemoteNode(Node):
         self.last_speed_limit_publish = -1.0
         self.last_angular_limit_publish = -1.0
         self.last_speed_limit_publish_time = 0.0
+        self.last_manual_command_time = 0.0
+        self.profile = str(self.get_parameter("profile").value).strip().lower() or "real"
         self.publish_direct_cmd_vel = bool(self.get_parameter("publish_direct_cmd_vel").value)
+        if self.profile == "real" and self.publish_direct_cmd_vel:
+            self.get_logger().error(
+                "publish_direct_cmd_vel=true was requested in real profile; forcing it to false. "
+                "WASD/manual commands will publish only to /waver/manual_cmd_vel."
+            )
+            self.publish_direct_cmd_vel = False
         self.allow_subprocess_launches = bool(
             self.get_parameter("allow_subprocess_launches").value
         )
@@ -250,6 +262,11 @@ class WaverRemoteNode(Node):
         self.operator_command_pub = self.create_publisher(
             String,
             str(self.get_parameter("operator_command_topic").value),
+            10,
+        )
+        self.keyboard_state_pub = self.create_publisher(
+            String,
+            str(self.get_parameter("keyboard_state_topic").value),
             10,
         )
         self.estop_pub = self.create_publisher(
@@ -647,18 +664,27 @@ class WaverRemoteNode(Node):
         # 역할: 방향 버튼/방향키 입력을 현재 speed slider 값으로 스케일링한다.
         # AUTO 중에는 mode를 AUTO로 유지해 Nav2 goal/path를 살리고, safety mux의 manual override만 사용한다.
         with self.lock:
+            current_mode = self.state.mode
             keep_auto = (
-                self.state.mode == "AUTO"
+                current_mode in {"AUTO", "PATROL", "RETURN_HOME", "MAPPING_AUTO"}
                 and bool(self.get_parameter("manual_override_returns_to_auto").value)
             )
-            if not keep_auto:
+            if current_mode == "MAPPING_AUTO" and (abs(linear) > 1e-5 or abs(angular) > 1e-5):
+                self.state.mode = "MAPPING_MANUAL"
+            elif current_mode == "MAPPING_MANUAL" and abs(linear) <= 1e-5 and abs(angular) <= 1e-5:
+                self.state.mode = "MAPPING_AUTO"
+            elif not keep_auto:
                 self.state.mode = "MANUAL"
             self.state.desired_linear = linear * self.state.speed_limit
             self.state.desired_angular = angular * self.state.angular_limit
             self.state.active_control = label
+            self.state.keyboard_state = label
+            self.state.manual_command_age = 0.0
             self.state.emergency_stop = False
             if keep_auto and (abs(linear) > 1e-5 or abs(angular) > 1e-5):
                 self.state.auto_status = "manual override active; AUTO goal retained"
+        self.last_manual_command_time = time.monotonic()
+        self.publish_mode(force=True)
 
     def stop_motion(self, stop_auto: bool = True) -> None:
         # 역할: 일반 정지 버튼. 자동순찰도 함께 멈추고 0속도를 반복 발행한다.
@@ -695,6 +721,25 @@ class WaverRemoteNode(Node):
             self.state.emergency_stop = False
             self.state.active_control = "reset"
         self.publish_stop_burst()
+
+    def clear_map_for_new_mapping_session(self) -> None:
+        # 역할: 새 SLAM 세션 시작 시 UI에 남아 있던 fixed map/path/target overlay를 지운다.
+        # 저장된 yaml/pgm 파일은 삭제하지 않고, 표시 상태만 unapplied로 전환한다.
+        with self.lock:
+            self.state.map_received = False
+            self.state.map_occupied.clear()
+            self.state.robot_trace.clear()
+            self.state.global_path.clear()
+            self.state.local_path.clear()
+            self.state.active_goal = None
+            self.state.object_goal = None
+            self.state.current_waypoint = None
+            self.state.lidar_objects.clear()
+            self.state.elevated_targets.clear()
+            self.state.map_sequence += 1
+            self.state.map_display_mode = "SLAM_LIVE"
+            self.state.map_apply_state = "OLD_MAP_UNAPPLIED_MAPPING_STARTED"
+            self.state.auto_status = "mapping session cleared; waiting live /map"
 
     def start_auto(self) -> None:
         # 역할: AUTO 버튼을 mission/Nav2 백엔드와 연결한다.
@@ -821,12 +866,9 @@ class WaverRemoteNode(Node):
         if normalized in {"START_PATROL", "RESUME_PATROL", "AUTO_MODE", "GAZEBO_TRIAL_START"}:
             self.start_auto()
         elif normalized == "START_MAPPING":
-            with self.lock:
-                self.state.map_display_mode = "SLAM_LIVE"
-                self.state.auto_status = "mapping mode: waiting live /map"
-                self.state.map_apply_state = "SLAM_LIVE requested"
+            self.clear_map_for_new_mapping_session()
             self.start_optional_process("mapping_launch_command", "mapping", "mapping_process")
-            self.set_mode("MAPPING")
+            self.set_mode("MAPPING_AUTO")
         elif normalized == "SAVE_MAP":
             with self.lock:
                 self.state.auto_status = "save map requested"
@@ -949,14 +991,20 @@ class WaverRemoteNode(Node):
             auto_angular = float(self.latest_auto_cmd.angular.z)
             auto_age = now - self.last_auto_cmd_time if self.last_auto_cmd_time else 999.0
             self.state.latest_auto_age = auto_age
+            if self.last_manual_command_time:
+                self.state.manual_command_age = now - self.last_manual_command_time
 
         self.publish_mode()
         self.publish_estop()
         self.publish_speed_limits()
+        with self.lock:
+            self.keyboard_state_pub.publish(
+                String(data=f"active={self.state.active_control} age={self.state.manual_command_age:.3f} mode={self.state.mode}")
+            )
         if estop or mode in {"STANDBY", "EMERGENCY"}:
             self.cmd_pub.publish(Twist())
             return
-        if mode == "MANUAL":
+        if mode in {"MANUAL", "MAPPING_MANUAL"}:
             command = self.assist.assisted_command(
                 DriveCommand(linear=linear, angular=angular, source="remote_panel")
             )
@@ -964,7 +1012,7 @@ class WaverRemoteNode(Node):
             msg.linear.x = command.linear
             msg.angular.z = command.angular
             self.cmd_pub.publish(msg)
-        elif mode in {"AUTO", "PATROL", "TRACK_ONLY", "RETURN_HOME"}:
+        elif mode in {"AUTO", "PATROL", "TRACK_ONLY", "RETURN_HOME", "MAPPING_AUTO"}:
             if not self.publish_direct_cmd_vel:
                 # 역할: AUTO 중에는 Nav2가 `/waver/cmd_vel_nav2`를 계속 만들고,
                 # 리모콘은 사람이 누르는 동안만 `/waver/manual_cmd_vel` 후보를 올린다.
@@ -1100,6 +1148,7 @@ class WaverRemotePanel:
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.bind("<KeyPress>", self.on_key_press)
         self.root.bind("<KeyRelease>", self.on_key_release)
+        self.root.bind("<FocusOut>", self.on_focus_loss)
 
         self.mode_var = tk.StringVar(value="STANDBY")
         self.cmd_var = tk.StringVar(value="cmd: 0.00 m/s, 0.00 rad/s")
@@ -1497,6 +1546,11 @@ class WaverRemotePanel:
         self.highlight_direction("")
         self.node.set_manual_command(0.0, 0.0, "released")
 
+    def on_focus_loss(self, _event) -> None:
+        # 역할: 창 포커스를 잃으면 key release가 누락돼도 수동 명령 stuck을 방지한다.
+        self.active_key = None
+        self.release_direction()
+
     def on_speed_change(self, _value: str) -> None:
         # 역할: slider 값을 ROS 스레드가 사용할 공유 상태로 반영한다.
         with self.lock:
@@ -1794,7 +1848,7 @@ class WaverRemotePanel:
         elif key == "r":
             self.node.reset_estop()
         elif key == "p":
-            self.node.start_auto()
+            self.node.send_operator_command("START_PATROL")
 
     def on_key_release(self, event) -> None:
         # 역할: 눌렀던 방향키를 떼면 정지한다.
@@ -1887,6 +1941,15 @@ class WaverRemotePanel:
                 (11700, lambda: self.node.send_operator_command("CLEAR_EMERGENCY_STOP")),
                 (12800, self.close_if_demo_requested),
             ]
+        elif script in {"airport_patrol_trial", "gazebo_airport_patrol_trial"}:
+            # 역할: 공항 Gazebo 검증에서 사람이 리모콘 START PATROL을 누른 상황만 재현한다.
+            # STOP/E-STOP/RETURN_HOME은 누르지 않아 순찰 -> target mission -> patrol resume 흐름을 보존한다.
+            steps = [
+                (1500, lambda: self.node.send_operator_command("START_PATROL")),
+                (5000, lambda: self.node.send_operator_command("START_PATROL")),
+                (10000, lambda: self.node.send_operator_command("RESUME_PATROL")),
+                (85000, self.close_if_demo_requested),
+            ]
         else:
             self.node.get_logger().warn(f"Unknown demo_script={script!r}; ignoring")
             return
@@ -1929,6 +1992,8 @@ class WaverRemotePanel:
             auto_angular = self.state.latest_auto_angular
             auto_age = self.state.latest_auto_age
             active = self.state.active_control
+            manual_age = self.state.manual_command_age
+            keyboard_state = self.state.keyboard_state
             pose_source = self.state.pose_source
             odom_yaw = self.state.odom_yaw
         self.mode_var.set(f"{mode} {'E-STOP' if estop else ''}".strip())
@@ -1937,13 +2002,16 @@ class WaverRemotePanel:
             "AUTO": "AUTO: Nav2 mission 주행, 방향키 입력은 잠깐 override 후 경로 복귀",
             "STANDBY": "STANDBY: 정지. AUTO 버튼을 누르면 mission/Nav2 백엔드에 AUTO 요청",
             "EMERGENCY": "EMERGENCY: latch stop. RESET 전까지 움직이지 않음",
+            "MAPPING_AUTO": "MAPPING_AUTO: SLAM live map 작성 중, WASD는 safety mux 후보로만 override",
+            "MAPPING_MANUAL": "MAPPING_MANUAL: mapping 수동 override, 키를 떼면 MAPPING_AUTO로 복귀",
         }.get(mode, f"{mode}: custom mode")
         self.mode_hint_var.set(hint)
         self.speed_text_var.set(
             f"speed: {self.speed_var.get():.2f} m/s, turn: {self.angular_var.get():.2f} rad/s"
         )
         self.cmd_var.set(
-            f"cmd: {cmd_linear:+.2f} m/s, {cmd_angular:+.2f} rad/s, active={active}"
+            f"cmd: {cmd_linear:+.2f} m/s, {cmd_angular:+.2f} rad/s, "
+            f"active={active}, key={keyboard_state}, manual_age={manual_age:.2f}s"
         )
         self.odom_var.set(
             f"pose({pose_source}): x={odom_x:+.2f}, y={odom_y:+.2f}, yaw={odom_yaw:+.2f}"
@@ -1980,6 +2048,8 @@ class WaverRemotePanel:
             "AUTO": "#2e7d32",
             "STANDBY": "#546e7a",
             "EMERGENCY": "#b71c1c",
+            "MAPPING_AUTO": "#0277bd",
+            "MAPPING_MANUAL": "#00838f",
         }.get(mode, "#3949ab")
         hazard_color = "#1b5e20"
         if "stop" in hazard or "stale" in hazard:
@@ -2031,6 +2101,7 @@ class WaverRemotePanel:
         if self.closed:
             return
         self.closed = True
+        self.active_key = None
         self.node.stop_motion(stop_auto=True)
         try:
             self.root.destroy()

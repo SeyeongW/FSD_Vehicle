@@ -75,6 +75,14 @@ def generate_launch_description() -> LaunchDescription:
         [
             DeclareLaunchArgument("trial_id", default_value="1"),
             DeclareLaunchArgument(
+                "target_scenario_id",
+                default_value="0",
+                description=(
+                    "Gazebo target trajectory scenario. 0 follows trial_id for H1/H2/H3 tests; "
+                    "1 forces the elevated dynamic patrol-interrupt scenario."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "target_min_height_m",
                 default_value="3.0",
                 description="Height threshold for elevated dynamic targets. This is not a motion-distance threshold.",
@@ -100,6 +108,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_ugv_bird_manager", default_value="false"),
             DeclareLaunchArgument("enable_gazebo_bird_bridge", default_value="false"),
             DeclareLaunchArgument("enable_fake_camera_classification", default_value="false"),
+            DeclareLaunchArgument("enable_fake_sound", default_value="false"),
             DeclareLaunchArgument("robot_entity", default_value="ugv_rover"),
             DeclareLaunchArgument("robot_spawn_x", default_value="0.0"),
             DeclareLaunchArgument("robot_spawn_y", default_value="0.0"),
@@ -114,6 +123,21 @@ def generate_launch_description() -> LaunchDescription:
                 ),
             ),
             DeclareLaunchArgument("enable_gazebo_map_path_visualizer", default_value="true"),
+            DeclareLaunchArgument(
+                "publish_static_map_to_odom_tf",
+                default_value="true",
+                description=(
+                    "Gazebo-only fallback TF for airport trials without AMCL/SLAM. "
+                    "Set false when a localization backend publishes map->odom."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "publish_static_rover_sensor_tf",
+                default_value="true",
+                description=(
+                    "Gazebo-only fixed TF fallback for ugv_rover links when no robot_state_publisher is running."
+                ),
+            ),
             DeclareLaunchArgument("dynamic_obstacle_topic", default_value="/waver/dynamic_obstacle_map"),
             DeclareLaunchArgument("enable_dynamic_obstacle_detour", default_value="false"),
             DeclareLaunchArgument("enable_simple_nav2_avoidance", default_value="false"),
@@ -173,6 +197,30 @@ def generate_launch_description() -> LaunchDescription:
                     "Gazebo moving-object trial: fake cluster publisher uses /waver/lidar_objects; "
                     "cluster/mission nodes never publish final /cmd_vel."
                 )
+            ),
+            Node(
+                package="tf2_ros",
+                executable="static_transform_publisher",
+                name="gazebo_static_map_to_odom_tf",
+                arguments=["0", "0", "0", "0", "0", "0", "map", "odom"],
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("publish_static_map_to_odom_tf")),
+            ),
+            Node(
+                package="tf2_ros",
+                executable="static_transform_publisher",
+                name="gazebo_static_base_footprint_to_base_link_tf",
+                arguments=["0.00046", "0", "0.08", "0", "0", "0", "base_footprint", "base_link"],
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("publish_static_rover_sensor_tf")),
+            ),
+            Node(
+                package="tf2_ros",
+                executable="static_transform_publisher",
+                name="gazebo_static_base_link_to_livox_tf",
+                arguments=["-0.05", "0", "0.08", "0", "0", "0", "base_link", "livox"],
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("publish_static_rover_sensor_tf")),
             ),
             ExecuteProcess(
                 cmd=[
@@ -344,6 +392,8 @@ def generate_launch_description() -> LaunchDescription:
                     "use_nav2": LaunchConfiguration("use_nav2"),
                     "require_scan": LaunchConfiguration("require_scan"),
                     "enable_test_publishers": "false",
+                    "enable_deep_learning_stub": LaunchConfiguration("enable_fake_camera_classification"),
+                    "enable_sound_stub": LaunchConfiguration("enable_fake_sound"),
                     "start_serial_bridge": "false",
                     "enable_experiment_logger": "false",
                     "waypoint_file": LaunchConfiguration("waypoint_file"),
@@ -356,6 +406,7 @@ def generate_launch_description() -> LaunchDescription:
                     "post_target_resume_cooldown_sec": LaunchConfiguration("post_target_resume_cooldown_sec"),
                     "use_sim_time": "true",
                     "enable_sim_nav_goal_arrival": "true",
+                    "require_robot_pose_for_goal": "false",
                     "enable_moving_object_map_transform": "true",
                     "ignore_scan_when_require_scan_false": "true",
                     "safety_max_linear_speed": LaunchConfiguration("gazebo_sim_max_linear_speed"),
@@ -458,6 +509,10 @@ def generate_launch_description() -> LaunchDescription:
                     {
                         "use_sim_time": True,
                         "trial_id": ParameterValue(trial_id, value_type=int),
+                        "scenario_id": ParameterValue(
+                            LaunchConfiguration("target_scenario_id"),
+                            value_type=int,
+                        ),
                         "duration_sec": ParameterValue(LaunchConfiguration("target_motion_duration_sec"), value_type=float),
                         "target_z": ParameterValue(LaunchConfiguration("target_z"), value_type=float),
                         "gazebo_entity_move_delay_sec": ParameterValue(

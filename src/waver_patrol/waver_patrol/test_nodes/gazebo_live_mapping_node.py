@@ -45,8 +45,8 @@ class GazeboLiveMappingNode(Node):
         self.declare_parameter("publish_rate_hz", 2.0)
         self.declare_parameter("reveal_duration_sec", 12.0)
         self.declare_parameter("auto_start", True)
-        self.declare_parameter("auto_save_on_complete", True)
-        self.declare_parameter("auto_apply_on_save", True)
+        self.declare_parameter("auto_save_on_complete", False)
+        self.declare_parameter("auto_apply_on_save", False)
         self.declare_parameter("save_dir", "~/ros2_ws/maps")
         self.declare_parameter("save_basename", "waver_latest_map")
 
@@ -95,7 +95,7 @@ class GazeboLiveMappingNode(Node):
             self.saved_once = False
             self.apply_state_pub.publish(String(data="MAPPING_STARTED"))
         elif command == "SAVE_MAP":
-            self.save_current_map(apply_after=True)
+            self.save_current_map(apply_after=False)
         elif command in {"LOAD_MAP", "APPLY_MAP", "START_LOCALIZATION"}:
             self.apply_full_map("MAP_APPLIED_BY_OPERATOR")
 

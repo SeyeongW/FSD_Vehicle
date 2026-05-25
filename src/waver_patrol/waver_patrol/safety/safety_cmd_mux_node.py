@@ -59,6 +59,8 @@ class SafetyCmdMuxNode(Node):
         self.declare_parameter("min_valid_scan_points", 20)
         self.declare_parameter("max_linear_speed", 0.16)
         self.declare_parameter("max_angular_speed", 0.45)
+        self.declare_parameter("mapping_max_linear_speed", 0.14)
+        self.declare_parameter("mapping_max_angular_speed", 0.40)
         self.declare_parameter("max_linear_delta_per_tick", 0.04)
         self.declare_parameter("max_angular_delta_per_tick", 0.08)
         self.declare_parameter("command_timeout_sec", 0.5)
@@ -164,7 +166,17 @@ class SafetyCmdMuxNode(Node):
             return stop_twist(), "EXTERNAL_STOP final_cmd_vel_zero", True
         if self.mode in {"EMERGENCY", "DISABLED"}:
             return stop_twist(), f"MODE_{self.mode}_STOP final_cmd_vel_zero", True
-        if self.mode not in {"AUTO", "PATROL", "TRACK_ONLY", "RETURN_HOME", "MANUAL", "STANDBY"}:
+        allowed_modes = {
+            "AUTO",
+            "PATROL",
+            "TRACK_ONLY",
+            "RETURN_HOME",
+            "MANUAL",
+            "STANDBY",
+            "MAPPING_AUTO",
+            "MAPPING_MANUAL",
+        }
+        if self.mode not in allowed_modes:
             if bool(self.get_parameter("stop_on_unknown_state").value):
                 return stop_twist(), f"UNKNOWN_MODE_STOP mode={self.mode}", True
 
@@ -184,10 +196,10 @@ class SafetyCmdMuxNode(Node):
     def _select_candidate(self, now: float) -> tuple[Twist, str, bool]:
         manual_fresh = now - self.last_manual_time <= float(self.get_parameter("manual_override_timeout_sec").value)
         manual_nonzero = abs(self.manual_cmd.linear.x) > 1e-5 or abs(self.manual_cmd.angular.z) > 1e-5
-        if self.mode == "MANUAL":
+        if self.mode in {"MANUAL", "MAPPING_MANUAL"}:
             if not manual_fresh:
-                return stop_twist(), "MANUAL_COMMAND_TIMEOUT_STOP", True
-            return self.manual_cmd, "MANUAL_PASS", False
+                return stop_twist(), f"{self.mode}_COMMAND_TIMEOUT_STOP", True
+            return self.manual_cmd, f"{self.mode}_PASS", False
         if manual_fresh and manual_nonzero:
             return self.manual_cmd, "MANUAL_OVERRIDE", False
         if self.mode == "STANDBY":
@@ -236,6 +248,9 @@ class SafetyCmdMuxNode(Node):
     def _limit(self, cmd: Twist) -> Twist:
         max_linear = min(float(self.get_parameter("max_linear_speed").value), self.speed_limit)
         max_angular = min(float(self.get_parameter("max_angular_speed").value), self.angular_speed_limit)
+        if self.mode in {"MAPPING_AUTO", "MAPPING_MANUAL"}:
+            max_linear = min(max_linear, float(self.get_parameter("mapping_max_linear_speed").value))
+            max_angular = min(max_angular, float(self.get_parameter("mapping_max_angular_speed").value))
         if (
             not self._scan_disabled_for_test()
             and cmd.linear.x > 0.0

@@ -126,28 +126,41 @@ def load_route_yaml(path: str, package_share: str | None = None) -> MissionRoute
     )
 
 
-def offset_goal_from_target(target: PoseStamped, offset_distance_m: float, yaw_policy: str = "FACE_TARGET") -> PoseStamped:
+def offset_goal_from_target(
+    target: PoseStamped,
+    offset_distance_m: float,
+    yaw_policy: str = "FACE_TARGET",
+    robot_pose: PoseStamped | Pose | None = None,
+) -> PoseStamped:
     """Create a 2D Nav2 goal near, not on top of, the object target.
 
-    The target's x/y is assumed to be in a global frame. The robot stops
-    `offset_distance_m` before the object along the ray from the map origin.
-    For real deployments this should be replaced with a robot-current-pose ray.
+    The target's x/y is assumed to be in a global frame. When a current robot
+    pose is available, the robot stops `offset_distance_m` before the object
+    along the robot-to-target bearing. This avoids the legacy map-origin ray
+    behavior, which produced unsafe goals when the robot was not near (0, 0).
     """
-    x = float(target.pose.position.x)
-    y = float(target.pose.position.y)
-    yaw = math.atan2(y, x) if abs(x) + abs(y) > 1e-6 else 0.0
-    distance = math.hypot(x, y)
+    target_x = float(target.pose.position.x)
+    target_y = float(target.pose.position.y)
+    if robot_pose is not None:
+        robot_position = robot_pose.pose.position if isinstance(robot_pose, PoseStamped) else robot_pose.position
+        robot_x = float(robot_position.x)
+        robot_y = float(robot_position.y)
+    else:
+        robot_x = 0.0
+        robot_y = 0.0
+
+    bearing = math.atan2(target_y - robot_y, target_x - robot_x)
+    distance = math.hypot(target_x - robot_x, target_y - robot_y)
     stop_distance = max(0.0, distance - max(0.0, offset_distance_m))
-    scale = stop_distance / distance if distance > 1e-6 else 0.0
     goal = PoseStamped()
     goal.header = target.header
-    goal.pose.position.x = x * scale
-    goal.pose.position.y = y * scale
+    goal.pose.position.x = robot_x + stop_distance * math.cos(bearing)
+    goal.pose.position.y = robot_y + stop_distance * math.sin(bearing)
     goal.pose.position.z = 0.0
     if yaw_policy == "KEEP_CURRENT_YAW":
         goal.pose.orientation = target.pose.orientation
     elif yaw_policy == "FACE_FORWARD":
         goal.pose.orientation = yaw_to_quaternion(0.0)
     else:
-        goal.pose.orientation = yaw_to_quaternion(yaw)
+        goal.pose.orientation = yaw_to_quaternion(bearing)
     return goal

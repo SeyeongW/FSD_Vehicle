@@ -75,6 +75,7 @@ setup(
             'simple_nav2_cmd_sim_node = waver_patrol.test_nodes.simple_nav2_cmd_sim_node:main',
             'gazebo_map_path_visualizer_node = waver_patrol.test_nodes.gazebo_map_path_visualizer_node:main',
             'gazebo_live_mapping_node = waver_patrol.test_nodes.gazebo_live_mapping_node:main',
+            'mapping_workflow_manager_node = waver_patrol.mapping.mapping_workflow_manager_node:main',
             'gazebo_moving_object_trial_publisher_node = waver_patrol.test_nodes.gazebo_moving_object_trial_publisher_node:main',
             'gazebo_dynamic_obstacle_node = waver_patrol.test_nodes.gazebo_dynamic_obstacle_node:main',
             'aerial_target_test_publisher_node = waver_patrol.test_nodes.aerial_target_test_publisher_node:main',

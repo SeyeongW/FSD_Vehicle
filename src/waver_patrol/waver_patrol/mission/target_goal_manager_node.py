@@ -4,7 +4,8 @@ import math
 from dataclasses import dataclass
 
 import rclpy
-from geometry_msgs.msg import PointStamped, PoseArray, PoseStamped
+from geometry_msgs.msg import PointStamped, PoseArray, PoseStamped, PoseWithCovarianceStamped
+from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import Bool, String
@@ -56,6 +57,9 @@ class TargetGoalManagerNode(Node):
         self.declare_parameter("target_hold_sec", 1.0)
         self.declare_parameter("target_lost_timeout_sec", 2.0)
         self.declare_parameter("goal_yaw_policy", "FACE_TARGET")
+        self.declare_parameter("robot_pose_topic", "/amcl_pose")
+        self.declare_parameter("robot_odom_topic", "/odom")
+        self.declare_parameter("require_robot_pose_for_goal", True)
         self.declare_parameter("lidar_objects_topic", "/waver/lidar_objects")
         self.declare_parameter("lidar_detections_topic", "/lidar/detections")
         self.declare_parameter("lidar_objects_map_topic", "/waver/lidar_objects_map")
@@ -79,12 +83,25 @@ class TargetGoalManagerNode(Node):
         self.bird_confirmed = False
         self.last_goal_time = -1e9
         self.last_candidate_time = 0.0
+        self.robot_pose: PoseStamped | None = None
 
         self.create_subscription(PoseStamped, "/waver/radar_target_goal", self.radar_goal_callback, 10)
         self.create_subscription(Bool, "/waver/radar_target_active", lambda m: setattr(self, "radar_active", bool(m.data)), 10)
         self.create_subscription(PointStamped, "/waver/aerial_target", self.aerial_point_callback, 10)
         self.create_subscription(Bool, "/waver/aerial_target_active", lambda m: setattr(self, "aerial_active", bool(m.data)), 10)
         self.create_subscription(PointStamped, "/waver/object_point", self.object_point_callback, 10)
+        self.create_subscription(
+            PoseWithCovarianceStamped,
+            str(self.get_parameter("robot_pose_topic").value),
+            self.robot_pose_callback,
+            10,
+        )
+        self.create_subscription(
+            Odometry,
+            str(self.get_parameter("robot_odom_topic").value),
+            self.robot_odom_callback,
+            10,
+        )
         self.create_subscription(
             PoseArray,
             str(self.get_parameter("elevated_dynamic_targets_topic").value),
@@ -130,6 +147,20 @@ class TargetGoalManagerNode(Node):
         pose.pose.position = msg.point
         pose.pose.orientation.w = 1.0
         self.accept_candidate(Candidate(pose, "object_point", moving=True, bird_confirmed=self.bird_confirmed))
+
+    def robot_pose_callback(self, msg: PoseWithCovarianceStamped) -> None:
+        pose = PoseStamped()
+        pose.header = msg.header
+        pose.pose = msg.pose.pose
+        self.robot_pose = pose
+
+    def robot_odom_callback(self, msg: Odometry) -> None:
+        if self.robot_pose is not None:
+            return
+        pose = PoseStamped()
+        pose.header = msg.header
+        pose.pose = msg.pose.pose
+        self.robot_pose = pose
 
     def elevated_dynamic_targets_callback(self, msg: PoseArray) -> None:
         # 역할: height>=3m AND ego-motion-compensated dynamic 필터를 통과한 객체만 mission goal 후보로 받는다.
@@ -186,10 +217,18 @@ class TargetGoalManagerNode(Node):
             self.state_pub.publish(String(data=f"TF_FAILED source={candidate.source} frame={candidate.pose.header.frame_id}"))
             self.active_pub.publish(Bool(data=False))
             return
+        robot_pose = self.robot_pose
+        if robot_pose is not None and robot_pose.header.frame_id != transformed.header.frame_id:
+            robot_pose = self.transform_to_global(robot_pose)
+        if robot_pose is None and bool(self.get_parameter("require_robot_pose_for_goal").value):
+            self.state_pub.publish(String(data=f"REJECTED source={candidate.source} reason=robot_pose_unavailable"))
+            self.active_pub.publish(Bool(data=False))
+            return
         goal = offset_goal_from_target(
             transformed,
             float(self.get_parameter("goal_offset_distance_m").value),
             str(self.get_parameter("goal_yaw_policy").value),
+            robot_pose=robot_pose,
         )
         goal.header.stamp = self.get_clock().now().to_msg()
         self.goal_pub.publish(goal)

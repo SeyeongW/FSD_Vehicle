@@ -55,6 +55,7 @@ def generate_launch_description():
     mission_command_topic = LaunchConfiguration("mission_command_topic")
     operator_command_topic = LaunchConfiguration("operator_command_topic")
     publish_direct_cmd_vel = LaunchConfiguration("publish_direct_cmd_vel")
+    profile = LaunchConfiguration("profile")
     allow_subprocess_launches = LaunchConfiguration("allow_subprocess_launches")
     allow_mapping_launches = LaunchConfiguration("allow_mapping_launches")
     allow_map_save_commands = LaunchConfiguration("allow_map_save_commands")
@@ -81,6 +82,7 @@ def generate_launch_description():
                 "manual_cmd_vel_topic": "/waver/manual_cmd_vel",
                 "auto_cmd_vel_topic": "/waver/cmd_vel_nav2",
                 "publish_direct_cmd_vel": ParameterValue(publish_direct_cmd_vel, value_type=bool),
+                "profile": profile,
                 "manual_override_returns_to_auto": True,
                 "auto_mode_strategy": auto_mode_strategy,
                 "auto_launch_command": auto_launch_command,
@@ -146,7 +148,8 @@ def generate_launch_description():
                 "mapping_launch_command",
                 default_value=(
                     "ros2 launch waver_patrol waver_mapping_backend.launch.py "
-                    "backend:=gazebo_live use_rviz:=false"
+                    "backend:=cartographer use_rviz:=false "
+                    "start_lidar_bringup:=false start_robot_pose_publisher:=false"
                 ),
             ),
             DeclareLaunchArgument("map_save_command", default_value=""),
@@ -171,6 +174,7 @@ def generate_launch_description():
             DeclareLaunchArgument("map_apply_state_topic", default_value="/waver/map_apply_state"),
             DeclareLaunchArgument("mission_command_topic", default_value="/waver/mission_command"),
             DeclareLaunchArgument("operator_command_topic", default_value="/waver/operator_command"),
+            DeclareLaunchArgument("profile", default_value="real"),
             DeclareLaunchArgument("publish_direct_cmd_vel", default_value="false"),
             DeclareLaunchArgument("allow_subprocess_launches", default_value="false"),
             DeclareLaunchArgument("allow_mapping_launches", default_value="true"),
