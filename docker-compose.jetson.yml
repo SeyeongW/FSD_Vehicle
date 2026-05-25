@@ -12,6 +12,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all,compute,video
       - SERIAL_PORT=${SERIAL_PORT_JETSON}
+      - UGV_WS_PATH=/ros2_ws/ugv_ws
     volumes:
       # 전체 워크스페이스 마운트
       - .:/ros2_ws/ugv_ws

@@ -17,10 +17,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='Waver project maintainers',
-    maintainer_email='whxogus4793@naver.com',
-    description='Camera perception and tracking utilities for Waver UGV.',
-    license='Apache-2.0',
+    maintainer='dudu',
+    maintainer_email='dudu@todo.todo',
+    description='TODO: Package description',
+    license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
@@ -30,7 +30,10 @@ setup(
             'apriltag_ctrl = ugv_vision.apriltag_ctrl:main',
             'apriltag_track_0 = ugv_vision.apriltag_track_0:main',
             'apriltag_track_1 = ugv_vision.apriltag_track_1:main',
-            'apriltag_track_2 = ugv_vision.apriltag_track_2:main'
+            'apriltag_track_2 = ugv_vision.apriltag_track_2:main',
+            'yolo_hailo_node = ugv_vision.yolo_hailo_node:main',
+            'lidar_camera_fusion_node = ugv_vision.lidar_camera_fusion_node:main',
+            'gimbal_controller_node = ugv_vision.gimbal_controller_node:main',
         ],
     },
 )

@@ -197,8 +197,8 @@ class ServiceHandler(Node):
         return process
         
     def load_map(self, req, res):
-        #file_path = os.path.expanduser(req.file_path)
-        file_path ="/home/ws/ugv_ws/src/ugv_main/ugv_nav/maps/map_server_params.yaml"
+        ws_path = os.environ.get('UGV_WS_PATH', '/ros2_ws/ugv_ws')
+        file_path = os.path.join(ws_path, 'src/ugv_main/ugv_nav/maps/map_server_params.yaml')
         topic = req.topic
         try:
             #process = subprocess.Popen(["ros2", "run", "nav2_map_server", "map_server", file_path, "map:=" + topic, "__name:=vizanti_map_server"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -226,8 +226,8 @@ class ServiceHandler(Node):
 
         
     def save_map(self, req, res):
-        #file_path = os.path.expanduser(req.file_path)
-        file_path ="/home/ws/ugv_ws/src/ugv_main/ugv_nav/maps/map"
+        ws_path = os.environ.get('UGV_WS_PATH', '/ros2_ws/ugv_ws')
+        file_path = os.path.join(ws_path, 'src/ugv_main/ugv_nav/maps/map')
         topic = req.topic
         try:
             #process = subprocess.Popen(["ros2", "run", "nav2_map_server", "map_saver_cli", "-f", file_path, "--ros-args", "map:=" + topic], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

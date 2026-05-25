@@ -52,7 +52,7 @@ def generate_launch_description() -> LaunchDescription:
 
     rosbag_command_text = PythonExpression(
         [
-            "'mkdir -p ~/ros2_ws/experiments_result/gazebo_trial_",
+            "'mkdir -p ~/ros2_ws/FSD_Vehicle/experiments_result/gazebo_trial_",
             trial_id,
             "/rosbag; ros2 bag record "
             "/tf /tf_static /clock /scan /odom /cmd_vel /waver/cmd_vel_nav2 "
@@ -63,7 +63,7 @@ def generate_launch_description() -> LaunchDescription:
             "/waver/camera_detection_state /waver/target_class /waver/target_confidence "
             "/waver/bird_confirmed /waver/sound_alert_state /waver/sound_task_done "
             "/gazebo/model_states "
-            "-o ~/ros2_ws/experiments_result/gazebo_trial_",
+            "-o ~/ros2_ws/FSD_Vehicle/experiments_result/gazebo_trial_",
             trial_id,
             "/rosbag/trial_",
             trial_id,
@@ -151,7 +151,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_experiment_logger", default_value="true"),
             DeclareLaunchArgument("enable_trial_logger", default_value="false"),
             DeclareLaunchArgument("record_bag", default_value="false"),
-            DeclareLaunchArgument("output_root", default_value="~/ros2_ws/experiments_result"),
+            DeclareLaunchArgument("output_root", default_value="~/ros2_ws/FSD_Vehicle/experiments_result"),
             DeclareLaunchArgument(
                 "world_file",
                 default_value=default_world,

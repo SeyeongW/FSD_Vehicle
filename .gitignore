@@ -22,6 +22,7 @@ __pycache__/
 *.swp
 *.swo
 *~
+*.bak
 
 # OS
 .DS_Store
@@ -39,18 +40,19 @@ images/
 *.yaml
 map_points.txt
 
-# ROS2 패키지의 실행 config/waypoint YAML은 소스에 포함해야 함
-!src/**/config/*.yaml
-!src/**/waypoints/*.yaml
+# ROS2 패키지의 launch/config/waypoint YAML은 소스에 포함해야 함
+!src/**/*.yaml
+!src/**/*.yml
 
 # Gazebo 임시 파일
 .gazebo/
+.tmp/
 
-# Waver experiment artifacts
+# ROS/Gazebo experiment outputs (논문 원본 rosbag/대용량 결과는 런타임 생성)
+bags/
 experiments_result/
 waver_experiments/
 waver_experiments*/
-bags/
 **/rosbag/
 *.db3
 *.mcap

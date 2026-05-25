@@ -291,11 +291,7 @@ def main(args: list[str] | None = None) -> None:
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     except Exception as exc:
-        shutdown_edge = (
-            "context is not valid" in str(exc)
-            or "Unable to convert call argument to Python object" in str(exc)
-        )
-        if rclpy.ok() and not shutdown_edge:
+        if rclpy.ok() and "context is not valid" not in str(exc):
             raise
     finally:
         node.destroy_node()

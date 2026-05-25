@@ -1,0 +1,220 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="plane_fit_50x50">
+
+    <plugin name="gazebo_ros_state" filename="libgazebo_ros_state.so">
+      <ros><namespace>/</namespace></ros>
+      <update_rate>20.0</update_rate>
+    </plugin>
+
+    <gravity>0 0 -9.8</gravity>
+    <include><uri>model://sun</uri></include>
+
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <scene>
+      <ambient>0.65 0.65 0.65 1</ambient>
+      <background>0.68 0.83 1.0 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <!-- 1) Ground: 기준 평면 z = 0, normal = [0, 0, 1] -->
+    <model name="ground">
+      <static>true</static>
+      <pose>0 0 0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>50 50 0.005</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry><box><size>50 50 0.005</size></box></geometry>
+          <material>
+            <ambient>0.13 0.38 0.08 1</ambient>
+            <diffuse>0.17 0.44 0.10 1</diffuse>
+            <specular>0.01 0.01 0.01 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 2) Outer walls: 수직 평면 비교용 -->
+    <model name="wall_north">
+      <static>true</static>
+      <pose>0 25 2.0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>50 1 4</size></box></geometry></collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry><box><size>50 1 4</size></box></geometry>
+          <material><ambient>0.52 0.50 0.46 1</ambient><diffuse>0.60 0.57 0.52 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_south">
+      <static>true</static>
+      <pose>0 -25 2.0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>50 1 4</size></box></geometry></collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry><box><size>50 1 4</size></box></geometry>
+          <material><ambient>0.52 0.50 0.46 1</ambient><diffuse>0.60 0.57 0.52 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_east">
+      <static>true</static>
+      <pose>25 0 2.0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1 50 4</size></box></geometry></collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry><box><size>1 50 4</size></box></geometry>
+          <material><ambient>0.52 0.50 0.46 1</ambient><diffuse>0.60 0.57 0.52 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_west">
+      <static>true</static>
+      <pose>-25 0 2.0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1 50 4</size></box></geometry></collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry><box><size>1 50 4</size></box></geometry>
+          <material><ambient>0.52 0.50 0.46 1</ambient><diffuse>0.60 0.57 0.52 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 기존 L자 벽: outlier 및 수직 구조물 -->
+    <model name="l_wall_horizontal">
+      <static>true</static>
+      <pose>10.071 7.221 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>6.0 0.3 1.0</size></box></geometry></collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry><box><size>6.0 0.3 1.0</size></box></geometry>
+          <material><ambient>0.45 0.45 0.45 1</ambient><diffuse>0.55 0.55 0.55 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="l_wall_vertical">
+      <static>true</static>
+      <pose>7.221 10.071 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.3 6.0 1.0</size></box></geometry></collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry><box><size>0.3 6.0 1.0</size></box></geometry>
+          <material><ambient>0.45 0.45 0.45 1</ambient><diffuse>0.55 0.55 0.55 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 기존 삼각형 벽: 복잡 구조물 -->
+    <model name="tr_triangle_side_1">
+      <static>true</static>
+      <pose>-7.221 -10.221 0.5 0 0 1.57079632679</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>6.0 0.3 1.0</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>false</cast_shadows><geometry><box><size>6.0 0.3 1.0</size></box></geometry><material><ambient>0.45 0.45 0.45 1</ambient><diffuse>0.55 0.55 0.55 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <model name="tr_triangle_side_2">
+      <static>true</static>
+      <pose>-4.623 -8.721 0.5 0 0 -0.5235987756</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>6.0 0.3 1.0</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>false</cast_shadows><geometry><box><size>6.0 0.3 1.0</size></box></geometry><material><ambient>0.45 0.45 0.45 1</ambient><diffuse>0.55 0.55 0.55 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <model name="tr_triangle_side_3">
+      <static>true</static>
+      <pose>-4.623 -11.721 0.5 0 0 0.5235987756</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>6.0 0.3 1.0</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>false</cast_shadows><geometry><box><size>6.0 0.3 1.0</size></box></geometry><material><ambient>0.45 0.45 0.45 1</ambient><diffuse>0.55 0.55 0.55 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <!-- 3) 경사판: normal angle error 비교용. pitch = 15 deg -->
+    <model name="fit_ramp_15deg">
+      <static>true</static>
+      <pose>4.0 -4.0 0.45 0 0.2617993878 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>5.0 3.0 0.08</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry><box><size>5.0 3.0 0.08</size></box></geometry>
+          <material>
+            <ambient>0.1 0.25 0.85 1</ambient>
+            <diffuse>0.1 0.35 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 4) 작은 장애물: outlier 역할 -->
+    <model name="outlier_box_1">
+      <static>true</static>
+      <pose>1.5 2.0 0.35 0 0 0.2</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.7 0.7 0.7</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>false</cast_shadows><geometry><box><size>0.7 0.7 0.7</size></box></geometry><material><ambient>0.8 0.1 0.1 1</ambient><diffuse>1.0 0.1 0.1 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <model name="outlier_box_2">
+      <static>true</static>
+      <pose>-2.0 3.0 0.6 0 0 0.5</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1.0 0.6 1.2</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>false</cast_shadows><geometry><box><size>1.0 0.6 1.2</size></box></geometry><material><ambient>0.8 0.1 0.1 1</ambient><diffuse>1.0 0.1 0.1 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <model name="outlier_column">
+      <static>true</static>
+      <pose>6.0 1.5 1.0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><cylinder><radius>0.35</radius><length>2.0</length></cylinder></geometry></collision>
+        <visual name="visual"><cast_shadows>false</cast_shadows><geometry><cylinder><radius>0.35</radius><length>2.0</length></cylinder></geometry><material><ambient>0.8 0.1 0.1 1</ambient><diffuse>1.0 0.1 0.1 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <!-- 기존 tree는 크기가 너무 커서 피팅 결과를 과도하게 방해할 수 있으므로 위치를 유지하되 이름만 관측 장애물로 사용 -->
+    <model name="tree">
+      <static>true</static>
+      <pose>-10.0 7.0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>3.0 3.0 8.0</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>false</cast_shadows><geometry><box><size>3.0 3.0 8.0</size></box></geometry><material><ambient>0.45 0.45 0.45 1</ambient><diffuse>0.55 0.55 0.55 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <model name="tree_2">
+      <static>true</static>
+      <pose>-10.0 7.0 8.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1.0 1.0 4.0</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>false</cast_shadows><geometry><box><size>1.0 1.0 4.0</size></box></geometry><material><ambient>0.45 0.45 0.45 1</ambient><diffuse>0.55 0.55 0.55 1</diffuse></material></visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

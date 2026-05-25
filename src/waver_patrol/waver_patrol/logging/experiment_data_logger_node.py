@@ -132,7 +132,7 @@ class ExperimentDataLoggerNode(Node):
     def __init__(self) -> None:
         super().__init__("experiment_data_logger_node")
         self.declare_parameter("experiment_name", "waver_radar_guided_bird_deterrence")
-        self.declare_parameter("output_root", "~/ros2_ws/experiments_result")
+        self.declare_parameter("output_root", "~/ros2_ws/FSD_Vehicle/experiments_result")
         self.declare_parameter("csv_flush_interval_sec", 1.0)
         self.declare_parameter("write_rosbag_command_file", True)
         self.declare_parameter("log_odom", True)

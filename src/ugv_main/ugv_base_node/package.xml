@@ -3,9 +3,9 @@
 <package format="3">
   <name>ugv_base_node</name>
   <version>0.0.0</version>
-  <description>Base odometry, TF, and chassis interface support for Waver UGV.</description>
-  <maintainer email="whxogus4793@naver.com">Waver project maintainers</maintainer>
-  <license>Apache-2.0</license>
+  <description>TODO: Package description</description>
+  <maintainer email="dudu@todo.todo">dudu</maintainer>
+  <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

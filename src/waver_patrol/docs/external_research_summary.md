@@ -1,6 +1,6 @@
 # External Research Summary
 
-Date checked: 2026-05-25
+Date checked: 2026-05-24
 Scope: ROS 2 Humble, Nav2, SLAM/map visualization, tf2, rosbag2, Gazebo, 3D LiDAR clustering, ego-motion compensation, and pre-real validation for Waver.
 
 ## Official Documentation
@@ -17,13 +17,6 @@ Scope: ROS 2 Humble, Nav2, SLAM/map visualization, tf2, rosbag2, Gazebo, 3D LiDA
 | slam_toolbox Humble docs | https://docs.ros.org/en/humble/p/slam_toolbox/ | SLAM mode and localization/saved-map mode must be separated in UI and launch files. |
 | RViz Marker display tutorial | https://docs.ros.org/en/humble/Tutorials/Intermediate/RViz/Marker-Display-types/Marker-Display-types.html | Target, waypoint, cluster, yaw-alignment, and trial states should be visible as markers or operator-panel overlays. |
 | Gazebo Classic tutorials | https://classic.gazebosim.org/tutorials | Pre-real tests should launch the existing `ugv_world.world` and `ugv_rover` before hardware tests. |
-
-Additional 2026-05-25 re-check:
-
-- ROS 2 Humble tf2 documentation confirms each node keeps a buffered frame tree and tooling such as `tf2_echo`/`view_frames` is the expected debugging path. This supports the Waver rule that raw LiDAR-frame apparent motion is not a target trigger.
-- ROS 2 Humble rosbag2 documentation describes recording selected topic sets for replay and examination, matching the `experiments_result` CSV/plot/report plus optional rosbag workflow.
-- Nav2 package documentation for Waypoint Follower, Collision Monitor, and Velocity Smoother supports keeping patrol in Nav2 while final robot velocity is guarded by a safety layer.
-- slam_toolbox/SLAM references reinforce separating live mapping from fixed-map localization. The current code keeps `backend:=gazebo_live` simulation-only and uses `cartographer`/`gmapping` launch wrappers for real mapping.
 
 ## GitHub / Open Source References
 
@@ -53,12 +46,11 @@ GitHub topic/trend check on 2026-05-24 favored ROS 2 Nav2, slam_toolbox, rosbag2
 3. Treat `target_min_height_m=3.0` as a height threshold, not a travel distance.
 4. Reject `z_valid=false` targets; 2D LaserScan can support obstacle stopping but not elevated-object classification.
 5. Keep Nav2 output remapped to `/waver/cmd_vel_nav2`; final `/cmd_vel` belongs only to `safety_cmd_mux_node`.
-6. Keep `enable_sound_output=false`, `start_serial_bridge=false`, `enable_deep_learning_stub=false`, and test publishers off for real preflight.
+6. Keep `enable_sound_output=false`, `start_serial_bridge=false`, and test publishers off for real preflight.
 7. Use rosbag2 plus CSV summaries; do not commit bag files or `experiments_result*` outputs.
-8. Keep UI WASD as `/waver/manual_cmd_vel` only; direct `/cmd_vel` publishing is blocked in `profile:=real`.
 
 ## Gap Against Current Workspace
 
-- Active tree uses `waver_patrol/perception/pointcloud_lidar_objects_node.py` as the real PointCloud2 object-candidate path. If archive `pcd_cluster_pkg` is later restored, it must remain perception-only and publish `/waver/lidar_objects` without `/cmd_vel`.
+- Active tree does not contain `pcd_cluster_pkg`; the archive copy has it under `~/ros2_ws/FSD_Vehicle`. Active real-robot path is therefore `waver_patrol/perception/pointcloud_lidar_objects_node.py`.
 - Gazebo validation can prove the height/dynamic logic with PoseArray data, but real deployment still needs a live 3D PointCloud2/depth/custom z source.
 - H4/H5/H6 ego-rotation and z-unknown trials are recommended stress tests; H1/H2/H3 are the current hard gate.

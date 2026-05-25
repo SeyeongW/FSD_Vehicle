@@ -3,9 +3,9 @@
 <package format="3">
   <name>cartographer</name>
   <version>0.0.0</version>
-  <description>Local Cartographer launch/config wrapper used by Waver SLAM mapping.</description>
-  <maintainer email="whxogus4793@naver.com">Waver project maintainers</maintainer>
-  <license>Apache-2.0</license>
+  <description>TODO: Package description</description>
+  <maintainer email="ws@todo.todo">ws</maintainer>
+  <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

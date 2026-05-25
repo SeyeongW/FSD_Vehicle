@@ -1,8 +1,7 @@
 import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -22,14 +21,6 @@ def generate_launch_description():
     rviz_config_arg = DeclareLaunchArgument(
         'rviz_config', default_value='bringup',
         description='Choose which rviz configuration to use'
-    )
-    start_driver_arg = DeclareLaunchArgument(
-        'start_driver', default_value='false',
-        description='Legacy direct serial ugv_driver. Keep false for Waver safety-mux profiles.'
-    )
-    legacy_driver_enabled_arg = DeclareLaunchArgument(
-        'legacy_driver_enabled', default_value='false',
-        description='Explicit opt-in required before ugv_driver can be launched.'
     )
 
     # Include the robot state launch from the ugv_description package
@@ -52,15 +43,6 @@ def generate_launch_description():
     driver_node = Node(
         package='ugv_bringup',
         executable='ugv_driver',
-        condition=IfCondition(
-            PythonExpression([
-                "'",
-                LaunchConfiguration('start_driver'),
-                "' == 'true' and '",
-                LaunchConfiguration('legacy_driver_enabled'),
-                "' == 'true'",
-            ])
-        ),
     )
 
     # Include laser lidar launch file
@@ -89,8 +71,6 @@ def generate_launch_description():
         pub_odom_tf_arg,
         use_rviz_arg,
         rviz_config_arg,
-        start_driver_arg,
-        legacy_driver_enabled_arg,
         robot_state_launch,
         bringup_node,
         driver_node,

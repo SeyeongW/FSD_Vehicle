@@ -3,9 +3,9 @@
 <package format="3">
   <name>ugv_bringup</name>
   <version>0.0.0</version>
-  <description>Sensor-only and legacy bringup launch files for Waver UGV.</description>
-  <maintainer email="whxogus4793@naver.com">Waver project maintainers</maintainer>
-  <license>Apache-2.0</license>
+  <description>TODO: Package description</description>
+  <maintainer email="dudu@todo.todo">dudu</maintainer>
+  <license>TODO: License declaration</license>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

@@ -24,7 +24,6 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_cluster_node", default_value="false"),
             DeclareLaunchArgument("enable_trial_logger", default_value="false"),
             DeclareLaunchArgument("enable_fake_camera_detection", default_value="true"),
-            DeclareLaunchArgument("enable_fake_sound", default_value="true"),
             DeclareLaunchArgument("record_bag", default_value="false"),
             DeclareLaunchArgument("output_root", default_value="~/ros2_ws/experiments_result"),
             IncludeLaunchDescription(
@@ -39,7 +38,6 @@ def generate_launch_description() -> LaunchDescription:
                     "enable_cluster_node": LaunchConfiguration("enable_cluster_node"),
                     "enable_experiment_logger": LaunchConfiguration("enable_trial_logger"),
                     "enable_fake_camera_detection": LaunchConfiguration("enable_fake_camera_detection"),
-                    "enable_fake_sound": LaunchConfiguration("enable_fake_sound"),
                     "use_gui": "false",
                     "record_bag": LaunchConfiguration("record_bag"),
                     "output_root": LaunchConfiguration("output_root"),

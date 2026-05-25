@@ -3,9 +3,9 @@
 <package format="3">
   <name>ugv_slam</name>
   <version>0.0.0</version>
-  <description>SLAM launch wrappers for Waver UGV mapping with gmapping, Cartographer, and RGB-D options.</description>
+  <description>TODO: Package description</description>
   <maintainer email="2849678712@qq.com">dudu</maintainer>
-  <license>Apache-2.0</license>
+  <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
@@ -17,9 +17,6 @@
   <depend>tf2_ros</depend>
   <depend>message_filters</depend>
   <depend>geometry_msgs</depend>
-  <exec_depend>cartographer</exec_depend>
-  <exec_depend>cartographer_ros</exec_depend>
-  <exec_depend>slam_gmapping</exec_depend>
   
 
   <test_depend>ament_lint_auto</test_depend>
