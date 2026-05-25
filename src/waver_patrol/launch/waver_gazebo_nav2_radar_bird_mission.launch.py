@@ -108,7 +108,7 @@ def generate_launch_description() -> LaunchDescription:
                     "enable_test_publishers": LaunchConfiguration("enable_test_publishers"),
                     "start_serial_bridge": "false",
                     "enable_experiment_logger": LaunchConfiguration("enable_experiment_logger"),
-                    "default_mode": "AUTO",
+                    "default_mode": "STANDBY",
                     "use_sim_time": "true",
                     "enable_sim_nav_goal_arrival": "true",
                 }.items(),

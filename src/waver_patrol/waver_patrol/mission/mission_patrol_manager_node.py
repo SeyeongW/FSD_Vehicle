@@ -82,7 +82,7 @@ class MissionPatrolManagerNode(Node):
         self.declare_parameter("nav2_action_name", "/navigate_to_pose")
         self.declare_parameter("use_nav2", True)
         self.declare_parameter("patrol_loop", True)
-        self.declare_parameter("default_mode", "AUTO")
+        self.declare_parameter("default_mode", "STANDBY")
         self.declare_parameter("resume_policy", "RETURN_TO_INTERRUPTED_WAYPOINT")
         self.declare_parameter("target_mission_timeout_sec", 120.0)
         self.declare_parameter("target_goal_tolerance_xy", 0.5)
@@ -722,6 +722,9 @@ def main(args: list[str] | None = None) -> None:
                 node.sound_request_pub.publish(Bool(data=False))
             except Exception:
                 pass
-        node.destroy_node()
+        try:
+            node.destroy_node()
+        except (KeyboardInterrupt, ExternalShutdownException):
+            pass
         if rclpy.ok():
             rclpy.shutdown()

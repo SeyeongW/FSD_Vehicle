@@ -82,6 +82,7 @@ class PanelState:
     map_resolution: float = 0.0
     map_origin_x: float = 0.0
     map_origin_y: float = 0.0
+    map_free: list[tuple[float, float]] = field(default_factory=list)
     map_occupied: list[tuple[float, float]] = field(default_factory=list)
     map_sequence: int = 0
     global_path: list[tuple[float, float]] = field(default_factory=list)
@@ -514,28 +515,42 @@ class WaverRemoteNode(Node):
             del trace[: len(trace) - 1200]
 
     def map_callback(self, msg: OccupancyGrid) -> None:
-        # 역할: RViz를 따로 보지 않아도 리모콘 안에서 2D SLAM/map 점유 영역을 확인한다.
+        # 역할: RViz를 따로 보지 않아도 리모콘 안에서 2D SLAM/map을 면으로 확인한다.
         width = int(msg.info.width)
         height = int(msg.info.height)
         resolution = float(msg.info.resolution)
         if width <= 0 or height <= 0 or resolution <= 0.0:
             return
-        step = max(1, int(max(width, height) / 180))
+        step = max(1, int(max(width, height) / 260))
+        free: list[tuple[float, float]] = []
         occupied: list[tuple[float, float]] = []
         data = msg.data
-        max_points = 6000
+        max_free_points = 12000
+        max_occupied_points = 9000
         for y in range(0, height, step):
             row = y * width
             for x in range(0, width, step):
                 value = data[row + x]
+                if value < 0:
+                    continue
+                wx = msg.info.origin.position.x + (x + 0.5) * resolution
+                wy = msg.info.origin.position.y + (y + 0.5) * resolution
                 if value > 50:
-                    wx = msg.info.origin.position.x + (x + 0.5) * resolution
-                    wy = msg.info.origin.position.y + (y + 0.5) * resolution
+                    if len(occupied) >= max_occupied_points:
+                        continue
                     occupied.append((float(wx), float(wy)))
-                    if len(occupied) >= max_points:
-                        break
-            if len(occupied) >= max_points:
+                else:
+                    if len(free) >= max_free_points:
+                        continue
+                    free.append((float(wx), float(wy)))
+            if len(free) >= max_free_points and len(occupied) >= max_occupied_points:
                 break
+        # Sparse early SLAM maps may have only obstacle endpoints.  Draw the known
+        # free cells too so the operator sees the growing mapped area instead of
+        # only a handful of points.
+        if not free and occupied:
+            for ox, oy in occupied[: min(len(occupied), 1200)]:
+                free.append((ox, oy))
         with self.lock:
             self.state.map_received = True
             self.state.map_frame = msg.header.frame_id or "map"
@@ -544,6 +559,7 @@ class WaverRemoteNode(Node):
             self.state.map_resolution = resolution
             self.state.map_origin_x = float(msg.info.origin.position.x)
             self.state.map_origin_y = float(msg.info.origin.position.y)
+            self.state.map_free = free
             self.state.map_occupied = occupied
             self.state.map_sequence += 1
 
@@ -727,6 +743,7 @@ class WaverRemoteNode(Node):
         # 저장된 yaml/pgm 파일은 삭제하지 않고, 표시 상태만 unapplied로 전환한다.
         with self.lock:
             self.state.map_received = False
+            self.state.map_free.clear()
             self.state.map_occupied.clear()
             self.state.robot_trace.clear()
             self.state.global_path.clear()
@@ -861,6 +878,7 @@ class WaverRemoteNode(Node):
         msg = String(data=normalized)
         self.mission_command_pub.publish(msg)
         self.operator_command_pub.publish(msg)
+        self.get_logger().info(f"operator command sent: {normalized}")
         with self.lock:
             self.state.auto_status = f"operator command: {normalized}"
         if normalized in {"START_PATROL", "RESUME_PATROL", "AUTO_MODE", "GAZEBO_TRIAL_START"}:
@@ -874,7 +892,12 @@ class WaverRemoteNode(Node):
                 self.state.auto_status = "save map requested"
                 self.state.map_apply_state = "SAVE_MAP requested"
             self.run_one_shot_command("map_save_command", "map save")
-        elif normalized in {"LOAD_MAP", "START_LOCALIZATION"}:
+        elif normalized == "STOP_MAPPING":
+            with self.lock:
+                self.state.auto_status = "mapping stop requested; save/apply when ready"
+                self.state.map_apply_state = "MAPPING_STOPPED_SAVE_OR_APPLY_REQUIRED"
+            self.set_mode("STANDBY")
+        elif normalized in {"APPLY_FIXED_MAP", "APPLY_MAP", "LOAD_MAP", "START_LOCALIZATION"}:
             with self.lock:
                 self.state.map_display_mode = "MAP_FIXED"
                 self.state.auto_status = "fixed map/localization requested"
@@ -949,10 +972,38 @@ class WaverRemoteNode(Node):
             shell=True,
             executable="/bin/bash",
             env=env,
+            preexec_fn=os.setsid,
         )
         setattr(self, attr_name, new_proc)
         with self.lock:
             self.state.auto_status = f"{label}: started pid {new_proc.pid}"
+
+    def stop_optional_process(self, attr_name: str, label: str) -> None:
+        proc = getattr(self, attr_name, None)
+        if proc is None:
+            return
+        if proc.poll() is None:
+            try:
+                os.killpg(proc.pid, signal.SIGINT)
+            except ProcessLookupError:
+                pass
+            try:
+                proc.wait(timeout=3.0)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                try:
+                    proc.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+        setattr(self, attr_name, None)
+        with self.lock:
+            self.state.auto_status = f"{label}: stopped"
 
     def run_one_shot_command(self, parameter_name: str, label: str) -> None:
         command = str(self.get_parameter(parameter_name).value).strip()
@@ -1233,8 +1284,9 @@ class WaverRemotePanel:
         frame.grid(row=3, column=0, sticky="ew", padx=12, pady=4)
         buttons = [
             ("SLAM MAPPING", "START_MAPPING", "#0277bd"),
+            ("STOP MAPPING", "STOP_MAPPING", "#37474f"),
             ("SAVE MAP", "SAVE_MAP", "#00695c"),
-            ("APPLY FIXED MAP", "START_LOCALIZATION", "#455a64"),
+            ("APPLY FIXED MAP", "APPLY_FIXED_MAP", "#455a64"),
             ("START PATROL", "START_PATROL", "#2e7d32"),
             ("PAUSE", "PAUSE_PATROL", "#546e7a"),
             ("RESUME", "RESUME_PATROL", "#00838f"),
@@ -1485,8 +1537,9 @@ class WaverRemotePanel:
             ("TARGET", "TARGET_TEST", "#ef6c00"),
             ("SOUND", "SOUND_TEST", "#ad1457"),
             ("SLAM\nMAP", "START_MAPPING", "#0277bd"),
+            ("STOP\nMAP", "STOP_MAPPING", "#37474f"),
             ("SAVE\nMAP", "SAVE_MAP", "#00695c"),
-            ("FIXED\nMAP", "START_LOCALIZATION", "#455a64"),
+            ("FIXED\nMAP", "APPLY_FIXED_MAP", "#455a64"),
             ("TRIAL ON", "GAZEBO_TRIAL_START", "#558b2f"),
             ("TRIAL OFF", "GAZEBO_TRIAL_STOP", "#795548"),
             ("MANUAL", "MANUAL_MODE", "#1565c0"),
@@ -1616,6 +1669,7 @@ class WaverRemotePanel:
             map_resolution = self.state.map_resolution
             map_origin_x = self.state.map_origin_x
             map_origin_y = self.state.map_origin_y
+            free_cells = list(self.state.map_free)
             occupied = list(self.state.map_occupied)
             robot = (self.state.odom_x, self.state.odom_y, self.state.odom_yaw)
             robot_trace = list(self.state.robot_trace)
@@ -1697,6 +1751,16 @@ class WaverRemotePanel:
             map_sample = max(1, int(max(map_width, map_height) / 180))
             cell_size = max(1.0, map_resolution * scale * map_sample)
             half = min(4.0, max(1.0, cell_size * 0.5))
+            for fx, fy in free_cells:
+                cx, cy = w2c(fx, fy)
+                canvas.create_rectangle(
+                    cx - half,
+                    cy - half,
+                    cx + half,
+                    cy + half,
+                    fill="#17323d",
+                    outline="",
+                )
             for ox, oy in occupied:
                 cx, cy = w2c(ox, oy)
                 canvas.create_rectangle(
@@ -1704,7 +1768,7 @@ class WaverRemotePanel:
                     cy - half,
                     cx + half,
                     cy + half,
-                    fill="#607d8b",
+                    fill="#8aa9b5",
                     outline="",
                 )
         else:
@@ -1773,6 +1837,7 @@ class WaverRemotePanel:
             text=(
                 f"{map_display_mode} frame={map_frame if map_received else 'odom'} "
                 f"map={'OK' if map_received else 'WAIT'} "
+                f"free={len(free_cells)} occ={len(occupied)} "
                 f"pose={pose_source} "
                 f"path={len(global_path)}({global_path_frame or '-'}) "
                 f"local={len(local_path)}({local_path_frame or '-'}) "
@@ -1795,6 +1860,7 @@ class WaverRemotePanel:
         self.map_status_var.set(
             f"map={'OK' if map_received else 'waiting'} | "
             f"robot=({rx:+.2f},{ry:+.2f}) yaw={yaw:+.2f} | "
+            f"free={len(free_cells)}, occupied={len(occupied)} | "
             f"global path={len(global_path)}, local path={len(local_path)} | "
             f"clusters={len(lidar_objects)}, elevated targets={len(elevated_targets)}"
         )
@@ -1932,7 +1998,7 @@ class WaverRemotePanel:
                 (2700, lambda: self.node.send_operator_command("RESUME_PATROL")),
                 (3700, lambda: self.node.send_operator_command("START_MAPPING")),
                 (4700, lambda: self.node.send_operator_command("SAVE_MAP")),
-                (5700, lambda: self.node.send_operator_command("START_LOCALIZATION")),
+                (5700, lambda: self.node.send_operator_command("APPLY_FIXED_MAP")),
                 (6700, lambda: self.node.send_operator_command("TARGET_TEST")),
                 (7700, lambda: self.node.send_operator_command("SOUND_TEST")),
                 (8700, lambda: self.node.send_operator_command("RETURN_HOME")),
@@ -1940,6 +2006,63 @@ class WaverRemotePanel:
                 (10700, lambda: self.node.send_operator_command("EMERGENCY_STOP")),
                 (11700, lambda: self.node.send_operator_command("CLEAR_EMERGENCY_STOP")),
                 (12800, self.close_if_demo_requested),
+            ]
+        elif script == "mapping_workflow_smoke":
+            # 역할: Gazebo 공항맵에서 리모콘 UI만으로 mapping -> manual movement ->
+            # save -> fixed-map apply 흐름을 검증한다. 수동 이동은 `/waver/manual_cmd_vel`
+            # 후보로만 나가고, 최종 `/cmd_vel`은 safety mux가 만든다.
+            # LiDAR-only SLAM은 Gazebo 공항 월드에서 wall-clock scan rate가 낮을 수 있어
+            # 충분한 scan accumulation 시간을 확보한 뒤 저장한다.
+            steps = [
+                (5000, lambda: self.node.send_operator_command("START_MAPPING")),
+                (18000, lambda: self.press_direction(1.0, 0.0, "mapping-forward")),
+                (33500, self.release_direction),
+                (35000, lambda: self.press_direction(0.0, 1.0, "mapping-left")),
+                (45500, self.release_direction),
+                (47000, lambda: self.press_direction(1.0, 0.0, "mapping-forward-2")),
+                (62000, self.release_direction),
+                (64000, lambda: self.press_direction(0.0, -1.0, "mapping-right")),
+                (74500, self.release_direction),
+                (76000, lambda: self.press_direction(1.0, 0.0, "mapping-forward-3")),
+                (90000, self.release_direction),
+                (96000, lambda: self.node.send_operator_command("SAVE_MAP")),
+                (111000, lambda: self.node.send_operator_command("APPLY_FIXED_MAP")),
+                (118000, lambda: self.node.send_operator_command("START_PATROL")),
+                (130000, lambda: self.node.send_operator_command("STOP")),
+                (134000, self.close_if_demo_requested),
+            ]
+        elif script == "mapping_full_coverage":
+            # 역할: 공항맵에서 smoke보다 넓은 coverage를 만든다. 장시간 자동 검증용이며,
+            # 모든 이동은 UI manual candidate -> safety mux -> /cmd_vel 경로만 사용한다.
+            steps = [
+                (5000, lambda: self.node.send_operator_command("START_MAPPING")),
+                (16000, lambda: self.press_direction(1.0, 0.0, "mapping-east-leg-1")),
+                (36000, self.release_direction),
+                (39000, lambda: self.press_direction(0.0, 1.0, "mapping-turn-left-1")),
+                (51000, self.release_direction),
+                (54000, lambda: self.press_direction(1.0, 0.0, "mapping-north-leg-1")),
+                (76000, self.release_direction),
+                (79000, lambda: self.press_direction(0.0, 1.0, "mapping-turn-left-2")),
+                (91000, self.release_direction),
+                (94000, lambda: self.press_direction(1.0, 0.0, "mapping-west-leg-1")),
+                (118000, self.release_direction),
+                (121000, lambda: self.press_direction(0.0, -1.0, "mapping-turn-right-1")),
+                (133000, self.release_direction),
+                (136000, lambda: self.press_direction(1.0, 0.0, "mapping-north-leg-2")),
+                (158000, self.release_direction),
+                (161000, lambda: self.press_direction(0.0, -1.0, "mapping-turn-right-2")),
+                (173000, self.release_direction),
+                (176000, lambda: self.press_direction(1.0, 0.0, "mapping-east-leg-2")),
+                (198000, self.release_direction),
+                (201000, lambda: self.press_direction(0.0, 1.0, "mapping-turn-left-3")),
+                (213000, self.release_direction),
+                (216000, lambda: self.press_direction(1.0, 0.0, "mapping-final-leg")),
+                (238000, self.release_direction),
+                (246000, lambda: self.node.send_operator_command("SAVE_MAP")),
+                (262000, lambda: self.node.send_operator_command("APPLY_FIXED_MAP")),
+                (276000, lambda: self.node.send_operator_command("START_PATROL")),
+                (292000, lambda: self.node.send_operator_command("STOP")),
+                (298000, self.close_if_demo_requested),
             ]
         elif script in {"airport_patrol_trial", "gazebo_airport_patrol_trial"}:
             # 역할: 공항 Gazebo 검증에서 사람이 리모콘 START PATROL을 누른 상황만 재현한다.
@@ -2103,6 +2226,8 @@ class WaverRemotePanel:
         self.closed = True
         self.active_key = None
         self.node.stop_motion(stop_auto=True)
+        self.node.stop_optional_process("mapping_process", "mapping")
+        self.node.stop_optional_process("localization_process", "localization")
         try:
             self.root.destroy()
         except self.tk.TclError:

@@ -130,7 +130,7 @@ def generate_launch_description():
                     allow_localization_launches, value_type=bool
                 ),
                 "demo_script": demo_script,
-                "demo_close_on_finish": demo_close_on_finish,
+                "demo_close_on_finish": ParameterValue(demo_close_on_finish, value_type=bool),
             },
         ],
     )
@@ -148,8 +148,10 @@ def generate_launch_description():
                 "mapping_launch_command",
                 default_value=(
                     "ros2 launch waver_patrol waver_mapping_backend.launch.py "
-                    "backend:=cartographer use_rviz:=false "
-                    "start_lidar_bringup:=false start_robot_pose_publisher:=false"
+                    "backend:=gmapping use_rviz:=false "
+                    "start_lidar_bringup:=false "
+                    "start_robot_pose_publisher:=false "
+                    "scan_topic:=/scan"
                 ),
             ),
             DeclareLaunchArgument("map_save_command", default_value=""),

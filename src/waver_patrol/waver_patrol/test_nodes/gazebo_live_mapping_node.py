@@ -96,8 +96,8 @@ class GazeboLiveMappingNode(Node):
             self.apply_state_pub.publish(String(data="MAPPING_STARTED"))
         elif command == "SAVE_MAP":
             self.save_current_map(apply_after=False)
-        elif command in {"LOAD_MAP", "APPLY_MAP", "START_LOCALIZATION"}:
-            self.apply_full_map("MAP_APPLIED_BY_OPERATOR")
+        elif command in {"LOAD_MAP", "APPLY_MAP", "APPLY_FIXED_MAP", "START_LOCALIZATION"}:
+            self.apply_full_map("MAP_FIXED_READY_BY_OPERATOR")
 
     def tick(self) -> None:
         if self.full_map is None:

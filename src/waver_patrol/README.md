@@ -14,7 +14,7 @@ through Waver-specific command sanitation, rate limiting, collision checks, and 
 | `ugv_nav/slam_nav.launch.py` | SLAM+Nav wrapper | Supervised, low-speed only. Patrol should wait for reliable localization. |
 | `ugv_slam/cartographer.launch.py` | 2D mapping wrapper | Preferred 2D mapping if available. |
 | `ugv_slam/gmapping.launch.py` | 2D mapping fallback | Useful for simple 2D tests. |
-| `ugv_slam/rtabmap_rgbd.launch.py` | 3D mapping wrapper | Requires RGB-D/OAK topics. |
+| `ugv_slam/rtabmap_rgbd.launch.py` | optional RGB-D wrapper | Not used by the default Waver mapping workflow; SLAM MAPPING is LiDAR-only by default. |
 | `ugv_tools/keyboard_ctrl.py` | reference only | Waver uses its own teleop so commands pass safety checks. |
 | `ugv_bringup/ugv_driver.py` | reference only | Existing driver sends `T:13/X/Z`; Waver serial bridge sends `T:1/L/R`. Do not run both command paths on one serial port. |
 
@@ -111,6 +111,11 @@ ros2 launch waver_patrol waver_mapping_2d.launch.py algorithm:=cartographer use_
 ros2 launch waver_patrol waver_mapping_2d.launch.py algorithm:=gmapping use_rviz:=true
 ros2 launch waver_patrol waver_mapping_3d.launch.py use_rviz:=true
 ```
+
+For the Gazebo airport `ugv_rover`, the operator-panel `SLAM MAPPING` workflow uses LiDAR-only
+`slam_gmapping` on `/scan` by default. The UI clears the previously displayed fixed map, starts
+the LiDAR SLAM backend, shows the live `/map`, then SAVE MAP and APPLY FIXED MAP publish the newly
+saved map back into the panel.
 
 ## Localization
 

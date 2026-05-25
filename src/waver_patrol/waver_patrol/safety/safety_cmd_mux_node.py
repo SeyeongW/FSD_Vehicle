@@ -44,7 +44,7 @@ class SafetyCmdMuxNode(Node):
         self.declare_parameter("speed_limit_topic", "/waver/speed_limit")
         self.declare_parameter("angular_speed_limit_topic", "/waver/angular_speed_limit")
         self.declare_parameter("mode_topic", "/waver/mode")
-        self.declare_parameter("mode_default", "AUTO")
+        self.declare_parameter("mode_default", "STANDBY")
         self.declare_parameter("cmd_vel_out_topic", "/cmd_vel")
         self.declare_parameter("safety_state_topic", "/waver/safety_state")
         self.declare_parameter("require_scan", True)
@@ -297,6 +297,9 @@ def main(args: list[str] | None = None) -> None:
                     node.cmd_pub.publish(stop_twist())
             except Exception:
                 pass
-        node.destroy_node()
+        try:
+            node.destroy_node()
+        except (KeyboardInterrupt, ExternalShutdownException):
+            pass
         if rclpy.ok():
             rclpy.shutdown()

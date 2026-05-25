@@ -11,6 +11,7 @@ from nav_msgs.msg import OccupancyGrid, Odometry, Path as NavPath
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import Bool, String
 
 from waver_patrol.autonomy_common import yaw_from_quaternion
 
@@ -43,21 +44,24 @@ class GazeboMapPathVisualizerNode(Node):
         self.declare_parameter("avoidance_corridor_radius_m", 0.55)
         self.declare_parameter("avoidance_offset_m", 0.85)
         self.declare_parameter("obstacle_timeout_sec", 0.8)
+        self.declare_parameter("pause_map_when_mapping_active", True)
+        self.declare_parameter("mapping_active_topic", "/waver/mapping_active")
+        self.declare_parameter("map_apply_state_topic", "/waver/map_apply_state")
         self.declare_parameter("publish_rate_hz", 2.0)
         self.declare_parameter("local_path_length_m", 1.2)
         self.declare_parameter("local_path_points", 16)
         self.declare_parameter("global_path_points", 80)
 
-        transient_qos = QoSProfile(
+        map_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
             depth=1,
             reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            durability=DurabilityPolicy.VOLATILE,
         )
         self.map_pub = self.create_publisher(
             OccupancyGrid,
             str(self.get_parameter("map_topic").value),
-            transient_qos,
+            map_qos,
         )
         self.global_path_pub = self.create_publisher(
             NavPath,
@@ -74,6 +78,7 @@ class GazeboMapPathVisualizerNode(Node):
         self.goal: PoseStamped | None = None
         self.obstacle: PointStamped | None = None
         self.last_obstacle_time = 0.0
+        self.pause_fixed_map = False
         self.map_msg = self.load_map(str(self.get_parameter("map_yaml").value))
 
         self.create_subscription(
@@ -100,6 +105,18 @@ class GazeboMapPathVisualizerNode(Node):
             self.obstacle_callback,
             10,
         )
+        self.create_subscription(
+            Bool,
+            str(self.get_parameter("mapping_active_topic").value),
+            self.mapping_active_callback,
+            10,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("map_apply_state_topic").value),
+            self.map_apply_state_callback,
+            10,
+        )
         rate = max(float(self.get_parameter("publish_rate_hz").value), 0.2)
         self.create_timer(1.0 / rate, self.publish_tick)
         self.get_logger().warn("gazebo_map_path_visualizer_node is Gazebo/test visualization only")
@@ -116,9 +133,18 @@ class GazeboMapPathVisualizerNode(Node):
         self.obstacle = msg
         self.last_obstacle_time = self._now()
 
+    def mapping_active_callback(self, msg: Bool) -> None:
+        if bool(self.get_parameter("pause_map_when_mapping_active").value) and msg.data:
+            self.pause_fixed_map = True
+
+    def map_apply_state_callback(self, msg: String) -> None:
+        state = msg.data.upper()
+        if "OLD_MAP_UNAPPLIED" in state or "MAPPING_STARTED" in state:
+            self.pause_fixed_map = True
+
     def publish_tick(self) -> None:
         now = self.get_clock().now().to_msg()
-        if self.map_msg is not None:
+        if self.map_msg is not None and not self.pause_fixed_map:
             self.map_msg.header.stamp = now
             self.map_pub.publish(self.map_msg)
         if self.odom is None:
@@ -323,6 +349,9 @@ def main(args: list[str] | None = None) -> None:
         if rclpy.ok() and "context is not valid" not in str(exc):
             raise
     finally:
-        node.destroy_node()
+        try:
+            node.destroy_node()
+        except (KeyboardInterrupt, ExternalShutdownException):
+            pass
         if rclpy.ok():
             rclpy.shutdown()

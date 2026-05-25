@@ -19,6 +19,13 @@ def generate_launch_description() -> LaunchDescription:
     default_world = os.path.join(ugv_share, "worlds", "ugv_world.world")
     default_robot = os.path.join(ugv_share, "models", "ugv_rover", "model.sdf")
     default_map = os.path.join(ugv_share, "maps", "map.yaml")
+    default_mapping_command = (
+        "ros2 launch waver_patrol waver_mapping_backend.launch.py "
+        "backend:=gmapping use_sim_time:=true use_rviz:=false "
+        "start_workflow_manager:=false "
+        "start_lidar_bringup:=false start_robot_pose_publisher:=false "
+        "scan_topic:=/scan"
+    )
 
     return LaunchDescription(
         [
@@ -30,6 +37,10 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("reveal_duration_sec", default_value="12.0"),
             DeclareLaunchArgument("save_dir", default_value="~/ros2_ws/maps"),
             DeclareLaunchArgument("save_basename", default_value="waver_latest_map"),
+            DeclareLaunchArgument("demo_script", default_value=""),
+            DeclareLaunchArgument("demo_close_on_finish", default_value="false"),
+            DeclareLaunchArgument("mapping_launch_command", default_value=default_mapping_command),
+            DeclareLaunchArgument("enable_gazebo_live_mapping", default_value="false"),
             DeclareLaunchArgument("robot_spawn_x", default_value="0.0"),
             DeclareLaunchArgument("robot_spawn_y", default_value="0.0"),
             DeclareLaunchArgument("robot_spawn_z", default_value="0.15"),
@@ -53,20 +64,35 @@ def generate_launch_description() -> LaunchDescription:
                     "spawn_target": "false",
                     "enable_mission_stack": "true",
                     "enable_simple_nav2_cmd_sim": "false",
-                    "enable_gazebo_map_path_visualizer": "false",
+                    "enable_gazebo_map_path_visualizer": "true",
                     "enable_moving_object_motion_filter": "false",
                     "enable_cluster_node": "false",
                     "enable_trial_logger": "false",
                     "record_bag": "false",
                     "require_scan": "false",
+                    "publish_static_map_to_odom_tf": "false",
                     "default_mode": "STANDBY",
                 }.items(),
+            ),
+            Node(
+                package="waver_patrol",
+                executable="mapping_workflow_manager_node",
+                name="mapping_workflow_manager_node",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "save_dir": LaunchConfiguration("save_dir"),
+                        "save_basename": LaunchConfiguration("save_basename"),
+                    }
+                ],
             ),
             Node(
                 package="waver_patrol",
                 executable="gazebo_live_mapping_node",
                 name="gazebo_live_mapping_node",
                 output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_gazebo_live_mapping")),
                 parameters=[
                     {
                         "use_sim_time": True,
@@ -78,8 +104,8 @@ def generate_launch_description() -> LaunchDescription:
                         "save_dir": LaunchConfiguration("save_dir"),
                         "save_basename": LaunchConfiguration("save_basename"),
                         "auto_start": True,
-                        "auto_save_on_complete": True,
-                        "auto_apply_on_save": True,
+                        "auto_save_on_complete": False,
+                        "auto_apply_on_save": False,
                     }
                 ],
             ),
@@ -98,6 +124,13 @@ def generate_launch_description() -> LaunchDescription:
                         "lidar_required": False,
                         "publish_direct_cmd_vel": False,
                         "auto_mode_strategy": "mission_nav2",
+                        "mapping_launch_command": LaunchConfiguration("mapping_launch_command"),
+                        "allow_mapping_launches": True,
+                        "demo_script": LaunchConfiguration("demo_script"),
+                        "demo_close_on_finish": ParameterValue(
+                            LaunchConfiguration("demo_close_on_finish"),
+                            value_type=bool,
+                        ),
                     }
                 ],
             ),

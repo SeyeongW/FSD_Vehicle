@@ -23,6 +23,11 @@ def generate_launch_description():
         default_value='true',
         description='Start robot_pose_publisher helper. Set false when another launch already owns TF.',
     )
+    use_sim_time_arg = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Use simulation clock for Gazebo mapping.',
+    )
                                      
     # Include launch description for bringing up the lidar
     bringup_lidar_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
@@ -53,7 +58,8 @@ def generate_launch_description():
     # Include launch description for cartographer
     cartographer_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
         [os.path.join(get_package_share_directory('cartographer'), 'launch'),
-         '/mapping.launch.py'])
+         '/mapping.launch.py']),
+        launch_arguments={'use_sim_time': LaunchConfiguration('use_sim_time')}.items(),
     )   
     
     # Return launch description
@@ -61,6 +67,7 @@ def generate_launch_description():
         use_rviz_arg,
         start_lidar_bringup_arg,
         start_robot_pose_publisher_arg,
+        use_sim_time_arg,
         bringup_lidar_launch,
         robot_pose_publisher_launch,
         cartographer_launch

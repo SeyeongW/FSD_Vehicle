@@ -5,7 +5,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo
-from launch.conditions import LaunchConfigurationEquals
+from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -27,8 +27,11 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument("source_map_yaml", default_value=default_source_map),
             DeclareLaunchArgument("use_rviz", default_value="false"),
+            DeclareLaunchArgument("start_workflow_manager", default_value="true"),
             DeclareLaunchArgument("start_lidar_bringup", default_value="false"),
             DeclareLaunchArgument("start_robot_pose_publisher", default_value="false"),
+            DeclareLaunchArgument("use_sim_time", default_value="false"),
+            DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("reveal_duration_sec", default_value="12.0"),
             DeclareLaunchArgument("save_dir", default_value="~/ros2_ws/maps"),
             DeclareLaunchArgument("save_basename", default_value="waver_latest_map"),
@@ -36,7 +39,7 @@ def generate_launch_description() -> LaunchDescription:
                 msg=(
                     "Waver mapping backend: no Gazebo process is started here. "
                     "Use backend:=gazebo_live for UI/save/apply workflow validation, "
-                    "or backend:=cartographer/gmapping for real SLAM."
+                    "or backend:=cartographer/gmapping for LiDAR-only SLAM."
                 )
             ),
             Node(
@@ -44,10 +47,12 @@ def generate_launch_description() -> LaunchDescription:
                 executable="mapping_workflow_manager_node",
                 name="mapping_workflow_manager_node",
                 output="screen",
+                condition=IfCondition(LaunchConfiguration("start_workflow_manager")),
                 parameters=[
                     {
                         "save_dir": LaunchConfiguration("save_dir"),
                         "save_basename": LaunchConfiguration("save_basename"),
+                        "use_sim_time": LaunchConfiguration("use_sim_time"),
                     }
                 ],
             ),
@@ -79,6 +84,7 @@ def generate_launch_description() -> LaunchDescription:
                     "use_rviz": LaunchConfiguration("use_rviz"),
                     "start_lidar_bringup": LaunchConfiguration("start_lidar_bringup"),
                     "start_robot_pose_publisher": LaunchConfiguration("start_robot_pose_publisher"),
+                    "use_sim_time": LaunchConfiguration("use_sim_time"),
                 }.items(),
                 condition=LaunchConfigurationEquals("backend", "cartographer"),
             ),
@@ -89,6 +95,8 @@ def generate_launch_description() -> LaunchDescription:
                     "use_rviz": LaunchConfiguration("use_rviz"),
                     "start_lidar_bringup": LaunchConfiguration("start_lidar_bringup"),
                     "start_robot_pose_publisher": LaunchConfiguration("start_robot_pose_publisher"),
+                    "use_sim_time": LaunchConfiguration("use_sim_time"),
+                    "scan_topic": LaunchConfiguration("scan_topic"),
                 }.items(),
                 condition=LaunchConfigurationEquals("backend", "gmapping"),
             ),

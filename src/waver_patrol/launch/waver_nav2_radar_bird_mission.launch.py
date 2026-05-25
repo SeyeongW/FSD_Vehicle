@@ -94,7 +94,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("ignore_scan_when_require_scan_false", default_value="false"),
             DeclareLaunchArgument("safety_max_linear_speed", default_value="0.18"),
             DeclareLaunchArgument("safety_max_angular_speed", default_value="0.45"),
-            DeclareLaunchArgument("default_mode", default_value="AUTO"),
+            DeclareLaunchArgument("default_mode", default_value="STANDBY"),
             DeclareLaunchArgument("target_classification_timeout_sec", default_value="15.0"),
             DeclareLaunchArgument("mission_sound_task_timeout_sec", default_value="15.0"),
             DeclareLaunchArgument("sound_task_duration_sec", default_value="5.0"),
