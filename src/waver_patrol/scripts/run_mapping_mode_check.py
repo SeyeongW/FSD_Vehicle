@@ -22,6 +22,7 @@ FIELDS = [
     "last_known_ratio",
     "map_changed",
     "save_command_sent",
+    "apply_command_sent",
     "map_saved",
     "map_applied",
     "saved_map_yaml",
@@ -40,6 +41,7 @@ class MappingModeCheck(Node):
         self.map_saved = False
         self.map_applied = False
         self.save_sent = False
+        self.apply_sent = False
         self.command_pub = self.create_publisher(String, args.mission_command_topic, 10)
         self.create_subscription(OccupancyGrid, args.map_topic, self.map_cb, 10)
         self.create_subscription(String, args.map_apply_state_topic, self.apply_cb, 10)
@@ -53,7 +55,7 @@ class MappingModeCheck(Node):
     def apply_cb(self, msg: String) -> None:
         text = msg.data
         self.map_saved = self.map_saved or "MAP_SAVED" in text
-        self.map_applied = self.map_applied or "MAP_APPLIED" in text
+        self.map_applied = self.map_applied or "MAP_APPLIED" in text or "MAP_FIXED_READY" in text
 
     def saved_path_cb(self, msg: String) -> None:
         if msg.data:
@@ -67,13 +69,16 @@ class MappingModeCheck(Node):
         if (not self.save_sent) and elapsed >= self.args.save_after_sec:
             self.command_pub.publish(String(data="SAVE_MAP"))
             self.save_sent = True
+        if self.save_sent and (not self.apply_sent) and elapsed >= self.args.apply_after_sec:
+            self.command_pub.publish(String(data="APPLY_FIXED_MAP"))
+            self.apply_sent = True
 
     def row(self) -> dict[str, object]:
         first = self.known_ratios[0] if self.known_ratios else 0.0
         last = self.known_ratios[-1] if self.known_ratios else 0.0
         changed = len(self.known_ratios) >= 2 and max(self.known_ratios) - min(self.known_ratios) >= 0.05
         saved_file_ok = bool(self.saved_path) and Path(os.path.expanduser(self.saved_path)).is_file()
-        overall = len(self.known_ratios) >= 2 and changed and self.save_sent and self.map_saved and self.map_applied and saved_file_ok
+        overall = len(self.known_ratios) >= 2 and changed and self.save_sent and self.apply_sent and self.map_saved and self.map_applied and saved_file_ok
         failures: list[str] = []
         if len(self.known_ratios) < 2:
             failures.append("map_messages_insufficient")
@@ -81,6 +86,8 @@ class MappingModeCheck(Node):
             failures.append("map_not_changed")
         if not self.save_sent:
             failures.append("save_command_not_sent")
+        if not self.apply_sent:
+            failures.append("apply_command_not_sent")
         if not self.map_saved:
             failures.append("map_saved_state_missing")
         if not self.map_applied:
@@ -95,6 +102,7 @@ class MappingModeCheck(Node):
             "last_known_ratio": round(last, 4),
             "map_changed": changed,
             "save_command_sent": self.save_sent,
+            "apply_command_sent": self.apply_sent,
             "map_saved": self.map_saved,
             "map_applied": self.map_applied,
             "saved_map_yaml": self.saved_path,
@@ -109,6 +117,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--experiment-name", default="")
     parser.add_argument("--duration-sec", type=float, default=14.0)
     parser.add_argument("--save-after-sec", type=float, default=7.0)
+    parser.add_argument("--apply-after-sec", type=float, default=10.0)
     parser.add_argument("--trial-id", default="M1")
     parser.add_argument("--map-topic", default="/map")
     parser.add_argument("--mission-command-topic", default="/waver/mission_command")

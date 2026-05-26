@@ -148,7 +148,8 @@ def generate_launch_description():
                 "mapping_launch_command",
                 default_value=(
                     "ros2 launch waver_patrol waver_mapping_backend.launch.py "
-                    "backend:=gmapping use_rviz:=false "
+                    "backend:=gmapping use_sim_time:=true use_rviz:=false "
+                    "start_workflow_manager:=false "
                     "start_lidar_bringup:=false "
                     "start_robot_pose_publisher:=false "
                     "scan_topic:=/scan"

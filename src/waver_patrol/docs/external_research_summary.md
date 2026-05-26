@@ -1,6 +1,6 @@
 # External Research Summary
 
-Date checked: 2026-05-24
+Date checked: 2026-05-26
 Scope: ROS 2 Humble, Nav2, SLAM/map visualization, tf2, rosbag2, Gazebo, 3D LiDAR clustering, ego-motion compensation, and pre-real validation for Waver.
 
 ## Official Documentation
@@ -14,9 +14,12 @@ Scope: ROS 2 Humble, Nav2, SLAM/map visualization, tf2, rosbag2, Gazebo, 3D LiDA
 | Nav2 Waypoint Follower | https://docs.nav2.org/configuration/packages/configuring-waypoint-follower.html | Patrol routes are waypoint-driven; target missions pause patrol and resume the saved waypoint index. |
 | Nav2 Collision Monitor | https://docs.nav2.org/configuration/packages/configuring-collision-monitor.html | Final velocity must pass through an independent safety layer. In this project that role is `safety_cmd_mux_node`. |
 | Nav2 Velocity Smoother | https://docs.nav2.org/configuration/packages/configuring-velocity-smoother.html | Candidate velocity commands should be rate-limited or smoothed before real wheels receive them. |
+| Nav2 Map Saver | https://docs.nav2.org/configuration/packages/map_server/configuring-map-saver.html | Mapping workflows should persist YAML/PGM maps and explicitly separate save from apply/localization. |
 | slam_toolbox Humble docs | https://docs.ros.org/en/humble/p/slam_toolbox/ | SLAM mode and localization/saved-map mode must be separated in UI and launch files. |
 | RViz Marker display tutorial | https://docs.ros.org/en/humble/Tutorials/Intermediate/RViz/Marker-Display-types/Marker-Display-types.html | Target, waypoint, cluster, yaw-alignment, and trial states should be visible as markers or operator-panel overlays. |
+| RViz fixed frame behavior | https://docs.ros.org/en/ros2_packages/jazzy/api/rviz2/doc/index.html | Map visualization must use `map` as the fixed frame in Patrol Mode so only robot/path/target overlays move. |
 | Gazebo Classic tutorials | https://classic.gazebosim.org/tutorials | Pre-real tests should launch the existing `ugv_world.world` and `ugv_rover` before hardware tests. |
+| Gazebo SDF world/spawn model docs | https://gazebosim.org/docs/latest/sdf_worlds/ | The airport world and robot SDF should be treated as simulation fixtures, not recreated in a new project. |
 
 ## GitHub / Open Source References
 
@@ -28,7 +31,7 @@ Scope: ROS 2 Humble, Nav2, SLAM/map visualization, tf2, rosbag2, Gazebo, 3D LiDA
 | `klintan/ros2_pcl_object_detection` | https://github.com/klintan/ros2_pcl_object_detection | Reference for Euclidean cluster extraction and pointcloud object topics. |
 | `mgonzs13/yolo_ros` | https://github.com/mgonzs13/yolo_ros | Candidate future camera detector bridge. Current project keeps AI model integration as a stub. |
 
-GitHub topic/trend check on 2026-05-24 favored ROS 2 Nav2, slam_toolbox, rosbag2, YOLO ROS wrappers, and PointCloud2 clustering packages. None of those replaces the active FSD_Vehicle structure; they only guide interfaces and safety defaults.
+GitHub topic/trend check on 2026-05-26 favored ROS 2 Nav2, slam_toolbox, rosbag2, YOLO ROS wrappers, and PointCloud2 clustering packages. None of those replaces the active FSD_Vehicle structure; they only guide interfaces and safety defaults.
 
 ## Papers / Literature Direction
 
@@ -54,3 +57,4 @@ GitHub topic/trend check on 2026-05-24 favored ROS 2 Nav2, slam_toolbox, rosbag2
 - Active tree does not contain `pcd_cluster_pkg`; the archive copy has it under `~/ros2_ws/FSD_Vehicle`. Active real-robot path is therefore `waver_patrol/perception/pointcloud_lidar_objects_node.py`.
 - Gazebo validation can prove the height/dynamic logic with PoseArray data, but real deployment still needs a live 3D PointCloud2/depth/custom z source.
 - H4/H5/H6 ego-rotation and z-unknown trials are recommended stress tests; H1/H2/H3 are the current hard gate.
+- The latest 10-run Gazebo/UI mapping validation is simulation-based evidence. It supports pre-deployment readiness, but wheel-on PASS still requires real_vehicle_precheck, rosbag replay, wheel-off HIL, hardware E-STOP, and supervised low-speed closed-area trials.

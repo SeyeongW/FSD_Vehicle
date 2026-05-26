@@ -20,7 +20,9 @@
 ```bash
 cd ~/ros2_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
-colcon build --packages-select ugv_tools waver_patrol ugv_slam ugv_gazebo --symlink-install
+colcon build --packages-select \
+  ugv_description ugv_bringup ugv_tools waver_patrol ugv_slam ugv_gazebo \
+  --symlink-install
 source install/setup.bash
 export ROS_DOMAIN_ID=30
 ```
@@ -194,19 +196,70 @@ ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
 
 최근 검증 기준:
 
-- 3회 연속 성공
-- `/scan` 평균 약 9.8 Hz
+- AI 직접 Gazebo + 리모콘 UI 10회 반복 성공
+- `/scan` 평균 약 13.2 Hz
 - map save/apply 성공
 - depth/RGB-D SLAM topic 미사용
 - `/cmd_vel` publisher: `safety_cmd_mux_node` 1개
+- 2026-05-26 SLAM 보정 후 full coverage 1회 검증:
+  - `/scan` 평균 약 17.4 Hz
+  - `map_known_ratio`: 약 0.332
+  - `known_cell_count`: 183633
+  - dots-only map 아님, runway/apron/service-road 경계가 연속 선으로 저장됨
+
+공항 월드의 runway 표식 상당수는 visual-only decal이라 2D LiDAR가 볼 수 없다.
+`ugv_world.world`에는 SLAM 검증용 저상 LiDAR-visible curb collision을 추가해
+실제 `/scan` 기반 gmapping이 선형 구조를 누적할 수 있게 했다.
 
 결과 저장 경로:
 
 ```text
-~/ros2_ws/FSD_Vehicle/experiments_result/latest/
+~/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs/
 ```
 
 실험 산출물은 GitHub에 올리지 않는다.
+
+### 논문용 10회 반복 검증
+
+다음 스크립트는 Gazebo 공항맵, `ugv_rover`, 리모콘 UI를 직접 띄우고 UI handler 경로로 `SLAM MAPPING`,
+WASD/manual 이동, `SAVE MAP`, `APPLY FIXED MAP`, `START PATROL`, `STOP`을 반복 검증한다.
+
+```bash
+cd ~/ros2_ws/FSD_Vehicle
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export ROS_DOMAIN_ID=30
+
+RUNS=10 \
+TRIAL_TIMEOUT_SEC=220 \
+OUTPUT_ROOT=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs \
+bash src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
+```
+
+최신 clean run 요약:
+
+- success_rate: 10/10
+- scan_hz_mean_avg: 약 13.2 Hz
+- map_known_ratio_mean: 약 0.20
+- direct_cmd_vel_violation_count: 0
+- final_pass_label: `PASS`
+
+SLAM 보정 후 full coverage 단일 재검증:
+
+```bash
+cd ~/ros2_ws/FSD_Vehicle
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export ROS_DOMAIN_ID=30
+
+RUNS=1 \
+TRIAL_TIMEOUT_SEC=380 \
+DEMO_SCRIPT=mapping_full_coverage \
+OUTPUT_ROOT=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/slam_fix_full_coverage \
+bash src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
+```
+
+결과 summary는 `experiments_result/paper_ready/slam_fix_full_coverage/`에 저장된다.
 
 ---
 
@@ -225,7 +278,7 @@ python3 src/waver_patrol/scripts/run_mapping_mode_check.py \
   --experiment-name mapping_mode_manual \
   --duration-sec 60 \
   --save-after-sec 40 \
-  --apply-after-save-sec 8
+  --apply-after-sec 48
 ```
 
 ---

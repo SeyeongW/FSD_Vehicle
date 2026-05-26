@@ -346,7 +346,13 @@ def main(args: list[str] | None = None) -> None:
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     except Exception as exc:
-        if rclpy.ok() and "context is not valid" not in str(exc):
+        shutdown_text = str(exc)
+        shutdown_race = (
+            "context is not valid" in shutdown_text
+            or "destruction was requested" in shutdown_text
+            or "Unable to convert call argument to Python object" in shutdown_text
+        )
+        if rclpy.ok() and not shutdown_race:
             raise
     finally:
         try:

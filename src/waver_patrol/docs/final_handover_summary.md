@@ -1,16 +1,38 @@
 # Final Handover Summary
 
-Active workspace: `~/ros2_ws`
-Active repository: `~/ros2_ws/src/FSD_Vehicle`
+Active workspace: `~/ros2_ws/FSD_Vehicle`
+Active repository: `~/ros2_ws/FSD_Vehicle`
 Branch: `jo`
+Reference commit during validation: `a6bf8af`
+
+This handover is limited to the `jo` branch. Do not use
+`~/ros2_ws/src/FSD_Vehicle` for the current release workflow.
 
 ## What This Version Provides
 
-- Existing `ugv_slam` mapping launch files remain the mapping entry point.
-- Existing `ugv_nav`/Nav2 launch files remain the localization/navigation entry point.
-- `waver_patrol` adds Waver mission, safety mux, target transform/filter, sound/camera stubs, Gazebo validation, and CSV/logging.
-- `ugv_tools` operator panel now displays map, pose, yaw, global/local paths, current waypoint, goals, cluster candidates, elevated dynamic targets, and mission/safety/camera/sound states.
-- Final `/cmd_vel` is owned by `safety_cmd_mux_node`; UI and perception nodes do not publish final `/cmd_vel`.
+- Existing `ugv_gazebo` airport world and `ugv_rover` SDF remain the Gazebo simulation fixtures.
+- Existing `ugv_slam` mapping launch files remain the LiDAR-only SLAM entry point.
+- Existing `ugv_nav`/Nav2 launch files remain the saved-map localization/navigation entry point.
+- `ugv_tools` operator panel keeps WASD/manual driving, but manual commands go to `/waver/manual_cmd_vel`; the UI does not directly publish final `/cmd_vel` when `publish_direct_cmd_vel:=false`.
+- `waver_patrol` owns mapping workflow, internal map save/apply fallback, safety mux, Gazebo validation, and paper-ready trial export.
+- Final `/cmd_vel` is owned by `safety_cmd_mux_node` in the validated Gazebo/UI workflow.
+
+## Mapping Workflow
+
+```text
+Gazebo ugv_world + ugv_rover
+  -> /scan + /odom + /tf
+  -> UI SLAM MAPPING command
+  -> LiDAR-only SLAM backend
+  -> live /map shown as SLAM_LIVE
+  -> SAVE MAP
+  -> ~/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml/.pgm
+  -> APPLY FIXED MAP
+  -> fixed /map shown in operator UI
+  -> START PATROL / STOP / E-STOP checks
+```
+
+Depth-camera SLAM is not used in the validated mapping workflow.
 
 ## Target Definition
 
@@ -23,12 +45,13 @@ dynamic_filter_pass == true
 ego_motion_compensated == true
 ```
 
-Default `target_min_height_m` is `3.0`.
+Default `target_min_height_m` is `3.0`. A 2D LaserScan-only object must not be
+accepted as an elevated target because it has no real z-source provenance.
 
 ## Perception Path
 
 ```text
-3D PointCloud2 or Gazebo 3D PoseArray
+3D PointCloud2 / Gazebo 3D PoseArray / custom 3D source
   -> /waver/lidar_objects
   -> moving_object_map_transform_node
   -> /waver/lidar_objects_map
@@ -39,110 +62,163 @@ Default `target_min_height_m` is `3.0`.
   -> mission_patrol_manager_node
 ```
 
-Active repo does not include `pcd_cluster_pkg`. Archive copy exists at `~/ros2_ws/FSD_Vehicle/src/ugv_main/pcd_cluster_pkg`. The active real-robot substitute is `waver_patrol/perception/pointcloud_lidar_objects_node.py`, which converts PointCloud2 clusters into `/waver/lidar_objects` without publishing velocity commands.
+`moving_object_motion_filter_node` now requires finite z plus accepted 3D source
+provenance by default. LaserScan-only or unknown z sources are classified as
+height unknown and do not trigger a mission.
 
-## Gazebo Validation Evidence
+## Latest Gazebo/UI Evidence
 
-Last height-based isolated run:
+Latest clean 10-run output:
 
 ```text
-~/ros2_ws/experiments_result/
+~/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs/
 ```
 
 Summary:
 
-- H1 elevated dynamic z=3.2 m: success, valid target.
-- H2 elevated static z=3.2 m: success, rejected.
-- H3 low dynamic z=1.0 m: success, rejected.
-- UI U1 `slam_live` label/topic check: success.
-- UI U3 command-button check: success; command topics were seen and direct `/cmd_vel` remained disabled.
+- trials: 10
+- success_count: 10
+- success_rate: 1.0
+- Gazebo launch success rate: 1.0
+- operator UI launch success rate: 1.0
+- SLAM mode success rate: 1.0
+- save/apply map success rate: 1.0
+- `/cmd_vel` single-publisher success rate: 1.0
+- direct `/cmd_vel` violation count: 0
+- scan_hz_mean_avg: 13.236 Hz
+- map_known_ratio_mean: 0.2095
+- known_cell_count_mean: 125439.5
+- dots-only map count: 0
+- shutdown traceback count: 0
+- final_pass_label: `PASS`
+
+Additional SLAM quality fix validation after adding LiDAR-visible airport curbs
+and tuning the LiDAR-only gmapping range:
+
+```text
+~/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/slam_fix_full_coverage/
+```
+
+- trials: 1
+- success_rate: 1.0
+- scan_hz_mean_avg: 17.4 Hz
+- map_known_ratio: 0.3324
+- known_cell_count: 183633
+- occupied_cell_count: 2770
+- dots-only map count: 0
+- save/apply map success: true
+- `/cmd_vel` publisher: `safety_cmd_mux_node` exactly once
+
+This run was used to verify that the map no longer appears as only sparse dots;
+the saved PGM contains continuous runway/apron/service-road boundary lines from
+real `/scan` observations.
+
+The repeated `libros2_livox.so` plugin warning did not affect the validated
+Gazebo `/scan` source. Real 3D target work still needs the actual Livox/Mid360
+driver or another verified 3D source.
 
 ## Build Status
 
-Focused and full workspace builds passed:
+Verified commands:
 
 ```bash
-colcon build --packages-select ugv_tools waver_patrol --symlink-install
-colcon build --symlink-install
+cd ~/ros2_ws/FSD_Vehicle
+source /opt/ros/humble/setup.bash
+python3 -m compileall -q src/waver_patrol src/ugv_main/ugv_tools
+colcon build --packages-select \
+  ugv_description ugv_bringup ugv_tools waver_patrol ugv_slam ugv_gazebo \
+  --symlink-install
 ```
 
-`livox_ros_driver2` was fixed to select the Humble rosidl branch automatically when
-`ROS_DISTRO=humble`, so plain workspace builds no longer need a manual
-`-DHUMBLE_ROS=humble` flag.
-
-These are simulation gates only. Real deployment still requires live 3D z source, TF, localization, scan safety, wheel-off motion direction tests, and single `/cmd_vel` ownership.
+Result: compileall passed and six focused packages built successfully.
 
 ## Run Commands
 
-Focused build:
+Gazebo only:
 
 ```bash
-cd ~/ros2_ws
+cd ~/ros2_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
-colcon build --packages-select ugv_tools waver_patrol --symlink-install
 source install/setup.bash
+export ROS_DOMAIN_ID=30
+
+ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
+  use_gui:=true \
+  use_operator_panel:=false \
+  robot_spawn_x:=0.0 \
+  robot_spawn_y:=0.0 \
+  robot_spawn_z:=0.15
 ```
 
-Gazebo rover only:
+Operator UI only:
 
 ```bash
-ros2 launch waver_patrol waver_gazebo_rover_only.launch.py use_gui:=true
-```
+cd ~/ros2_ws/FSD_Vehicle
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export ROS_DOMAIN_ID=30
 
-Operator panel:
-
-```bash
 ros2 launch ugv_tools waver_operator_panel.launch.py \
+  map_topic:=/map \
+  map_display_mode:=auto \
+  global_path_topic:=/plan \
+  local_path_topic:=/local_plan \
   require_scan:=false \
   auto_mode_strategy:=mission_nav2 \
-  map_display_mode:=auto
+  publish_direct_cmd_vel:=false
 ```
 
-Height H1/H2/H3 validation:
+Paper-ready 10-run Gazebo/UI validation:
 
 ```bash
-OUTPUT_ROOT=$HOME/ros2_ws/experiments_result \
-TRIALS="1 2 3" \
-REQUIRED_SUCCESSES=3 \
-RECORD_BAG=false \
-TARGET_MIN_HEIGHT_M=3.0 \
-MIN_DYNAMIC_MOTION_M=0.2 \
-MIN_DYNAMIC_VELOCITY_MPS=0.05 \
-bash ~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/run_pre_real_gazebo_trials.sh
+cd ~/ros2_ws/FSD_Vehicle
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export ROS_DOMAIN_ID=30
+
+RUNS=10 \
+TRIAL_TIMEOUT_SEC=220 \
+OUTPUT_ROOT=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs \
+bash src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
 ```
 
-Paper-ready export:
+View summary:
 
 ```bash
-python3 ~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/prepare_paper_results.py \
-  --input-dir ~/ros2_ws/experiments_result \
-  --output-root ~/ros2_ws/experiments_result/paper_ready
+column -s, -t < experiments_result/paper_ready/ai_gazebo_ui_10runs/statistics_10runs.csv
+sed -n '1,120p' experiments_result/paper_ready/ai_gazebo_ui_10runs/final_judgement.md
 ```
 
-Use `~/ros2_ws/experiments_result/paper_ready/latest/` for report writing.  It
-contains selected H1/H2/H3 tables, UI validation tables, summary metrics, plots,
-and a Markdown paper summary without copying rosbag databases.
-
-UI validation:
+Safety check while backend is running:
 
 ```bash
-python3 ~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/run_ui_visualization_check.py \
-  --output-root ~/ros2_ws/experiments_result \
-  --trial-id U3 \
-  --map-mode map_fixed \
-  --require-command
+ros2 topic info -v /cmd_vel
+ros2 topic echo /waver/safety_state
+ros2 topic echo /waver/mission_state
 ```
 
-Preflight:
+Expected `/cmd_vel` publisher: `safety_cmd_mux_node` exactly once.
 
-```bash
-bash ~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/waver_real_preflight_check.sh
-```
+## Applicability Judgment
+
+The current evidence supports **simulation-based conditional pass** for supervised
+pre-deployment work. It does **not** prove unrestricted real-vehicle operation.
+
+Real wheel-on PASS still requires:
+
+- real_vehicle_precheck PASS
+- rosbag replay PASS
+- wheel-off HIL PASS
+- hardware E-STOP PASS
+- software E-STOP PASS
+- scan/odom/TF stale-stop PASS
+- supervised closed-area low-speed test PASS
 
 ## Remaining Manual Checks
 
-- Confirm actual 3D LiDAR topic and frame on Jetson.
-- Confirm `map -> odom -> base_link -> lidar_frame` TF.
+- Confirm actual 3D LiDAR topic, frame, and z-source provenance on Jetson.
+- Confirm `map -> odom -> base_link -> lidar_frame` TF on the real robot.
 - Confirm `/cmd_vel` publisher is one and named `safety_cmd_mux_node`.
-- Confirm operator panel shows `MAP_FIXED` in saved-map patrol and the map does not rotate with Waver yaw.
+- Confirm serial bridge is disabled until real precheck and wheel-off HIL are complete.
+- Confirm operator panel shows `MAP_FIXED` after saved-map apply and that the map does not rotate with Waver yaw.
 - Confirm sound output remains disabled until legal/safety approval.

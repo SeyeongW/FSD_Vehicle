@@ -98,6 +98,7 @@ class MovingObjectMotionFilterNode(Node):
         self.declare_parameter("require_height_filter", True)
         self.declare_parameter("require_dynamic_filter", True)
         self.declare_parameter("z_source_mode", "pointcloud")
+        self.declare_parameter("require_3d_z_source", True)
 
         self.declare_parameter("min_dynamic_motion_m", 0.2)
         self.declare_parameter("min_dynamic_velocity_mps", 0.05)
@@ -258,7 +259,11 @@ class MovingObjectMotionFilterNode(Node):
 
     def _classify(self, pose: Pose, metrics: dict[str, float]) -> tuple[bool, str, dict[str, object]]:
         z = float(pose.position.z)
-        z_valid = math.isfinite(z)
+        z_source_mode = str(self.get_parameter("z_source_mode").value).strip().lower()
+        z_source_3d_valid = self._z_source_3d_valid(z_source_mode)
+        z_valid = math.isfinite(z) and (
+            z_source_3d_valid or not bool(self.get_parameter("require_3d_z_source").value)
+        )
         object_height = z - float(self.get_parameter("ground_z_offset_m").value)
         min_height = float(self.get_parameter("target_min_height_m").value)
         max_height = float(self.get_parameter("target_max_height_m").value)
@@ -290,7 +295,9 @@ class MovingObjectMotionFilterNode(Node):
             and high_yaw_mode == "pause_new_targets"
         )
 
-        if not z_valid and bool(self.get_parameter("require_z_valid").value):
+        if not z_source_3d_valid and bool(self.get_parameter("require_3d_z_source").value):
+            classification = "height_unknown_2d_or_unknown_source"
+        elif not z_valid and bool(self.get_parameter("require_z_valid").value):
             classification = "height_unknown"
         elif not height_filter_pass and bool(self.get_parameter("require_height_filter").value):
             classification = "low_altitude_object" if z_valid else "height_unknown"
@@ -316,6 +323,8 @@ class MovingObjectMotionFilterNode(Node):
         )
         return valid, classification, {
             "z_valid": z_valid,
+            "z_source_mode": z_source_mode,
+            "z_source_3d_valid": z_source_3d_valid,
             "object_height_m": object_height,
             "height_filter_pass": height_filter_pass,
             "dynamic_filter_pass": dynamic_filter_pass,
@@ -333,6 +342,8 @@ class MovingObjectMotionFilterNode(Node):
             f"object_height_m={float(gates['object_height_m']):.3f} "
             f"target_min_height_m={float(self.get_parameter('target_min_height_m').value):.3f} "
             f"z_valid={bool(gates['z_valid'])} "
+            f"z_source_mode={gates['z_source_mode']} "
+            f"z_source_3d_valid={bool(gates['z_source_3d_valid'])} "
             f"height_filter_pass={bool(gates['height_filter_pass'])} "
             f"raw_displacement_m={metrics['raw_displacement_m']:.3f} "
             f"compensated_motion_m={metrics['compensated_motion_m']:.3f} "
@@ -369,9 +380,9 @@ class MovingObjectMotionFilterNode(Node):
         static.header = elevated.header
         if pose is not None:
             if valid:
-                elevated.poses.append(pose)
+                elevated.poses.append(_copy_pose(pose))
             else:
-                static.poses.append(pose)
+                static.poses.append(_copy_pose(pose))
         self.elevated_pub.publish(elevated)
         self.static_pub.publish(static)
 
@@ -382,7 +393,7 @@ class MovingObjectMotionFilterNode(Node):
         point.point = pose.position
         stamped = PoseStamped()
         stamped.header = elevated.header
-        stamped.pose = pose
+        stamped.pose = _copy_pose(pose)
         try:
             if valid:
                 self.point_pub.publish(point)
@@ -402,7 +413,7 @@ class MovingObjectMotionFilterNode(Node):
         marker.id = 0
         marker.type = Marker.SPHERE
         marker.action = Marker.ADD
-        marker.pose = pose
+        marker.pose = _copy_pose(pose)
         marker.scale.x = 0.35
         marker.scale.y = 0.35
         marker.scale.z = 0.35
@@ -418,7 +429,7 @@ class MovingObjectMotionFilterNode(Node):
         text.id = 1
         text.type = Marker.TEXT_VIEW_FACING
         text.action = Marker.ADD
-        text.pose = pose
+        text.pose = _copy_pose(pose)
         text.pose.position.z += 0.45
         text.scale.z = 0.22
         text.color.r = marker.color.r
@@ -428,6 +439,26 @@ class MovingObjectMotionFilterNode(Node):
         text.text = classification
         markers.markers.append(text)
         return markers
+
+    @staticmethod
+    def _z_source_3d_valid(z_source_mode: str) -> bool:
+        mode = (z_source_mode or "").strip().lower()
+        if not mode or mode in {"unknown", "none", "laser", "laserscan", "scan", "2d", "2d_lidar", "fake_2d"}:
+            return False
+        valid_tokens = {
+            "pointcloud",
+            "pointcloud2",
+            "3d_lidar",
+            "livox",
+            "mid360",
+            "depth_camera",
+            "stereo_camera",
+            "gazebo_model_state",
+            "custom_3d_detection",
+            "posearray_3d",
+            "simulation_3d",
+        }
+        return mode in valid_tokens
 
     def timeout_tick(self) -> None:
         if self.last_msg_time and self._now() - self.last_msg_time > float(self.get_parameter("stale_timeout_sec").value):

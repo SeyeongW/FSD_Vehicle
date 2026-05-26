@@ -63,6 +63,8 @@ def generate_launch_description() -> LaunchDescription:
                     "spawn_robot": "true",
                     "spawn_target": "false",
                     "enable_mission_stack": "true",
+                    "enable_radar_command_bridge": "false",
+                    "enable_target_goal_manager": "false",
                     "enable_simple_nav2_cmd_sim": "false",
                     "enable_gazebo_map_path_visualizer": "true",
                     "enable_moving_object_motion_filter": "false",

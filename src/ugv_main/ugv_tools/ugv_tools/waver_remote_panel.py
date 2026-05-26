@@ -700,6 +700,13 @@ class WaverRemoteNode(Node):
             if keep_auto and (abs(linear) > 1e-5 or abs(angular) > 1e-5):
                 self.state.auto_status = "manual override active; AUTO goal retained"
         self.last_manual_command_time = time.monotonic()
+        self.get_logger().info(
+            "manual command set: "
+            f"label={label} linear={linear:.3f} angular={angular:.3f} "
+            f"scaled_linear={self.state.desired_linear:.3f} "
+            f"scaled_angular={self.state.desired_angular:.3f} "
+            f"topic={self.cmd_output_topic}"
+        )
         self.publish_mode(force=True)
 
     def stop_motion(self, stop_auto: bool = True) -> None:
@@ -1154,6 +1161,8 @@ class WaverRemoteNode(Node):
     def destroy_node(self) -> bool:
         # 역할: GUI 창이 닫혀도 자동순찰 중지와 stop burst를 보장한다.
         self.stop_auto()
+        self.stop_optional_process("mapping_process", "mapping")
+        self.stop_optional_process("localization_process", "localization")
         self.publish_stop_burst()
         return super().destroy_node()
 
@@ -2025,11 +2034,15 @@ class WaverRemotePanel:
                 (74500, self.release_direction),
                 (76000, lambda: self.press_direction(1.0, 0.0, "mapping-forward-3")),
                 (90000, self.release_direction),
-                (96000, lambda: self.node.send_operator_command("SAVE_MAP")),
-                (111000, lambda: self.node.send_operator_command("APPLY_FIXED_MAP")),
-                (118000, lambda: self.node.send_operator_command("START_PATROL")),
-                (130000, lambda: self.node.send_operator_command("STOP")),
-                (134000, self.close_if_demo_requested),
+                (92000, lambda: self.press_direction(0.0, 1.0, "mapping-left-2")),
+                (102500, self.release_direction),
+                (104000, lambda: self.press_direction(1.0, 0.0, "mapping-forward-4")),
+                (120000, self.release_direction),
+                (126000, lambda: self.node.send_operator_command("SAVE_MAP")),
+                (142000, lambda: self.node.send_operator_command("APPLY_FIXED_MAP")),
+                (150000, lambda: self.node.send_operator_command("START_PATROL")),
+                (162000, lambda: self.node.send_operator_command("STOP")),
+                (166000, self.close_if_demo_requested),
             ]
         elif script == "mapping_full_coverage":
             # 역할: 공항맵에서 smoke보다 넓은 coverage를 만든다. 장시간 자동 검증용이며,
@@ -2321,6 +2334,10 @@ def main(args=None):
             rclpy.spin(node)
         except ExternalShutdownException:
             pass
+        except Exception as exc:  # noqa: BLE001
+            if type(exc).__name__ == "InvalidHandle" or "destruction was requested" in str(exc):
+                return
+            raise
 
     executor_thread = threading.Thread(target=spin_node, daemon=True)
     executor_thread.start()

@@ -38,7 +38,7 @@ Expected outputs:
 
 - `/map` known ratio increases while mapping is active.
 - `/waver/map_apply_state` reports `MAP_SAVED` and `MAP_APPLIED`.
-- `~/ros2_ws/maps/waver_latest_map.yaml` is created.
+- `~/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml` is created.
 - The operator UI shows `SLAM_LIVE` while mapping and `MAP_FIXED` after apply.
 
 Important: this mapping preview is simulation-only. Real mapping still uses

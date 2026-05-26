@@ -247,7 +247,13 @@ def main(args: list[str] | None = None) -> None:
             raise
     finally:
         if rclpy.ok():
-            node.active_pub.publish(Bool(data=False))
-        node.destroy_node()
+            try:
+                node.active_pub.publish(Bool(data=False))
+            except Exception:
+                pass
+        try:
+            node.destroy_node()
+        except (KeyboardInterrupt, ExternalShutdownException):
+            pass
         if rclpy.ok():
             rclpy.shutdown()

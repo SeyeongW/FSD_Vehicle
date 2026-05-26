@@ -32,6 +32,9 @@ class MappingWorkflowManagerNode(Node):
         self.declare_parameter("save_dir", "~/ros2_ws/FSD_Vehicle/maps")
         self.declare_parameter("save_basename", "waver_latest_map")
         self.declare_parameter("map_saver_timeout_sec", 30.0)
+        self.declare_parameter("use_internal_map_writer", True)
+        self.declare_parameter("crop_unknown_border_on_save", True)
+        self.declare_parameter("crop_margin_cells", 20)
         self.declare_parameter("known_ratio_min_for_save", 0.01)
         self.declare_parameter("fixed_map_topic", "/map")
         self.declare_parameter("fixed_map_publish_period_sec", 1.0)
@@ -63,6 +66,8 @@ class MappingWorkflowManagerNode(Node):
         self.mapping_active = False
         self.saving = False
         self.apply_requested_after_save = False
+        self.last_command = ""
+        self.last_command_time = 0.0
 
         self.create_subscription(
             OccupancyGrid,
@@ -94,6 +99,11 @@ class MappingWorkflowManagerNode(Node):
 
     def command_callback(self, msg: String) -> None:
         command = msg.data.strip().upper()
+        now = self._now()
+        if command == self.last_command and now - self.last_command_time < 0.25:
+            return
+        self.last_command = command
+        self.last_command_time = now
         self.get_logger().info(f"mapping workflow command: {command}")
         if command == "START_MAPPING":
             self.mapping_active = True
@@ -156,15 +166,20 @@ class MappingWorkflowManagerNode(Node):
                 shutil.copy2(old_yaml, archive_dir / f"{save_basename}_{suffix}.yaml")
                 if old_pgm.exists():
                     shutil.copy2(old_pgm, archive_dir / f"{save_basename}_{suffix}.pgm")
-            timeout = float(self.get_parameter("map_saver_timeout_sec").value)
-            command = ["ros2", "run", "nav2_map_server", "map_saver_cli", "-f", str(target_base)]
-            self.mapping_state_pub.publish(String(data=f"SAVE_MAP running {' '.join(command)}"))
-            result = subprocess.run(command, check=False, timeout=timeout, capture_output=True, text=True)
-            if result.returncode != 0:
-                detail = (result.stderr or result.stdout or "").strip()[-180:]
-                self.map_apply_state_pub.publish(String(data=f"SAVE_MAP_FAILED returncode={result.returncode}"))
-                self.fault_pub.publish(String(data=f"map_saver_failed {detail}"))
-                return
+            if bool(self.get_parameter("use_internal_map_writer").value):
+                self.mapping_state_pub.publish(String(data=f"SAVE_MAP writing internal {target_base}"))
+                self.write_saved_map(self.last_map, target_base)
+            else:
+                timeout = float(self.get_parameter("map_saver_timeout_sec").value)
+                command = ["ros2", "run", "nav2_map_server", "map_saver_cli", "-f", str(target_base)]
+                self.mapping_state_pub.publish(String(data=f"SAVE_MAP running {' '.join(command)}"))
+                result = subprocess.run(command, check=False, timeout=timeout, capture_output=True, text=True)
+                if result.returncode != 0:
+                    detail = (result.stderr or result.stdout or "").strip()[-240:]
+                    self.get_logger().error(f"SAVE_MAP_FAILED returncode={result.returncode}: {detail}")
+                    self.map_apply_state_pub.publish(String(data=f"SAVE_MAP_FAILED returncode={result.returncode}"))
+                    self.fault_pub.publish(String(data=f"map_saver_failed {detail}"))
+                    return
             self.saved_yaml = str(old_yaml)
             self.map_saved_path_pub.publish(String(data=self.saved_yaml))
             self.map_apply_state_pub.publish(String(data=f"MAP_SAVED_NOT_APPLIED {self.saved_yaml}"))
@@ -278,6 +293,74 @@ class MappingWorkflowManagerNode(Node):
                     data.append(-1)
         grid.data = data
         return grid
+
+    def write_saved_map(self, msg: OccupancyGrid, target_base: Path) -> None:
+        yaml_path = target_base.with_suffix(".yaml")
+        pgm_path = target_base.with_suffix(".pgm")
+        width = int(msg.info.width)
+        height = int(msg.info.height)
+        if width <= 0 or height <= 0 or len(msg.data) != width * height:
+            raise RuntimeError("invalid occupancy grid dimensions")
+        min_x, min_y, max_x, max_y = 0, 0, width - 1, height - 1
+        if bool(self.get_parameter("crop_unknown_border_on_save").value):
+            known_indices = [i for i, value in enumerate(msg.data) if int(value) >= 0]
+            if known_indices:
+                xs = [i % width for i in known_indices]
+                ys = [i // width for i in known_indices]
+                margin = max(0, int(self.get_parameter("crop_margin_cells").value))
+                min_x = max(min(xs) - margin, 0)
+                max_x = min(max(xs) + margin, width - 1)
+                min_y = max(min(ys) - margin, 0)
+                max_y = min(max(ys) + margin, height - 1)
+        cropped_width = max_x - min_x + 1
+        cropped_height = max_y - min_y + 1
+        with pgm_path.open("wb") as stream:
+            stream.write(
+                f"P5\n# CREATOR: waver mapping workflow\n{cropped_width} {cropped_height}\n255\n".encode(
+                    "ascii"
+                )
+            )
+            for y in range(max_y, min_y - 1, -1):
+                row = bytearray()
+                offset = y * width
+                for value in msg.data[offset + min_x : offset + max_x + 1]:
+                    occupancy = int(value)
+                    if occupancy < 0:
+                        pixel = 205
+                    elif occupancy >= 65:
+                        pixel = 0
+                    else:
+                        pixel = 254
+                    row.append(pixel)
+                stream.write(row)
+        yaw = self.quaternion_yaw(msg.info.origin.orientation)
+        resolution = float(msg.info.resolution)
+        dx = float(min_x) * resolution
+        dy = float(min_y) * resolution
+        cos_yaw = math.cos(yaw)
+        sin_yaw = math.sin(yaw)
+        origin_x = float(msg.info.origin.position.x) + cos_yaw * dx - sin_yaw * dy
+        origin_y = float(msg.info.origin.position.y) + sin_yaw * dx + cos_yaw * dy
+        payload = {
+            "image": pgm_path.name,
+            "mode": "trinary",
+            "resolution": resolution,
+            "origin": [
+                origin_x,
+                origin_y,
+                float(yaw),
+            ],
+            "negate": 0,
+            "occupied_thresh": 0.65,
+            "free_thresh": 0.25,
+        }
+        yaml_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    @staticmethod
+    def quaternion_yaw(q) -> float:
+        siny_cosp = 2.0 * (float(q.w) * float(q.z) + float(q.x) * float(q.y))
+        cosy_cosp = 1.0 - 2.0 * (float(q.y) * float(q.y) + float(q.z) * float(q.z))
+        return math.atan2(siny_cosp, cosy_cosp)
 
     @staticmethod
     def read_pgm(path: Path) -> tuple[int, int, list[int]]:

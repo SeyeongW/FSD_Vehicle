@@ -31,9 +31,9 @@ options = {
  
 MAP_BUILDER.use_trajectory_builder_2d = true  -- 是否启动2D SLAM
 TRAJECTORY_BUILDER_2D.submaps.num_range_data = 35  -- 2D轨迹构建器中子地图的范围数据数量
-TRAJECTORY_BUILDER_2D.min_range = 0.1  -- 限制在雷达最小扫描范围，比机器人半径小的都忽略
-TRAJECTORY_BUILDER_2D.max_range = 3.5  -- 限制在雷达最大扫描范围
-TRAJECTORY_BUILDER_2D.missing_data_ray_length = 5.  -- 限制在雷达最大扫描范围
+TRAJECTORY_BUILDER_2D.min_range = 0.12  -- Gazebo/real 2D LiDAR minimum usable range
+TRAJECTORY_BUILDER_2D.max_range = 30.0  -- Airport world boundaries are farther than the old indoor 3.5 m limit
+TRAJECTORY_BUILDER_2D.missing_data_ray_length = 30.0
 TRAJECTORY_BUILDER_2D.use_imu_data = false  -- 是否使用IMU数据
 TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = true  -- 是否使用实时回环检测扫描匹配
 
