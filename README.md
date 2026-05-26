@@ -15,6 +15,22 @@
 
 ---
 
+## 프로젝트 핵심 평가 기준
+
+이 프로젝트의 최종 목적은 SLAM map coverage 향상이 아니라 **조류탐지 자율주행 순찰**이다.
+
+논문/보고서 판단 우선순위:
+
+1. 조류탐지 precision, recall, F1, mAP, false positive/negative, latency, FPS
+2. 조류 target 3D 위치화, z-valid, 높이/거리/방위각 오차, tracking continuity, ID switch
+3. patrol mode에서만 유효한 bird mission trigger precision/recall/F1
+4. 순찰/복귀/STOP/E-STOP 및 `/cmd_vel` single-publisher safety
+5. LiDAR-only SLAM, map save/apply, fixed-map UI 반영
+
+SLAM 지표는 조류탐지 자율주행을 가능하게 하는 support gate다. `map_known_ratio`가 좋아졌다는 사실만으로 조류탐지 성능 개선이라고 쓰면 안 된다.
+
+---
+
 ## 0. 공통 준비
 
 ```bash
@@ -174,6 +190,88 @@ ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
 ```
 
 `mapping_full_coverage`는 smoke보다 오래 주행해 공항맵의 더 넓은 부분을 SLAM으로 채운다. 논문용 “넓은 map coverage” 데이터는 이 명령 또는 수동 WASD coverage 후 저장한 map을 사용한다.
+
+---
+
+## 4-1. Gazebo 조류탐지 + UI 검증
+
+현재 `jo` 브랜치에는 Gazebo model-state ground truth를 사용하는 synthetic bird detector/localizer/tracker/trigger 검증 node가 있다.
+
+주의: 이 검증은 실제 YOLO/실카메라 mAP가 아니다. 실제 조류 detector 성능 주장은 labeled bird image/video dataset과 detector model 평가가 추가로 필요하다.
+
+### 단일 조류탐지 Gazebo 실행
+
+```bash
+cd ~/ros2_ws/FSD_Vehicle
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export ROS_DOMAIN_ID=30
+
+ros2 launch waver_patrol gazebo_bird_detection_validation.launch.py \
+  use_gui:=true \
+  use_operator_panel:=false \
+  scenario_id:=B3_DYNAMIC_BIRD_HIGH \
+  expected_bird:=true \
+  expected_mission_trigger:=true \
+  move_target_model:=true \
+  output_dir:=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/manual_bird_trial/csv
+```
+
+### 리모콘 UI만 실행
+
+```bash
+cd ~/ros2_ws/FSD_Vehicle
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export ROS_DOMAIN_ID=30
+
+ros2 launch ugv_tools waver_operator_panel.launch.py \
+  map_topic:=/map \
+  map_display_mode:=auto \
+  global_path_topic:=/plan \
+  local_path_topic:=/local_plan \
+  require_scan:=false \
+  auto_mode_strategy:=mission_nav2 \
+  publish_direct_cmd_vel:=false
+```
+
+### 10회 조류탐지 Gazebo/UI 반복 검증
+
+```bash
+cd ~/ros2_ws/FSD_Vehicle
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export ROS_DOMAIN_ID=30
+
+RUNS=10 \
+REQUIRED_SUCCESSES=10 \
+USE_GUI=true \
+TRIAL_DURATION_SEC=6 \
+HZ_SAMPLE_SEC=5 \
+OUTPUT_ROOT=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/bird_detection_10runs \
+bash src/waver_patrol/scripts/run_bird_detection_gazebo_ui_trials.sh
+```
+
+생성 주요 파일:
+
+```text
+experiments_result/paper_ready/bird_detection_10runs/final_10runs/summary_10runs.csv
+experiments_result/paper_ready/bird_detection_10runs/statistics_10runs.csv
+experiments_result/paper_ready/bird_detection_10runs/final_judgement.md
+```
+
+검증 topic:
+
+```bash
+ros2 topic echo /bird/detections_2d
+ros2 topic echo /bird/detections_3d
+ros2 topic echo /bird/tracks
+ros2 topic echo /bird/metrics
+ros2 topic echo /bird/mission_target
+ros2 topic info -v /cmd_vel
+```
+
+자세한 설명은 `src/waver_patrol/docs/bird_detection_autonomy_validation.md`를 참고한다.
 
 ---
 

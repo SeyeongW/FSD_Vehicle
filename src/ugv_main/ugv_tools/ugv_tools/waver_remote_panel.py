@@ -2086,6 +2086,23 @@ class WaverRemotePanel:
                 (10000, lambda: self.node.send_operator_command("RESUME_PATROL")),
                 (85000, self.close_if_demo_requested),
             ]
+        elif script == "bird_detection_trial":
+            # 역할: 조류탐지 통합 검증에서 실제 리모콘 버튼/수동조작 경로를 사용한다.
+            # START_PATROL로 mission trigger 허용 mode에 진입하고, WASD 후보 명령은
+            # `/waver/manual_cmd_vel`로만 발행된다. 마지막에는 STOP/E-STOP/RESET을
+            # 거쳐 safety mux의 zero command와 latch 해제를 확인한다.
+            steps = [
+                (1200, lambda: self.node.send_operator_command("START_PATROL")),
+                (4200, lambda: self.press_direction(1.0, 0.0, "bird-trial-forward")),
+                (8200, self.release_direction),
+                (9800, lambda: self.press_direction(0.0, 1.0, "bird-trial-left")),
+                (12600, self.release_direction),
+                (14200, lambda: self.node.send_operator_command("RESUME_PATROL")),
+                (30000, lambda: self.node.send_operator_command("STOP")),
+                (33500, lambda: self.node.send_operator_command("EMERGENCY_STOP")),
+                (37000, lambda: self.node.send_operator_command("CLEAR_EMERGENCY_STOP")),
+                (40500, self.close_if_demo_requested),
+            ]
         else:
             self.node.get_logger().warn(f"Unknown demo_script={script!r}; ignoring")
             return

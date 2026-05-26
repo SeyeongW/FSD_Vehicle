@@ -30,6 +30,8 @@ Scope: ROS 2 Humble, Nav2, SLAM/map visualization, tf2, rosbag2, Gazebo, 3D LiDA
 | `jkk-research/lidar_cluster_ros2` | https://github.com/jkk-research/lidar_cluster_ros2 | Reference for ROS 2 Humble PointCloud2 clustering patterns. |
 | `klintan/ros2_pcl_object_detection` | https://github.com/klintan/ros2_pcl_object_detection | Reference for Euclidean cluster extraction and pointcloud object topics. |
 | `mgonzs13/yolo_ros` | https://github.com/mgonzs13/yolo_ros | Candidate future camera detector bridge. Current project keeps AI model integration as a stub. |
+| Ultralytics ROS quickstart | https://docs.ultralytics.com/guides/ros-quickstart | Reference interface for future real image detector integration using ROS image topics. |
+| `FoundationVision/ByteTrack` | https://github.com/FoundationVision/ByteTrack | Reference tracking-by-detection baseline for associating bird detections into tracklets. |
 
 GitHub topic/trend check on 2026-05-26 favored ROS 2 Nav2, slam_toolbox, rosbag2, YOLO ROS wrappers, and PointCloud2 clustering packages. None of those replaces the active FSD_Vehicle structure; they only guide interfaces and safety defaults.
 
@@ -41,6 +43,28 @@ GitHub topic/trend check on 2026-05-26 favored ROS 2 Nav2, slam_toolbox, rosbag2
 | Unsupervised LiDAR object detection | "Towards Unsupervised Object Detection From LiDAR Point Clouds", arXiv:2311.02007 | Temporal consistency and clustering are useful, but Waver only needs conservative cluster centroids before real learning models. |
 | Ego-motion compensated dynamic detection | Dynamic-object detection literature consistently separates sensor-frame apparent motion from world-frame motion | Waver must classify static objects during yaw rotation as `static_due_to_ego_motion` instead of target. |
 | LiDAR-camera fusion surveys | Recent fusion work emphasizes calibrated frames, timestamp alignment, and explicit 3D measurements | Waver height filtering requires real z from PointCloud2/depth/custom 3D messages; 2D LaserScan is insufficient. |
+| ByteTrack | "ByteTrack: Multi-Object Tracking by Associating Every Detection Box", arXiv:2110.06864 | Bird tracking should be evaluated separately from detection using track continuity, ID switches, and trigger latency. |
+
+## Bird Detection Autonomy Update
+
+The project objective is bird-detection autonomous patrol, not SLAM-only
+coverage improvement. SLAM/map metrics are support gates. Bird-system claims
+must be based on bird precision, recall, F1, mAP, false positive/negative,
+tracking continuity, z-valid localization, and mission-trigger correctness.
+
+Current `jo` implements a Gazebo synthetic ground-truth bridge
+(`bird_detection_pipeline_node`) to validate the ROS2 topic/mission/safety
+pipeline before a real detector is installed. This bridge publishes
+`/bird/detections_2d`, `/bird/detections_3d`, `/bird/tracks`,
+`/bird/metrics`, and `/bird/mission_target`. It is intentionally labeled
+`gazebo_model_state_synthetic` and must not be described as real-camera YOLO
+performance.
+
+Future real-detector integration should use an image model such as YOLO/RT-DETR
+with documented license, class list, threshold/NMS settings, inference
+hardware, and labeled bird dataset. ByteTrack/SORT-style tracking can then be
+used for track continuity and ID-switch metrics. Gazebo 10-run results are
+simulation-based pipeline evidence only.
 
 ## Applied Design Principles
 
