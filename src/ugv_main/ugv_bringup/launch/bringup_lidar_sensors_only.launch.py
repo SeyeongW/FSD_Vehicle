@@ -20,6 +20,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("pub_odom_tf", default_value="true"),
             DeclareLaunchArgument("use_rviz", default_value="false"),
             DeclareLaunchArgument("rviz_config", default_value="bringup"),
+            DeclareLaunchArgument("start_base_feedback", default_value="false"),
             LogInfo(
                 msg=(
                     "Starting UGV sensor-only bringup: robot state, lidar and odom only. "
@@ -34,6 +35,7 @@ def generate_launch_description() -> LaunchDescription:
                     "rviz_config": LaunchConfiguration("rviz_config"),
                     "start_driver": "false",
                     "legacy_driver_enabled": "false",
+                    "start_base_feedback": LaunchConfiguration("start_base_feedback"),
                 }.items(),
             ),
         ]

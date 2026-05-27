@@ -1,0 +1,224 @@
+mission_patrol_manager_node:
+  ros__parameters:
+    waypoint_file: "waypoints/waver_nav2_patrol_mission.yaml"
+    nav2_action_name: "/navigate_to_pose"
+    use_nav2: true
+    resume_policy: "RETURN_TO_INTERRUPTED_WAYPOINT"
+    patrol_loop: true
+    default_mode: "STANDBY"
+    target_mission_timeout_sec: 120.0
+    target_goal_tolerance_xy: 0.50
+    target_re_detection_timeout_sec: 20.0
+    target_classification_timeout_sec: 15.0
+    patrol_goal_timeout_sec: 180.0
+    sound_task_timeout_sec: 15.0
+    bird_confidence_threshold: 0.70
+    max_goal_retries: 2
+    recovery_retry_count: 2
+    ignore_new_target_during_mission: true
+    frame_id: "map"
+    base_frame: "base_link"
+    global_frame: "map"
+
+target_goal_manager_node:
+  ros__parameters:
+    global_frame: "map"
+    base_frame: "base_link"
+    use_tf_transform: true
+    min_height_m: 3.0
+    min_depth_m: 0.50
+    max_depth_m: 30.0
+    min_target_distance_m: 1.0
+    max_target_distance_m: 20.0
+    require_motion: true
+    require_bird_confirmed: true
+    allow_radar_without_bird_confirmed: false
+    require_3d_fusion_valid: true
+    enforce_mode_gate: true
+    allowed_trigger_modes: ["PATROL", "AUTO", "BIRD_CONFIRMED"]
+    goal_offset_distance_m: 2.0
+    goal_publish_cooldown_sec: 3.0
+    target_hold_sec: 1.0
+    target_lost_timeout_sec: 2.0
+    target_pose_stale_timeout_sec: 3.0
+    robot_pose_stale_timeout_sec: 2.0
+    goal_yaw_policy: "FACE_TARGET"
+    robot_pose_topic: "/amcl_pose"
+    robot_odom_topic: "/odom"
+    require_robot_pose_for_goal: true
+    bird_target_valid_topic: "/waver/bird_target_valid"
+    bird_target_pose_map_topic: "/waver/bird_target_pose_map"
+    elevated_dynamic_targets_topic: "/waver/elevated_dynamic_targets"
+    subscribe_raw_lidar_objects: false
+    subscribe_lidar_objects_map: false
+
+moving_object_motion_filter_node:
+  ros__parameters:
+    input_topic: "/waver/lidar_objects_map"
+    raw_input_topic: "/waver/lidar_objects"
+    target_min_height_m: 3.0
+    target_max_height_m: 30.0
+    height_reference_frame: "map"
+    fallback_height_reference_frame: "odom"
+    ground_z_offset_m: 0.0
+    require_z_valid: true
+    require_height_filter: true
+    require_dynamic_filter: true
+    min_dynamic_motion_m: 0.2
+    min_dynamic_velocity_mps: 0.05
+    min_sample_motion_epsilon_m: 0.005
+    min_tracking_duration_sec: 1.0
+    max_tracking_duration_sec: 20.0
+    require_consecutive_dynamic_frames: 5
+    static_motion_tolerance_m: 0.25
+    high_yaw_rate_mode: "strict_validation"
+    angular_velocity_threshold_radps: 0.25
+    max_target_distance_m: 20.0
+    min_target_distance_m: 0.5
+    z_source_mode: "pointcloud"
+    require_3d_z_source: true
+    disable_triggers_in_mapping_mode: true
+
+livox_pointcloud_to_scan_node:
+  ros__parameters:
+    pointcloud_topic: "/mid360_PointCloud2"
+    scan_topic: "/scan"
+    state_topic: "/waver/livox_scan_adapter_state"
+    forward_axis: "x"
+    lateral_axis: "y"
+    height_axis: "z"
+    positive_lateral_is_left: true
+    obstacle_min_height_m: -0.35
+    obstacle_max_height_m: 0.80
+    range_min_m: 0.08
+    range_max_m: 12.0
+    angle_increment_rad: 0.0174533
+    max_points: 60000
+    min_raw_points: 50
+    min_used_points: 10
+
+pointcloud_lidar_objects_node:
+  ros__parameters:
+    pointcloud_topic: "/mid360_PointCloud2"
+    output_pose_array_topic: "/waver/lidar_objects"
+    state_topic: "/waver/lidar_objects_state"
+    target_frame: "base_link"
+    forward_axis: "x"
+    lateral_axis: "y"
+    height_axis: "z"
+    positive_lateral_is_left: true
+    require_tf: true
+    min_height_m: 0.35
+    max_height_m: 30.0
+    min_depth_m: 0.2
+    max_depth_m: 30.0
+    voxel_leaf_size_m: 0.20
+    cluster_eps_m: 0.55
+    cluster_min_points: 4
+    max_points: 30000
+    remove_robot_body: true
+    self_x_min: -0.7
+    self_x_max: 0.7
+    self_y_min: -0.7
+    self_y_max: 0.7
+    self_z_min: -0.4
+    self_z_max: 0.9
+
+bird_detector_node:
+  ros__parameters:
+    real_profile: true
+    image_topic: "/camera/image_raw"
+    camera_info_topic: "/camera/camera_info"
+    detections_topic: "/waver/bird_detections_2d"
+    confirmed_topic: "/waver/bird_confirmed"
+    state_topic: "/waver/bird_detector_state"
+    backend: "yolo"
+    model_path: ""
+    confidence_threshold: 0.65
+    bird_class_names: ["bird"]
+    nof_m_window: 5
+    nof_m_required: 3
+    camera_stale_sec: 1.0
+    min_bbox_area_fraction: 0.001
+    max_bbox_area_fraction: 0.8
+    edge_margin_fraction: 0.05
+    max_inference_hz: 10.0
+
+bird_3d_fusion_node:
+  ros__parameters:
+    detections_topic: "/waver/bird_detections_2d"
+    bird_confirmed_topic: "/waver/bird_confirmed"
+    camera_info_topic: "/camera/camera_info"
+    pointcloud_topic: "/mid360_PointCloud2"
+    moving_target_valid_topic: "/waver/moving_target_valid"
+    pose_base_topic: "/waver/bird_target_pose_base"
+    pose_map_topic: "/waver/bird_target_pose_map"
+    valid_topic: "/waver/bird_target_valid"
+    state_topic: "/waver/bird_fusion_state"
+    marker_topic: "/waver/bird_target_marker"
+    base_frame: "base_link"
+    global_frame: "map"
+    min_points_in_bbox: 5
+    max_points: 60000
+    min_height_m: 3.0
+    max_height_m: 30.0
+    ground_z_offset_m: 0.0
+    min_range_m: 1.0
+    max_range_m: 30.0
+    require_dynamic_valid: true
+
+safety_cmd_mux_node:
+  ros__parameters:
+    nav2_cmd_topic: "/waver/cmd_vel_nav2"
+    cmd_vel_auto_topic: ""
+    manual_cmd_vel_topic: "/waver/manual_cmd_vel"
+    cmd_vel_out_topic: "/cmd_vel"
+    scan_topic: "/scan"
+    mode_default: "STANDBY"
+    require_scan: true
+    ignore_scan_when_require_scan_false: false
+    scan_stale_s: 0.5
+    hard_stop_distance_m: 0.45
+    slow_down_distance_m: 1.2
+    clear_distance_m: 1.8
+    front_sector_deg: 55.0
+    rear_sector_deg: 55.0
+    min_valid_scan_points: 40
+    command_timeout_sec: 0.3
+    manual_override_timeout_sec: 0.3
+    max_linear_speed: 0.10
+    max_angular_speed: 0.35
+    mapping_max_linear_speed: 0.10
+    mapping_max_angular_speed: 0.30
+    max_linear_delta_per_tick: 0.03
+    max_angular_delta_per_tick: 0.06
+    stop_on_unknown_state: true
+    stop_on_adapter_degraded: true
+    stop_on_battery_fault: true
+
+battery_return_manager_node:
+  ros__parameters:
+    warning_percentage: 0.30
+    critical_percentage: 0.20
+    resume_percentage: 0.38
+    warning_voltage: 9.8
+    critical_voltage: 9.3
+    resume_voltage: 10.2
+    battery_stale_sec: 5.0
+    stop_on_battery_stale: true
+    battery_safety_state_topic: "/waver/battery_safety_state"
+    prefer_charge_pose: true
+    waypoint_file: "waypoints/waver_nav2_patrol_mission.yaml"
+    home_frame_id: "map"
+    home_x: 0.0
+    home_y: 0.0
+    home_yaw: 0.0
+
+serial_cmd_vel_bridge:
+  ros__parameters:
+    cmd_vel_topic: "/cmd_vel"
+    cmd_timeout_s: 0.3
+    command_rate_hz: 20.0
+    stop_repeat: 5
+    serial_port: ""
+    require_explicit_serial_port: true

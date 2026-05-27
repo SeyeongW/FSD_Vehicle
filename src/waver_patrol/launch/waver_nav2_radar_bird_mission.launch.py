@@ -90,6 +90,8 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_test_publishers", default_value="false"),
             DeclareLaunchArgument("start_serial_bridge", default_value="false"),
             DeclareLaunchArgument("include_existing_ugv_driver", default_value="false"),
+            DeclareLaunchArgument("serial_port", default_value=""),
+            DeclareLaunchArgument("require_explicit_serial_port", default_value="false"),
             DeclareLaunchArgument("require_scan", default_value="true"),
             DeclareLaunchArgument("ignore_scan_when_require_scan_false", default_value="false"),
             DeclareLaunchArgument("safety_max_linear_speed", default_value="0.18"),
@@ -109,6 +111,11 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_moving_object_goal_relay", default_value="false"),
             DeclareLaunchArgument("require_robot_pose_for_goal", default_value="true"),
             DeclareLaunchArgument("pointcloud_topic", default_value="/mid360_PointCloud2"),
+            DeclareLaunchArgument("pointcloud_target_frame", default_value="base_link"),
+            DeclareLaunchArgument("pointcloud_forward_axis", default_value="x"),
+            DeclareLaunchArgument("pointcloud_lateral_axis", default_value="y"),
+            DeclareLaunchArgument("pointcloud_height_axis", default_value="z"),
+            DeclareLaunchArgument("pointcloud_positive_lateral_is_left", default_value="true"),
             DeclareLaunchArgument("moving_object_input_topic", default_value="/waver/lidar_objects"),
             DeclareLaunchArgument("moving_object_input_type", default_value="pose_array"),
             DeclareLaunchArgument("moving_object_output_topic", default_value="/waver/lidar_objects_map"),
@@ -191,6 +198,14 @@ def generate_launch_description() -> LaunchDescription:
                     {
                         "pointcloud_topic": pointcloud_topic,
                         "output_pose_array_topic": "/waver/lidar_objects",
+                        "target_frame": ParameterValue(LaunchConfiguration("pointcloud_target_frame"), value_type=str),
+                        "forward_axis": ParameterValue(LaunchConfiguration("pointcloud_forward_axis"), value_type=str),
+                        "lateral_axis": ParameterValue(LaunchConfiguration("pointcloud_lateral_axis"), value_type=str),
+                        "height_axis": ParameterValue(LaunchConfiguration("pointcloud_height_axis"), value_type=str),
+                        "positive_lateral_is_left": ParameterValue(
+                            LaunchConfiguration("pointcloud_positive_lateral_is_left"),
+                            value_type=bool,
+                        ),
                     },
                 ],
             ),
@@ -390,7 +405,16 @@ def generate_launch_description() -> LaunchDescription:
                 name="serial_cmd_vel_bridge",
                 output="screen",
                 condition=serial_condition,
-                parameters=common,
+                parameters=[
+                    *common,
+                    {
+                        "serial_port": ParameterValue(LaunchConfiguration("serial_port"), value_type=str),
+                        "require_explicit_serial_port": ParameterValue(
+                            LaunchConfiguration("require_explicit_serial_port"),
+                            value_type=bool,
+                        ),
+                    },
+                ],
             ),
             Node(
                 package="waver_patrol",

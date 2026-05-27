@@ -37,6 +37,7 @@ class BatteryReturnManagerNode(Node):
         self.declare_parameter("return_home_arrived_topic", "/waver/return_home_arrived")
         self.declare_parameter("mission_reset_topic", "/waver/mission_reset")
         self.declare_parameter("battery_state_text_topic", "/waver/battery_state_text")
+        self.declare_parameter("battery_safety_state_topic", "/waver/battery_safety_state")
         self.declare_parameter("waypoint_file", "waypoints/waver_bird_patrol_demo.yaml")
         self.declare_parameter("prefer_charge_pose", True)
         self.declare_parameter("warning_percentage", 0.30)
@@ -46,7 +47,7 @@ class BatteryReturnManagerNode(Node):
         self.declare_parameter("critical_voltage", 9.3)
         self.declare_parameter("resume_voltage", 10.2)
         self.declare_parameter("battery_stale_sec", 5.0)
-        self.declare_parameter("stop_on_battery_stale", False)
+        self.declare_parameter("stop_on_battery_stale", True)
         self.declare_parameter("home_frame_id", "odom")
         self.declare_parameter("home_x", 0.0)
         self.declare_parameter("home_y", 0.0)
@@ -64,6 +65,7 @@ class BatteryReturnManagerNode(Node):
         self.active_pub = self.create_publisher(Bool, str(self.get_parameter("return_home_active_topic").value), 10)
         self.goal_pub = self.create_publisher(PoseStamped, str(self.get_parameter("return_goal_topic").value), 10)
         self.text_pub = self.create_publisher(String, str(self.get_parameter("battery_state_text_topic").value), 10)
+        self.safety_text_pub = self.create_publisher(String, str(self.get_parameter("battery_safety_state_topic").value), 10)
         self.create_subscription(BatteryState, str(self.get_parameter("battery_state_topic").value), self.battery_callback, 10)
         self.create_subscription(Float32, str(self.get_parameter("voltage_topic").value), self.voltage_callback, 10)
         self.create_subscription(Bool, str(self.get_parameter("return_home_arrived_topic").value), self.arrived_callback, 10)
@@ -107,7 +109,9 @@ class BatteryReturnManagerNode(Node):
         self.active_pub.publish(Bool(data=self.return_active))
         if self.return_active:
             self.goal_pub.publish(self._return_goal())
-        self.text_pub.publish(String(data=f"{state} pct={self._fmt(self.last_percentage)} voltage={self._fmt(self.last_voltage)}"))
+        text = f"{state} pct={self._fmt(self.last_percentage)} voltage={self._fmt(self.last_voltage)}"
+        self.text_pub.publish(String(data=text))
+        self.safety_text_pub.publish(String(data=text))
 
     def _percentage_state(self) -> str:
         if self.last_percentage is None or self._now() - self.last_percentage_time > float(self.get_parameter("battery_stale_sec").value):

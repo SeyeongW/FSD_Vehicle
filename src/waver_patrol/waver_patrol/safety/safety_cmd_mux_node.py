@@ -41,6 +41,7 @@ class SafetyCmdMuxNode(Node):
         self.declare_parameter("livox_scan_adapter_state_topic", "/waver/livox_scan_adapter_state")
         self.declare_parameter("emergency_stop_topic", "/waver/emergency_stop")
         self.declare_parameter("external_stop_topic", "/waver/external_stop")
+        self.declare_parameter("battery_safety_state_topic", "/waver/battery_safety_state")
         self.declare_parameter("speed_limit_topic", "/waver/speed_limit")
         self.declare_parameter("angular_speed_limit_topic", "/waver/angular_speed_limit")
         self.declare_parameter("mode_topic", "/waver/mode")
@@ -50,6 +51,7 @@ class SafetyCmdMuxNode(Node):
         self.declare_parameter("require_scan", True)
         self.declare_parameter("ignore_scan_when_require_scan_false", False)
         self.declare_parameter("stop_on_adapter_degraded", True)
+        self.declare_parameter("stop_on_battery_fault", True)
         self.declare_parameter("scan_stale_s", 0.5)
         self.declare_parameter("front_sector_deg", 55.0)
         self.declare_parameter("rear_sector_deg", 55.0)
@@ -78,6 +80,7 @@ class SafetyCmdMuxNode(Node):
         self.last_auto_time = 0.0
         self.last_manual_time = 0.0
         self.scan = ScanSectorState()
+        self.battery_safety_state = "UNKNOWN"
         self.last_out = stop_twist()
         self.last_scan_blocking_state = "SCAN_STALE_STOP"
 
@@ -90,6 +93,7 @@ class SafetyCmdMuxNode(Node):
         self.create_subscription(Twist, str(self.get_parameter("manual_cmd_vel_topic").value), self.manual_callback, 10)
         self.create_subscription(LaserScan, str(self.get_parameter("scan_topic").value), self.scan_callback, qos_profile_sensor_data)
         self.create_subscription(String, str(self.get_parameter("livox_scan_adapter_state_topic").value), self.adapter_state_callback, 10)
+        self.create_subscription(String, str(self.get_parameter("battery_safety_state_topic").value), self.battery_state_callback, 10)
         self.create_subscription(Bool, str(self.get_parameter("emergency_stop_topic").value), lambda m: setattr(self, "estop", bool(m.data)), 10)
         self.create_subscription(Bool, str(self.get_parameter("external_stop_topic").value), lambda m: setattr(self, "external_stop", bool(m.data)), 10)
         self.create_subscription(Float32, str(self.get_parameter("speed_limit_topic").value), self.speed_limit_callback, 10)
@@ -125,6 +129,9 @@ class SafetyCmdMuxNode(Node):
 
     def adapter_state_callback(self, msg: String) -> None:
         self.scan.adapter_state = msg.data.strip().upper()
+
+    def battery_state_callback(self, msg: String) -> None:
+        self.battery_safety_state = msg.data.strip().upper()
 
     def scan_callback(self, msg: LaserScan) -> None:
         front_limit = math.radians(float(self.get_parameter("front_sector_deg").value) * 0.5)
@@ -164,6 +171,8 @@ class SafetyCmdMuxNode(Node):
             return stop_twist(), "EMERGENCY_STOP final_cmd_vel_zero", True
         if self.external_stop:
             return stop_twist(), "EXTERNAL_STOP final_cmd_vel_zero", True
+        if self._battery_fault():
+            return stop_twist(), f"BATTERY_FAULT_STOP state={self.battery_safety_state}", True
         if self.mode in {"EMERGENCY", "DISABLED"}:
             return stop_twist(), f"MODE_{self.mode}_STOP final_cmd_vel_zero", True
         allowed_modes = {
@@ -243,6 +252,15 @@ class SafetyCmdMuxNode(Node):
         if not state or state == "UNKNOWN":
             return False
         bad_tokens = ("DEGRADED", "STALE", "FAILED", "EMPTY", "NO_POINTS", "NOT_ENABLED")
+        return any(token in state for token in bad_tokens)
+
+    def _battery_fault(self) -> bool:
+        if not bool(self.get_parameter("stop_on_battery_fault").value):
+            return False
+        state = self.battery_safety_state
+        if not state or state == "UNKNOWN":
+            return False
+        bad_tokens = ("CRITICAL", "STALE_STOP", "BATTERY_STALE_STOP")
         return any(token in state for token in bad_tokens)
 
     def _limit(self, cmd: Twist) -> Twist:

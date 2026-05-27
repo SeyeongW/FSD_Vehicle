@@ -14,6 +14,9 @@ def get_localplan_config_file(context):
     # Get the use_localplan and use_localization launch configurations
     use_localplan = context.launch_configurations['use_localplan']
     use_localization = context.launch_configurations['use_localization']
+    explicit_params = context.launch_configurations.get('params_file', '').strip()
+    if explicit_params:
+        return explicit_params
 
     # Get the package share directory for ugv_nav
     ugv_nav_dir = get_package_share_directory('ugv_nav')
@@ -55,7 +58,7 @@ def launch_setup(context, *args, **kwargs):
     emcl_param_file = os.path.join(emcl_dir, 'config', 'emcl2_quick_start.param.yaml')                        
     # Include the bringup_lidar launch description
     bringup_lidar_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ugv_bringup'), 'launch', 'bringup_lidar.launch.py')),
+        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ugv_bringup'), 'launch', 'bringup_lidar_sensors_only.launch.py')),
         launch_arguments={
             'use_rviz': LaunchConfiguration('use_rviz'),
             'rviz_config': 'nav_2d', 
@@ -118,10 +121,14 @@ def launch_setup(context, *args, **kwargs):
 
 # Function to generate the launch description
 def generate_launch_description():
+    default_map = os.path.join(get_package_share_directory('ugv_nav'), 'maps', 'map.yaml')
     # Return the launch description
     return LaunchDescription([
         DeclareLaunchArgument('use_localplan', default_value='teb', description='Choose which localplan to use: dwa,teb'),
         DeclareLaunchArgument('use_localization', default_value='amcl', description='Choose which use_localization to use: amcl,cartographer'),
+        DeclareLaunchArgument('map', default_value=default_map, description='Map YAML for localization/Nav2'),
+        DeclareLaunchArgument('params_file', default_value='', description='Override Nav2 params YAML. If empty, use ugv_nav defaults.'),
+        DeclareLaunchArgument('use_rviz', default_value='false', description='Whether to launch RViz'),
         OpaqueFunction(function=launch_setup)
     ])
 

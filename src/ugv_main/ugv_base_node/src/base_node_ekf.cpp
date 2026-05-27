@@ -7,6 +7,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 
 #include <cmath>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <chrono>
@@ -63,22 +64,24 @@ class OdomPublisher : public rclcpp::Node
     rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr odom_raw_subscription_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher_;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-    rclcpp::TimerBase::SharedPtr timer_; 
+    rclcpp::TimerBase::SharedPtr timer_;
 
     double dt = 0.0;
     double x_pos_ = 0.0;
     double y_pos_ = 0.0;
-    float pre_odl;
-    float pre_odr;
-    float vx;
-    float vw;     
+    float pre_odl = 0.0f;
+    float pre_odr = 0.0f;
+    float vx = 0.0f;
+    float vw = 0.0f;
     bool pub_odom_tf_ = false;
-    bool is_initialized = false;
+    bool odom_initialized_ = false;
     rclcpp::Time last_time_;
     std::string odom_frame = "odom";
-    std::string base_footprint_frame = "base_footprint";
+    std::string base_frame = "base_link";
     float init_odl = 0.0;
     float init_odr = 0.0; 
+    double wheel_base_ = 0.175;
+    double max_encoder_delta_m_ = 1.0;
 
 public:
     OdomPublisher()
@@ -86,13 +89,22 @@ public:
     {
         // Declare parameters
         this->declare_parameter<std::string>("odom_frame", "odom");
-        this->declare_parameter<std::string>("base_footprint_frame", "base_footprint");
+        this->declare_parameter<std::string>("base_frame", "base_link");
+        this->declare_parameter<std::string>("base_footprint_frame", "base_link");
         this->declare_parameter<bool>("pub_odom_tf", false);
+        this->declare_parameter<double>("wheel_base", 0.175);
+        this->declare_parameter<double>("max_encoder_delta_m", 1.0);
 
         // Get parameters
         this->get_parameter<bool>("pub_odom_tf", pub_odom_tf_);
         this->get_parameter<std::string>("odom_frame", odom_frame);
-        this->get_parameter<std::string>("base_footprint_frame", base_footprint_frame);
+        this->get_parameter<std::string>("base_frame", base_frame);
+        if (base_frame.empty())
+        {
+            this->get_parameter<std::string>("base_footprint_frame", base_frame);
+        }
+        this->get_parameter<double>("wheel_base", wheel_base_);
+        this->get_parameter<double>("max_encoder_delta_m", max_encoder_delta_m_);
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
         // Create subscriptions
@@ -123,23 +135,42 @@ private:
     // Handle odometry data
     void handle_odom(const std::shared_ptr<std_msgs::msg::Float32MultiArray> msg)
     {
-        rclcpp::Time curren_time = rclcpp::Clock().now();
+        if (msg->data.size() < 2)
+        {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Ignoring odom_raw: expected at least 2 encoder values");
+            return;
+        }
+
+        rclcpp::Time current_time = this->now();
 
         float now_odl = msg->data.at(0);
         float now_odr = msg->data.at(1);
+        if (!std::isfinite(now_odl) || !std::isfinite(now_odr))
+        {
+            vx = 0.0f;
+            vw = 0.0f;
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Ignoring odom_raw: encoder value is NaN/Inf");
+            return;
+        }
 
-        if (!is_initialized)
+        if (!odom_initialized_)
         {
             init_odl = now_odl;
             init_odr = now_odr;
-            is_initialized = true;
+            pre_odl = 0.0f;
+            pre_odr = 0.0f;
+            vx = 0.0f;
+            vw = 0.0f;
+            last_time_ = current_time;
+            odom_initialized_ = true;
+            return;
         }
 
         now_odl -= init_odl;
         now_odr -= init_odr;
 
-        dt = (curren_time - last_time_).seconds();
-        last_time_ = curren_time;
+        dt = (current_time - last_time_).seconds();
+        last_time_ = current_time;
 
         float dleft = now_odl - pre_odl;
         float dright = now_odr - pre_odr;
@@ -147,10 +178,32 @@ private:
         pre_odl = now_odl;
         pre_odr = now_odr;
 
+        if (dt <= 1e-4 || dt > 1.0)
+        {
+            vx = 0.0f;
+            vw = 0.0f;
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Skipping odom velocity update: invalid dt=%.6f", dt);
+            return;
+        }
+        if (std::fabs(dleft) > max_encoder_delta_m_ || std::fabs(dright) > max_encoder_delta_m_)
+        {
+            vx = 0.0f;
+            vw = 0.0f;
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Skipping odom velocity update: encoder jump left=%.3f right=%.3f", dleft, dright);
+            return;
+        }
+
         float dxy_ave = (dright + dleft) / 2.0;
-        float dth = (dright - dleft) / 0.175;
+        float dth = (dright - dleft) / static_cast<float>(wheel_base_);
         vx = dxy_ave / dt;
         vw = dth / dt;
+        if (!std::isfinite(vx) || !std::isfinite(vw))
+        {
+            vx = 0.0f;
+            vw = 0.0f;
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Reset odom velocity: computed NaN/Inf");
+            return;
+        }
 
         if (dxy_ave != 0)
         {
@@ -172,11 +225,15 @@ private:
     // Publish odometry data
     void publish_odom()
     {
-        rclcpp::Time curren_time = rclcpp::Clock().now();
+        if (!odom_initialized_)
+        {
+            return;
+        }
+        rclcpp::Time curren_time = this->now();
         nav_msgs::msg::Odometry odom;
         odom.header.stamp = curren_time;
         odom.header.frame_id = odom_frame;
-        odom.child_frame_id = base_footprint_frame;
+        odom.child_frame_id = base_frame;
 
         // Robot's position in x, y, and z
         odom.pose.pose.position.x = x_pos_;
@@ -227,7 +284,7 @@ private:
             geometry_msgs::msg::TransformStamped t;
             t.header.stamp = curren_time;
             t.header.frame_id = odom_frame;
-            t.child_frame_id = base_footprint_frame;
+            t.child_frame_id = base_frame;
             t.transform.translation.x = x_pos_;
             t.transform.translation.y = y_pos_;
             t.transform.translation.z = 0.0;

@@ -51,13 +51,16 @@ class ReadLine:
 
 # Base controller class for managing UART communication and processing commands
 class BaseController:
-    def __init__(self, uart_dev_set, baud_set):
+    def __init__(self, uart_dev_set, baud_set, feedback_only=True):
         self.logger = logging.getLogger('BaseController')  # Logger setup
         self.ser = serial.Serial(uart_dev_set, baud_set, timeout=1)  # Open serial connection
         self.rl = ReadLine(self.ser)  # Initialize ReadLine helper
         self.command_queue = queue.Queue()  # Command queue for sending data
-        self.command_thread = threading.Thread(target=self.process_commands, daemon=True)  # Start a separate thread for processing commands
-        self.command_thread.start()
+        self.feedback_only = bool(feedback_only)
+        self.command_thread = None
+        if not self.feedback_only:
+            self.command_thread = threading.Thread(target=self.process_commands, daemon=True)  # Start a separate thread for processing commands
+            self.command_thread.start()
         self.data_buffer = None  # Buffer for holding received data
         # Base data structure to hold sensor values
         self.base_data = {"T": 1001, "L": 0, "R": 0, "ax": 0, "ay": 0, "az": 0, "gx": 0, "gy": 0, "gz": 0, "mx": 0, "my": 0, "mz": 0, "odl": 0, "odr": 0, "v": 0}
@@ -84,6 +87,9 @@ class BaseController:
 
     # Add a command to the queue to be sent via UART
     def send_command(self, data):
+        if self.feedback_only:
+            self.logger.warning("feedback_only=true; command write suppressed")
+            return
         self.command_queue.put(data)
 
     # Thread function to process and send commands from the queue
@@ -100,13 +106,24 @@ class BaseController:
 class ugv_bringup(Node):
     def __init__(self):
         super().__init__('ugv_bringup')
+        self.declare_parameter('serial_port', '')
+        self.declare_parameter('baudrate', 115200)
+        self.declare_parameter('feedback_only', True)
+        requested_port = str(self.get_parameter('serial_port').value).strip()
+        selected_port = requested_port if requested_port else serial_port
+        baudrate = int(self.get_parameter('baudrate').value)
+        feedback_only = bool(self.get_parameter('feedback_only').value)
+        self.get_logger().warn(
+            f"ugv_bringup opening serial feedback port={selected_port} baudrate={baudrate} "
+            f"feedback_only={feedback_only}. Do not run this on the same port as a command bridge."
+        )
         # Publishers for IMU data, magnetic field data, odometry, and voltage
         self.imu_data_raw_publisher_ = self.create_publisher(Imu, "imu/data_raw", 100)
         self.imu_mag_publisher_ = self.create_publisher(MagneticField, "imu/mag", 100)
         self.odom_publisher_ = self.create_publisher(Float32MultiArray, "odom/odom_raw", 100)
         self.voltage_publisher_ = self.create_publisher(Float32, "voltage", 50)
         # Initialize the base controller with the UART port and baud rate
-        self.base_controller = BaseController(serial_port, 115200)
+        self.base_controller = BaseController(selected_port, baudrate, feedback_only=feedback_only)
         # Timer to periodically execute the feedback loop
         self.feedback_timer = self.create_timer(0.001, self.feedback_loop)
 

@@ -11,6 +11,13 @@ from sensor_msgs.msg import PointCloud2
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import String
 
+try:
+    from tf2_ros import Buffer, TransformException, TransformListener
+except Exception:  # pragma: no cover
+    Buffer = None
+    TransformException = Exception
+    TransformListener = None
+
 
 class PointCloudLidarObjectsNode(Node):
     """Convert 3D LiDAR PointCloud2 into elevated object center candidates.
@@ -26,6 +33,12 @@ class PointCloudLidarObjectsNode(Node):
         self.declare_parameter("pointcloud_topic", "/mid360_PointCloud2")
         self.declare_parameter("output_pose_array_topic", "/waver/lidar_objects")
         self.declare_parameter("state_topic", "/waver/lidar_objects_state")
+        self.declare_parameter("target_frame", "base_link")
+        self.declare_parameter("forward_axis", "x")
+        self.declare_parameter("lateral_axis", "y")
+        self.declare_parameter("height_axis", "z")
+        self.declare_parameter("positive_lateral_is_left", True)
+        self.declare_parameter("require_tf", True)
         self.declare_parameter("min_height_m", 0.35)
         self.declare_parameter("max_height_m", 8.0)
         self.declare_parameter("min_depth_m", 0.2)
@@ -44,14 +57,21 @@ class PointCloudLidarObjectsNode(Node):
 
         self.objects_pub = self.create_publisher(PoseArray, str(self.get_parameter("output_pose_array_topic").value), 10)
         self.state_pub = self.create_publisher(String, str(self.get_parameter("state_topic").value), 10)
+        if Buffer is not None:
+            self.tf_buffer = Buffer()
+            self.tf_listener = TransformListener(self.tf_buffer, self)
+        else:
+            self.tf_buffer = None
+            self.tf_listener = None
         self.create_subscription(PointCloud2, str(self.get_parameter("pointcloud_topic").value), self.cloud_callback, 5)
 
     def cloud_callback(self, msg: PointCloud2) -> None:
         try:
-            points, raw_count = self._filtered_voxel_points(msg)
+            points, raw_count, frame_id = self._filtered_voxel_points(msg)
             clusters = self._cluster(points)
             pose_array = PoseArray()
             pose_array.header = msg.header
+            pose_array.header.frame_id = frame_id
             for cluster in clusters:
                 if len(cluster) < int(self.get_parameter("cluster_min_points").value):
                     continue
@@ -66,16 +86,39 @@ class PointCloudLidarObjectsNode(Node):
                 pose_array.poses.append(pose)
             self.objects_pub.publish(pose_array)
             state = "OBJECTS_OK" if pose_array.poses else "NO_OBJECTS"
-            self.state_pub.publish(String(data=f"{state} frame={msg.header.frame_id} raw={raw_count} voxels={len(points)} clusters={len(pose_array.poses)}"))
+            self.state_pub.publish(
+                String(
+                    data=(
+                        f"{state} frame={pose_array.header.frame_id} source_frame={msg.header.frame_id} "
+                        f"raw={raw_count} voxels={len(points)} clusters={len(pose_array.poses)}"
+                    )
+                )
+            )
         except Exception as exc:
             self.state_pub.publish(String(data=f"OBJECTS_FAILED fail_safe_no_cmd_vel error={exc}"))
             self.get_logger().warn(f"PointCloud object extraction failed: {exc}")
 
-    def _filtered_voxel_points(self, msg: PointCloud2) -> tuple[list[tuple[float, float, float]], int]:
+    def _filtered_voxel_points(self, msg: PointCloud2) -> tuple[list[tuple[float, float, float]], int, str]:
         leaf = max(float(self.get_parameter("voxel_leaf_size_m").value), 0.05)
         max_points = int(self.get_parameter("max_points").value)
         voxel: dict[tuple[int, int, int], tuple[float, float, float]] = {}
         raw_count = 0
+        target_frame = str(self.get_parameter("target_frame").value).strip()
+        source_frame = msg.header.frame_id.strip()
+        transform = None
+        output_frame = source_frame
+        if target_frame and source_frame and target_frame != source_frame:
+            if self.tf_buffer is None:
+                if bool(self.get_parameter("require_tf").value):
+                    raise RuntimeError(f"TF unavailable source={source_frame} target={target_frame}")
+            else:
+                try:
+                    transform = self.tf_buffer.lookup_transform(target_frame, source_frame, rclpy.time.Time())
+                    output_frame = target_frame
+                except TransformException as exc:
+                    if bool(self.get_parameter("require_tf").value):
+                        raise RuntimeError(f"TF_FAIL source={source_frame} target={target_frame}: {exc}") from exc
+                    output_frame = source_frame
         for point in point_cloud2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
             raw_count += 1
             if raw_count > max_points:
@@ -83,16 +126,44 @@ class PointCloudLidarObjectsNode(Node):
             x, y, z = float(point[0]), float(point[1]), float(point[2])
             if not all(math.isfinite(v) for v in (x, y, z)):
                 continue
+            if transform is not None:
+                x, y, z = self._transform_xyz(x, y, z, transform)
             if self._is_self_point(x, y, z):
                 continue
-            depth = x
+            axes = self._axis_values(x, y, z)
+            depth = axes[str(self.get_parameter("forward_axis").value).strip().lower()]
+            lateral = axes[str(self.get_parameter("lateral_axis").value).strip().lower()]
+            height = axes[str(self.get_parameter("height_axis").value).strip().lower()]
+            if not bool(self.get_parameter("positive_lateral_is_left").value):
+                lateral = -lateral
             if depth < float(self.get_parameter("min_depth_m").value) or depth > float(self.get_parameter("max_depth_m").value):
                 continue
-            if z < float(self.get_parameter("min_height_m").value) or z > float(self.get_parameter("max_height_m").value):
+            if height < float(self.get_parameter("min_height_m").value) or height > float(self.get_parameter("max_height_m").value):
                 continue
             key = (round(x / leaf), round(y / leaf), round(z / leaf))
             voxel.setdefault(key, (x, y, z))
-        return list(voxel.values()), raw_count
+        return list(voxel.values()), raw_count, output_frame
+
+    @staticmethod
+    def _axis_values(x: float, y: float, z: float) -> dict[str, float]:
+        return {"x": x, "y": y, "z": z, "-x": -x, "-y": -y, "-z": -z}
+
+    @staticmethod
+    def _transform_xyz(x: float, y: float, z: float, transform) -> tuple[float, float, float]:
+        q = transform.transform.rotation
+        tx = transform.transform.translation.x
+        ty = transform.transform.translation.y
+        tz = transform.transform.translation.z
+        # Rotate vector by quaternion q * v * q^-1.
+        qx, qy, qz, qw = float(q.x), float(q.y), float(q.z), float(q.w)
+        ix = qw * x + qy * z - qz * y
+        iy = qw * y + qz * x - qx * z
+        iz = qw * z + qx * y - qy * x
+        iw = -qx * x - qy * y - qz * z
+        rx = ix * qw + iw * -qx + iy * -qz - iz * -qy
+        ry = iy * qw + iw * -qy + iz * -qx - ix * -qz
+        rz = iz * qw + iw * -qz + ix * -qy - iy * -qx
+        return rx + float(tx), ry + float(ty), rz + float(tz)
 
     def _is_self_point(self, x: float, y: float, z: float) -> bool:
         if not bool(self.get_parameter("remove_robot_body").value):

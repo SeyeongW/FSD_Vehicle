@@ -504,7 +504,42 @@ ros2 launch ugv_tools waver_operator_panel.launch.py \
 
 ---
 
-## 10. 실차 wheel-on 저속 backend
+## 10. 실차 조류탐지 real backend
+
+실차용 기본 launch는 fake/test/Gazebo bird publisher를 실행하지 않는다. 카메라 모델이 없으면 `bird_confirmed=false`가 유지되어 bird approach mission은 막힌다.
+
+### Dry-run / no serial
+
+```bash
+cd ~/ros2_ws/FSD_Vehicle
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export ROS_DOMAIN_ID=30
+
+ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
+  start_serial_bridge:=false \
+  default_mode:=STANDBY \
+  safety_max_linear_speed:=0.05 \
+  map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
+  bird_model_path:=$HOME/models/bird_yolov8n.pt
+```
+
+### Wheel-off serial test
+
+바퀴를 띄우고 물리 E-STOP을 잡은 상태에서만 실행한다.
+
+```bash
+ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
+  start_serial_bridge:=true \
+  serial_port:=/dev/serial/by-id/<WAVER_SERIAL_ID> \
+  default_mode:=STANDBY \
+  safety_max_linear_speed:=0.05 \
+  safety_max_angular_speed:=0.20 \
+  map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
+  bird_model_path:=$HOME/models/bird_yolov8n.pt
+```
+
+### Wheel-on 저속 backend
 
 아래 명령은 wheel-off와 dry-run 점검을 통과한 뒤에만 사용한다.
 
@@ -514,23 +549,14 @@ source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
 
-ros2 launch waver_patrol waver_nav2_radar_bird_mission.launch.py \
-  use_sim_time:=false \
-  use_nav2:=true \
-  require_scan:=true \
+ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   start_serial_bridge:=true \
-  include_existing_ugv_driver:=false \
-  enable_test_publishers:=false \
-  enable_deep_learning_stub:=false \
-  enable_sound_stub:=false \
-  enable_pointcloud_lidar_objects:=true \
-  enable_moving_object_map_transform:=true \
-  enable_moving_object_motion_filter:=true \
+  serial_port:=/dev/serial/by-id/<WAVER_SERIAL_ID> \
   default_mode:=STANDBY \
-  remap_nav2_cmd_vel:=true \
   safety_max_linear_speed:=0.10 \
-  safety_max_angular_speed:=0.30 \
-  use_rviz:=false
+  safety_max_angular_speed:=0.35 \
+  map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
+  bird_model_path:=$HOME/models/bird_yolov8n.pt
 ```
 
 실차 wheel-on 전 필수 확인:
@@ -542,6 +568,8 @@ ros2 topic hz /odom
 ros2 run tf2_ros tf2_echo odom base_link
 ros2 topic echo /waver/safety_state
 ros2 topic echo /waver/serial_bridge_state
+bash src/waver_patrol/scripts/waver_cmd_chain_check.sh
+bash src/waver_patrol/scripts/waver_bird_autonomy_health_check.sh
 ```
 
 금지 조건:

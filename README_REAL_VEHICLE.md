@@ -1,105 +1,109 @@
-# Waver Real-Vehicle Release Notes
+# Waver Real-Vehicle Bird Autonomy Checklist
 
-This branch is prepared as a pre-real validation baseline, not as an automatic
-wheel-on command. Keep the robot lifted or drive wheels disabled until the
-preflight checks pass.
+This repository must be used on branch `jo` only. The real profile is designed for a low-speed, supervised, closed-area Waver UGV test. It does not enable wheel-on driving by default.
 
-## Command Path
+## Command Chain
 
-- Operator UI WASD/arrow keys publish only `/waver/manual_cmd_vel`.
-- Nav2 output must be remapped to `/waver/cmd_vel_nav2`.
-- `safety_cmd_mux_node` is the only allowed final `/cmd_vel` publisher.
-- Legacy `ugv_driver` is disabled by default. Use
-  `legacy_driver_enabled:=true start_driver:=true` only for archived legacy tests.
-- The canonical serial bridge must subscribe only to final `/cmd_vel`.
+Default mode is `safety_mux_final`:
 
-## Real Backend
+```text
+Nav2 controller
+  -> /waver/cmd_vel_nav2
+  -> safety_cmd_mux_node
+  -> /cmd_vel
+  -> serial_cmd_vel_bridge or canonical base driver
+```
+
+The final `/cmd_vel` publisher must be exactly one node: `safety_cmd_mux_node`. The operator UI publishes WASD/manual commands only to `/waver/manual_cmd_vel`.
+
+## Build
 
 ```bash
-cd ~/ros2_ws
+cd ~/ros2_ws/FSD_Vehicle
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install --packages-select \
+  waver_patrol ugv_bringup ugv_base_node ugv_tools ugv_nav
+source install/setup.bash
+```
+
+## Dry Run, No Serial
+
+```bash
+cd ~/ros2_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
-ros2 launch waver_patrol waver_nav2_radar_bird_mission.launch.py \
-  use_nav2:=true \
-  require_scan:=true \
+ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   start_serial_bridge:=false \
-  include_existing_ugv_driver:=false \
-  remap_nav2_cmd_vel:=true \
-  enable_pointcloud_lidar_objects:=true \
-  enable_moving_object_map_transform:=true \
-  enable_moving_object_motion_filter:=true \
-  enable_deep_learning_stub:=false \
-  enable_sound_stub:=false
+  default_mode:=STANDBY \
+  safety_max_linear_speed:=0.05 \
+  map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
+  bird_model_path:=$HOME/models/bird_yolov8n.pt
 ```
+
+If `bird_model_path` is empty or missing, the detector publishes `MODEL_MISSING` and `bird_confirmed=false`; patrol can be checked, but bird approach is blocked.
 
 ## Operator UI
 
 ```bash
 ros2 launch ugv_tools waver_operator_panel.launch.py \
-  require_scan:=false \
+  profile:=real \
   publish_direct_cmd_vel:=false \
-  profile:=real
+  map_topic:=/map \
+  map_display_mode:=auto \
+  global_path_topic:=/plan \
+  local_path_topic:=/local_plan \
+  camera_detection_status_topic:=/waver/bird_detector_state
 ```
 
-WASD and arrow keys remain enabled. They are manual candidates only and must pass
-through the safety mux before any motor command is written.
-
-## SLAM Mapping Workflow
-
-1. Press `SLAM MAPPING` in the UI. The old map display and overlays are cleared,
-   but existing map files are not deleted.
-2. The panel enters `MAPPING_AUTO` and starts
-   `waver_mapping_backend.launch.py backend:=cartographer` by default.
-3. The live `/map` is rendered as `SLAM_LIVE`.
-4. Press `SAVE MAP`. The mapping workflow manager saves
-   `~/ros2_ws/maps/waver_latest_map.yaml` and keeps it unapplied.
-5. Press `APPLY FIXED MAP`. The UI state becomes `MAP_FIXED_READY`; start the
-   localization/Nav2 backend for the saved map before wheel-on patrol.
-
-Simulation-only workflow validation can use:
+## Preflight Checks
 
 ```bash
-ros2 launch waver_patrol waver_mapping_backend.launch.py backend:=gazebo_live use_rviz:=false
+bash src/waver_patrol/scripts/waver_real_preflight_check.sh
+bash src/waver_patrol/scripts/waver_cmd_chain_check.sh
+bash src/waver_patrol/scripts/waver_bird_autonomy_health_check.sh
 ```
 
-## Patrol And Object Mission
-
-- `START PATROL` is allowed only after a fixed map, localization, safety, and
-  route are ready.
-- Height-based target condition is:
-  `object_height_m >= 3.0`, `z_valid=true`, `dynamic_filter_pass=true`, and
-  ego-motion compensation completed in map/odom.
-- Target approach goals are generated from the current robot pose toward the
-  object with a safety offset, not from the map origin.
-- Mapping mode disables object target interrupts by default.
-
-## E-Stop
-
-- `STOP` cancels motion and returns to `STANDBY`.
-- `E-STOP` latches `EMERGENCY`; reset is required before driving.
-- Scan stale, TF/localization stale, duplicate final `/cmd_vel`, serial fault, or
-  E-stop must hold zero command.
+Do not enable serial if any check fails.
 
 ## Wheel-Off Test
 
-1. Verify Python compile and focused colcon build.
-2. Launch backend with `start_serial_bridge:=false`.
-3. Launch UI with `publish_direct_cmd_vel:=false`.
-4. Confirm `/cmd_vel` has exactly one publisher and `ugv_driver` is absent.
-5. Press each UI command and verify only candidate/safety topics change.
+Only run this with wheels off the ground and a physical E-stop available.
 
-## Wheel-On Low-Speed Test
+```bash
+ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
+  start_serial_bridge:=true \
+  serial_port:=/dev/serial/by-id/<WAVER_SERIAL_ID> \
+  default_mode:=STANDBY \
+  safety_max_linear_speed:=0.05 \
+  safety_max_angular_speed:=0.20 \
+  map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
+  bird_model_path:=$HOME/models/bird_yolov8n.pt
+```
 
-After wheel-off tests pass, enable the canonical serial bridge only. Start at
-0.10 to 0.15 m/s maximum linear speed, keep E-stop in hand, and test manual
-WASD before AUTO/PATROL.
+Verify manual direction, STOP, E-stop, serial reconnect stop burst, scan stale stop, and `/cmd_vel` single publisher before any wheel-on test.
 
-## Known Limitations
+## Closed-Area Low-Speed Wheel-On
 
-- Height filtering requires real z data from 3D LiDAR, depth, stereo, or a
-  custom 3D detection source. 2D LaserScan cannot prove height>=3 m.
-- The operator panel can start a mapping backend, but full production map-server
-  lifecycle orchestration should be checked on the robot PC before wheel-on.
-- Sound and classifier stubs are disabled by default for real profile; use real
-  reviewed backends or explicit dry-run mode.
+Only after dry-run, preflight, and wheel-off tests pass:
+
+```bash
+ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
+  start_serial_bridge:=true \
+  serial_port:=/dev/serial/by-id/<WAVER_SERIAL_ID> \
+  default_mode:=STANDBY \
+  safety_max_linear_speed:=0.10 \
+  safety_max_angular_speed:=0.35 \
+  map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
+  bird_model_path:=$HOME/models/bird_yolov8n.pt
+```
+
+Start in `STANDBY`. The operator must explicitly press START PATROL in the UI. Bird approach requires `bird_confirmed=true`, valid 3D fusion, elevated height, dynamic motion, fresh robot pose, and a passing safety state.
+
+## Known Remaining Risks
+
+- Camera-LiDAR extrinsic calibration must be measured on the real vehicle.
+- Bird model quality depends on an airport/runway dataset and false-positive testing.
+- Mid360 frame axes must be verified with TF and pointcloud visualization.
+- Battery thresholds must be calibrated under load.
+- Hardware E-stop and serial protocol direction must be validated wheel-off first.

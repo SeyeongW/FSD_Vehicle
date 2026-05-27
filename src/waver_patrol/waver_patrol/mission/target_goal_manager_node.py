@@ -29,6 +29,7 @@ class Candidate:
     source: str
     moving: bool = False
     bird_confirmed: bool = False
+    fusion_valid: bool = False
 
 
 class TargetGoalManagerNode(Node):
@@ -52,10 +53,22 @@ class TargetGoalManagerNode(Node):
         self.declare_parameter("require_motion", True)
         self.declare_parameter("require_bird_confirmed", False)
         self.declare_parameter("allow_radar_without_bird_confirmed", True)
+        self.declare_parameter("require_3d_fusion_valid", False)
+        self.declare_parameter("enforce_mode_gate", False)
+        self.declare_parameter("allowed_trigger_modes", ["PATROL", "AUTO", "BIRD_CONFIRMED"])
+        self.declare_parameter("mode_topic", "/waver/mode")
+        self.declare_parameter("safety_state_topic", "/waver/safety_state")
+        self.declare_parameter("battery_safety_state_topic", "/waver/battery_safety_state")
+        self.declare_parameter("emergency_stop_topic", "/waver/emergency_stop")
+        self.declare_parameter("external_stop_topic", "/waver/external_stop")
+        self.declare_parameter("bird_target_valid_topic", "/waver/bird_target_valid")
+        self.declare_parameter("bird_target_pose_map_topic", "/waver/bird_target_pose_map")
         self.declare_parameter("goal_offset_distance_m", 1.5)
         self.declare_parameter("goal_publish_cooldown_sec", 3.0)
         self.declare_parameter("target_hold_sec", 1.0)
         self.declare_parameter("target_lost_timeout_sec", 2.0)
+        self.declare_parameter("target_pose_stale_timeout_sec", 3.0)
+        self.declare_parameter("robot_pose_stale_timeout_sec", 2.0)
         self.declare_parameter("goal_yaw_policy", "FACE_TARGET")
         self.declare_parameter("robot_pose_topic", "/amcl_pose")
         self.declare_parameter("robot_odom_topic", "/odom")
@@ -66,10 +79,12 @@ class TargetGoalManagerNode(Node):
         self.declare_parameter("elevated_dynamic_targets_topic", "/waver/elevated_dynamic_targets")
         self.declare_parameter("subscribe_raw_lidar_objects", False)
         self.declare_parameter("subscribe_lidar_objects_map", False)
+        self.declare_parameter("target_goal_state_topic", "/waver/target_goal_state")
 
         self.goal_pub = self.create_publisher(PoseStamped, "/waver/object_mission_goal", 10)
         self.active_pub = self.create_publisher(Bool, "/waver/object_mission_goal_active", 10)
         self.state_pub = self.create_publisher(String, "/waver/object_mission_goal_state", 10)
+        self.target_goal_state_pub = self.create_publisher(String, str(self.get_parameter("target_goal_state_topic").value), 10)
 
         if bool(self.get_parameter("use_tf_transform").value) and Buffer is not None:
             self.tf_buffer = Buffer()
@@ -81,9 +96,16 @@ class TargetGoalManagerNode(Node):
         self.radar_active = False
         self.aerial_active = False
         self.bird_confirmed = False
+        self.bird_target_valid = False
+        self.mode = "STANDBY"
+        self.safety_state = "UNKNOWN"
+        self.battery_safety_state = "UNKNOWN"
+        self.estop = False
+        self.external_stop = False
         self.last_goal_time = -1e9
         self.last_candidate_time = 0.0
         self.robot_pose: PoseStamped | None = None
+        self.robot_pose_time = 0.0
 
         self.create_subscription(PoseStamped, "/waver/radar_target_goal", self.radar_goal_callback, 10)
         self.create_subscription(Bool, "/waver/radar_target_active", lambda m: setattr(self, "radar_active", bool(m.data)), 10)
@@ -108,6 +130,12 @@ class TargetGoalManagerNode(Node):
             self.elevated_dynamic_targets_callback,
             10,
         )
+        self.create_subscription(
+            PoseStamped,
+            str(self.get_parameter("bird_target_pose_map_topic").value),
+            self.bird_target_pose_callback,
+            10,
+        )
         if bool(self.get_parameter("subscribe_raw_lidar_objects").value):
             self.create_subscription(
                 PoseArray,
@@ -129,6 +157,12 @@ class TargetGoalManagerNode(Node):
                 10,
             )
         self.create_subscription(Bool, "/waver/bird_confirmed", lambda m: setattr(self, "bird_confirmed", bool(m.data)), 10)
+        self.create_subscription(Bool, str(self.get_parameter("bird_target_valid_topic").value), lambda m: setattr(self, "bird_target_valid", bool(m.data)), 10)
+        self.create_subscription(String, str(self.get_parameter("mode_topic").value), lambda m: setattr(self, "mode", m.data.strip().upper()), 10)
+        self.create_subscription(String, str(self.get_parameter("safety_state_topic").value), lambda m: setattr(self, "safety_state", m.data.strip().upper()), 10)
+        self.create_subscription(String, str(self.get_parameter("battery_safety_state_topic").value), lambda m: setattr(self, "battery_safety_state", m.data.strip().upper()), 10)
+        self.create_subscription(Bool, str(self.get_parameter("emergency_stop_topic").value), lambda m: setattr(self, "estop", bool(m.data)), 10)
+        self.create_subscription(Bool, str(self.get_parameter("external_stop_topic").value), lambda m: setattr(self, "external_stop", bool(m.data)), 10)
         self.create_timer(0.5, self.timeout_tick)
 
     def radar_goal_callback(self, msg: PoseStamped) -> None:
@@ -153,6 +187,7 @@ class TargetGoalManagerNode(Node):
         pose.header = msg.header
         pose.pose = msg.pose.pose
         self.robot_pose = pose
+        self.robot_pose_time = self._now()
 
     def robot_odom_callback(self, msg: Odometry) -> None:
         if self.robot_pose is not None:
@@ -161,6 +196,18 @@ class TargetGoalManagerNode(Node):
         pose.header = msg.header
         pose.pose = msg.pose.pose
         self.robot_pose = pose
+        self.robot_pose_time = self._now()
+
+    def bird_target_pose_callback(self, msg: PoseStamped) -> None:
+        self.accept_candidate(
+            Candidate(
+                msg,
+                "bird_3d_fusion",
+                moving=self.bird_target_valid,
+                bird_confirmed=self.bird_confirmed,
+                fusion_valid=self.bird_target_valid,
+            )
+        )
 
     def elevated_dynamic_targets_callback(self, msg: PoseArray) -> None:
         # 역할: height>=3m AND ego-motion-compensated dynamic 필터를 통과한 객체만 mission goal 후보로 받는다.
@@ -181,6 +228,7 @@ class TargetGoalManagerNode(Node):
                     "elevated_dynamic_target",
                     moving=True,
                     bird_confirmed=self.bird_confirmed,
+                    fusion_valid=self.bird_target_valid,
                 )
         if best is not None:
             self.accept_candidate(best)
@@ -205,23 +253,23 @@ class TargetGoalManagerNode(Node):
         now = self._now()
         reason = self.rejection_reason(candidate)
         if reason:
-            self.state_pub.publish(String(data=f"REJECTED source={candidate.source} reason={reason}"))
+            self._publish_state(f"REJECTED source={candidate.source} reason={reason}")
             self.active_pub.publish(Bool(data=False))
             return
         if now - self.last_goal_time < float(self.get_parameter("goal_publish_cooldown_sec").value):
-            self.state_pub.publish(String(data=f"COOLDOWN source={candidate.source}"))
+            self._publish_state(f"COOLDOWN source={candidate.source}")
             self.active_pub.publish(Bool(data=True))
             return
         transformed = self.transform_to_global(candidate.pose)
         if transformed is None:
-            self.state_pub.publish(String(data=f"TF_FAILED source={candidate.source} frame={candidate.pose.header.frame_id}"))
+            self._publish_state(f"TF_FAILED source={candidate.source} frame={candidate.pose.header.frame_id}")
             self.active_pub.publish(Bool(data=False))
             return
         robot_pose = self.robot_pose
         if robot_pose is not None and robot_pose.header.frame_id != transformed.header.frame_id:
             robot_pose = self.transform_to_global(robot_pose)
         if robot_pose is None and bool(self.get_parameter("require_robot_pose_for_goal").value):
-            self.state_pub.publish(String(data=f"REJECTED source={candidate.source} reason=robot_pose_unavailable"))
+            self._publish_state(f"REJECTED source={candidate.source} reason=robot_pose_unavailable")
             self.active_pub.publish(Bool(data=False))
             return
         goal = offset_goal_from_target(
@@ -233,23 +281,37 @@ class TargetGoalManagerNode(Node):
         goal.header.stamp = self.get_clock().now().to_msg()
         self.goal_pub.publish(goal)
         self.active_pub.publish(Bool(data=True))
-        self.state_pub.publish(
-            String(
-                data=(
-                    f"ACCEPTED source={candidate.source} frame={goal.header.frame_id} "
-                    f"goal_x={goal.pose.position.x:.3f} goal_y={goal.pose.position.y:.3f}"
-                )
+        self._publish_state(
+            (
+                f"ACCEPTED source={candidate.source} frame={goal.header.frame_id} "
+                f"goal_x={goal.pose.position.x:.3f} goal_y={goal.pose.position.y:.3f}"
             )
         )
         self.last_goal_time = now
         self.last_candidate_time = now
 
     def rejection_reason(self, candidate: Candidate) -> str:
+        if self.estop:
+            return "emergency_stop_active"
+        if self.external_stop:
+            return "external_stop_active"
+        if bool(self.get_parameter("enforce_mode_gate").value):
+            allowed = {str(v).upper() for v in self.get_parameter("allowed_trigger_modes").value}
+            if self.mode not in allowed:
+                return f"mode_not_allowed:{self.mode}"
+        if any(token in self.safety_state for token in ("EMERGENCY", "STOP", "FAULT")) and "MAPPING" not in self.safety_state:
+            return f"safety_state_blocks:{self.safety_state}"
+        if any(token in self.battery_safety_state for token in ("CRITICAL", "STALE_STOP", "BATTERY_STALE_STOP")):
+            return f"battery_blocks:{self.battery_safety_state}"
         pose = candidate.pose
         if not pose.header.frame_id:
             return "missing_frame_id"
         if not is_finite_pose(pose):
             return "nan_inf_pose"
+        if pose.header.stamp.sec or pose.header.stamp.nanosec:
+            stamp = float(pose.header.stamp.sec) + float(pose.header.stamp.nanosec) * 1e-9
+            if self._now() - stamp > float(self.get_parameter("target_pose_stale_timeout_sec").value):
+                return "target_pose_stale"
         x = float(pose.pose.position.x)
         y = float(pose.pose.position.y)
         z = float(pose.pose.position.z)
@@ -270,6 +332,13 @@ class TargetGoalManagerNode(Node):
         if bool(self.get_parameter("require_bird_confirmed").value) and not candidate.bird_confirmed:
             if candidate.source != "radar" or not bool(self.get_parameter("allow_radar_without_bird_confirmed").value):
                 return "bird_not_confirmed"
+        if bool(self.get_parameter("require_3d_fusion_valid").value) and not candidate.fusion_valid:
+            return "bird_3d_fusion_not_valid"
+        if bool(self.get_parameter("require_robot_pose_for_goal").value):
+            if self.robot_pose is None:
+                return "robot_pose_unavailable"
+            if self._now() - self.robot_pose_time > float(self.get_parameter("robot_pose_stale_timeout_sec").value):
+                return "robot_pose_stale"
         return ""
 
     def transform_to_global(self, msg: PoseStamped) -> PoseStamped | None:
@@ -294,8 +363,13 @@ class TargetGoalManagerNode(Node):
             return
         if self._now() - self.last_candidate_time > float(self.get_parameter("target_lost_timeout_sec").value):
             self.active_pub.publish(Bool(data=False))
-            self.state_pub.publish(String(data="TARGET_LOST_TIMEOUT"))
+            self._publish_state("TARGET_LOST_TIMEOUT")
             self.last_candidate_time = 0.0
+
+    def _publish_state(self, text: str) -> None:
+        msg = String(data=text)
+        self.state_pub.publish(msg)
+        self.target_goal_state_pub.publish(msg)
 
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9

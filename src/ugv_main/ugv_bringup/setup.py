@@ -18,10 +18,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='dudu',
-    maintainer_email='dudu@todo.todo',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    maintainer='chotaehyun',
+    maintainer_email='whxogus4793@naver.com',
+    description='Sensor and legacy base bringup launch files for the Waver UGV platform.',
+    license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [

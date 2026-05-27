@@ -57,6 +57,8 @@ setup(
             'lidar_aerial_motion_detector_node = waver_patrol.perception.lidar_aerial_motion_detector_node:main',
             'livox_pointcloud_to_scan_node = waver_patrol.perception.livox_pointcloud_to_scan_node:main',
             'pointcloud_lidar_objects_node = waver_patrol.perception.pointcloud_lidar_objects_node:main',
+            'bird_detector_node = waver_patrol.perception.bird_detector_node:main',
+            'bird_3d_fusion_node = waver_patrol.perception.bird_3d_fusion_node:main',
             'moving_object_map_transform_node = waver_patrol.perception.moving_object_map_transform_node:main',
             'moving_object_motion_filter_node = waver_patrol.perception.moving_object_motion_filter_node:main',
             'moving_object_goal_relay_node = waver_patrol.perception.moving_object_goal_relay_node:main',

@@ -7,6 +7,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 
 #include <cmath>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <chrono>
@@ -69,17 +70,19 @@ class OdomPublisher : public rclcpp::Node
     double dt = 0.0;
     double x_pos_ = 0.0;
     double y_pos_ = 0.0;
-    float pre_odl;
-    float pre_odr;
-    float vx;  // Linear velocity
-    float vw;  // Angular velocity
+    float pre_odl = 0.0f;
+    float pre_odr = 0.0f;
+    float vx = 0.0f;  // Linear velocity
+    float vw = 0.0f;  // Angular velocity
     bool pub_odom_tf_ = false;
-    bool is_initialized = false;
+    bool odom_initialized_ = false;
     rclcpp::Time last_time_;
     std::string odom_frame = "odom";
-    std::string base_footprint_frame = "base_footprint";
+    std::string base_frame = "base_link";
     float init_odl = 0.0; // Initial value for left wheel encoder
     float init_odr = 0.0; // Initial value for right wheel encoder
+    double wheel_base_ = 0.175;
+    double max_encoder_delta_m_ = 1.0;
 
 public:
     OdomPublisher()
@@ -87,12 +90,21 @@ public:
     {
         // Declare and retrieve parameters
         this->declare_parameter<std::string>("odom_frame", "odom");
-        this->declare_parameter<std::string>("base_footprint_frame", "base_footprint");
+        this->declare_parameter<std::string>("base_frame", "base_link");
+        this->declare_parameter<std::string>("base_footprint_frame", "base_link");
         this->declare_parameter<bool>("pub_odom_tf", false);
+        this->declare_parameter<double>("wheel_base", 0.175);
+        this->declare_parameter<double>("max_encoder_delta_m", 1.0);
 
         this->get_parameter<bool>("pub_odom_tf", pub_odom_tf_);
         this->get_parameter<std::string>("odom_frame", odom_frame);
-        this->get_parameter<std::string>("base_footprint_frame", base_footprint_frame);
+        this->get_parameter<std::string>("base_frame", base_frame);
+        if (base_frame.empty())
+        {
+            this->get_parameter<std::string>("base_footprint_frame", base_frame);
+        }
+        this->get_parameter<double>("wheel_base", wheel_base_);
+        this->get_parameter<double>("max_encoder_delta_m", max_encoder_delta_m_);
 
         // Initialize transform broadcaster
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
@@ -126,17 +138,36 @@ private:
     // Callback to handle raw odometry data and update position/velocity
     void handle_odom(const std::shared_ptr<std_msgs::msg::Float32MultiArray> msg)
     {
-        rclcpp::Time curren_time = rclcpp::Clock().now();
+        if (msg->data.size() < 2)
+        {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Ignoring odom_raw: expected at least 2 encoder values");
+            return;
+        }
+
+        rclcpp::Time current_time = this->now();
 
         float now_odl = msg->data.at(0);  // Left wheel odometry
         float now_odr = msg->data.at(1);  // Right wheel odometry
+        if (!std::isfinite(now_odl) || !std::isfinite(now_odr))
+        {
+            vx = 0.0f;
+            vw = 0.0f;
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Ignoring odom_raw: encoder value is NaN/Inf");
+            return;
+        }
 
         // Initialize encoders if it's the first callback
-        if (!is_initialized)
+        if (!odom_initialized_)
         {
             init_odl = now_odl;
             init_odr = now_odr;
-            is_initialized = true;
+            pre_odl = 0.0f;
+            pre_odr = 0.0f;
+            vx = 0.0f;
+            vw = 0.0f;
+            last_time_ = current_time;
+            odom_initialized_ = true;
+            return;
         }
 
         // Adjust odometry readings by subtracting the initial values
@@ -144,8 +175,8 @@ private:
         now_odr -= init_odr;
 
         // Calculate time delta
-        dt = (curren_time - last_time_).seconds();
-        last_time_ = curren_time;
+        dt = (current_time - last_time_).seconds();
+        last_time_ = current_time;
 
         // Compute distance traveled by each wheel
         float dleft = now_odl - pre_odl;
@@ -155,13 +186,35 @@ private:
         pre_odl = now_odl;
         pre_odr = now_odr;
 
+        if (dt <= 1e-4 || dt > 1.0)
+        {
+            vx = 0.0f;
+            vw = 0.0f;
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Skipping odom velocity update: invalid dt=%.6f", dt);
+            return;
+        }
+        if (std::fabs(dleft) > max_encoder_delta_m_ || std::fabs(dright) > max_encoder_delta_m_)
+        {
+            vx = 0.0f;
+            vw = 0.0f;
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Skipping odom velocity update: encoder jump left=%.3f right=%.3f", dleft, dright);
+            return;
+        }
+
         // Calculate average distance and change in heading
         float dxy_ave = (dright + dleft) / 2.0;
-        float dth = (dright - dleft) / 0.175;
+        float dth = (dright - dleft) / static_cast<float>(wheel_base_);
 
         // Compute linear and angular velocities
         vx = dxy_ave / dt;
         vw = dth / dt;
+        if (!std::isfinite(vx) || !std::isfinite(vw))
+        {
+            vx = 0.0f;
+            vw = 0.0f;
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Reset odom velocity: computed NaN/Inf");
+            return;
+        }
 
         // Update position if robot has moved
         if (dxy_ave != 0)
@@ -185,13 +238,17 @@ private:
     // Function to publish odometry data and broadcast transformation
     void publish_odom()
     {
+        if (!odom_initialized_)
+        {
+            return;
+        }
         auto odom = nav_msgs::msg::Odometry();
         auto trans = geometry_msgs::msg::TransformStamped();
 
         // Set the header information
-        odom.header.stamp = rclcpp::Clock().now();
+        odom.header.stamp = this->now();
         odom.header.frame_id = odom_frame;
-        odom.child_frame_id = base_footprint_frame;
+        odom.child_frame_id = base_frame;
 
         // Set the position and orientation in the odometry message
         odom.pose.pose.position.x = x_pos_;
@@ -223,9 +280,9 @@ private:
         // If enabled, broadcast the transformation
         if (pub_odom_tf_)
         {
-            trans.header.stamp = rclcpp::Clock().now();
+            trans.header.stamp = this->now();
             trans.header.frame_id = odom_frame;
-            trans.child_frame_id = base_footprint_frame;
+            trans.child_frame_id = base_frame;
 
             // Set translation and rotation for the transform
             trans.transform.translation.x = x_pos_;

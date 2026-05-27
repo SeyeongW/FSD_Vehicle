@@ -143,6 +143,7 @@ def main(args: list[str] | None = None) -> None:
             self.declare_parameter("state_topic", "/waver/serial_bridge_state")
             self.declare_parameter("cmd_timeout_s", 0.3)
             self.declare_parameter("serial_port", "")
+            self.declare_parameter("require_explicit_serial_port", False)
             self.declare_parameter("baudrate", 115200)
             self.declare_parameter("command_rate_hz", 20.0)
             self.declare_parameter("stop_repeat", 5)
@@ -157,6 +158,11 @@ def main(args: list[str] | None = None) -> None:
             requested_port = str(self.get_parameter("serial_port").value).strip()
             if requested_port:
                 preferred_ports = [requested_port]
+            elif bool(self.get_parameter("require_explicit_serial_port").value):
+                raise RuntimeError(
+                    "serial_cmd_vel_bridge requires serial_port when require_explicit_serial_port=true. "
+                    "Use /dev/serial/by-id/<WAVER_SERIAL_ID> for real vehicle tests."
+                )
             client = SerialJsonClient(
                 SerialClientConfig(
                     preferred_ports,
