@@ -71,6 +71,7 @@ class PanelState:
     sound_state: str = "unknown"
     gazebo_trial_state: str = "unknown"
     map_apply_state: str = "unknown"
+    current_map_source: str = "NONE"
     height_filter_debug: str = "unknown"
     auto_status: str = "stopped"
     odom_yaw: float = 0.0
@@ -123,6 +124,7 @@ class WaverRemoteNode(Node):
         self.declare_parameter("odom_topic", "/odom")
         self.declare_parameter("amcl_pose_topic", "/amcl_pose")
         self.declare_parameter("map_topic", "/map")
+        self.declare_parameter("fixed_map_topic", "/map_fixed")
         self.declare_parameter("map_display_mode", "auto")
         self.declare_parameter("global_path_topic", "/plan")
         self.declare_parameter("local_path_topic", "/local_plan")
@@ -149,7 +151,10 @@ class WaverRemoteNode(Node):
         self.declare_parameter("mode_topic", "/waver/mode")
         self.declare_parameter("mode_cmd_topic", "/waver/mode_cmd")
         self.declare_parameter("mission_command_topic", "/waver/mission_command")
+        self.declare_parameter("mapping_command_topic", "/waver/mapping_command")
         self.declare_parameter("operator_command_topic", "/waver/operator_command")
+        self.declare_parameter("ui_map_reset_topic", "/waver/ui_map_reset")
+        self.declare_parameter("current_map_source_topic", "/waver/current_map_source")
         self.declare_parameter("keyboard_state_topic", "/waver/operator_keyboard_state")
         self.declare_parameter("emergency_stop_topic", "/waver/emergency_stop")
         self.declare_parameter("mission_reset_topic", "/waver/mission_reset")
@@ -261,6 +266,11 @@ class WaverRemoteNode(Node):
             str(self.get_parameter("mission_command_topic").value),
             10,
         )
+        self.mapping_command_pub = self.create_publisher(
+            String,
+            str(self.get_parameter("mapping_command_topic").value),
+            10,
+        )
         self.operator_command_pub = self.create_publisher(
             String,
             str(self.get_parameter("operator_command_topic").value),
@@ -296,6 +306,12 @@ class WaverRemoteNode(Node):
         self.create_subscription(Twist, self.final_cmd_vel_topic, self.cmd_callback, 10)
         self.create_subscription(Twist, self.auto_cmd_vel_topic, self.auto_cmd_callback, 10)
         self.create_subscription(
+            String,
+            str(self.get_parameter("mode_topic").value),
+            self.mode_state_callback,
+            10,
+        )
+        self.create_subscription(
             Odometry,
             str(self.get_parameter("odom_topic").value),
             self.odom_callback,
@@ -311,6 +327,12 @@ class WaverRemoteNode(Node):
             OccupancyGrid,
             str(self.get_parameter("map_topic").value),
             self.map_callback,
+            10,
+        )
+        self.create_subscription(
+            OccupancyGrid,
+            str(self.get_parameter("fixed_map_topic").value),
+            self.fixed_map_callback,
             10,
         )
         self.create_subscription(
@@ -422,6 +444,18 @@ class WaverRemoteNode(Node):
             10,
         )
         self.create_subscription(
+            Bool,
+            str(self.get_parameter("ui_map_reset_topic").value),
+            self.ui_map_reset_callback,
+            10,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("current_map_source_topic").value),
+            self.current_map_source_callback,
+            10,
+        )
+        self.create_subscription(
             String,
             str(self.get_parameter("battery_state_text_topic").value),
             lambda msg: self.set_text_state("battery_state", msg.data),
@@ -465,6 +499,26 @@ class WaverRemoteNode(Node):
         if mode in {"fixed", "map_fixed", "localization", "patrol", "saved"}:
             return "MAP_FIXED"
         return "AUTO_MAP"
+
+    def mode_state_callback(self, msg: String) -> None:
+        mode = msg.data.strip().upper()
+        if not mode:
+            return
+        with self.lock:
+            self.state.mode = mode
+
+    def ui_map_reset_callback(self, msg: Bool) -> None:
+        if bool(msg.data):
+            self.clear_map_for_new_mapping_session()
+
+    def current_map_source_callback(self, msg: String) -> None:
+        source = msg.data.strip().upper() or "NONE"
+        with self.lock:
+            self.state.current_map_source = source
+            if source in {"SLAM_LIVE_MAP", "MAP_LIVE", "SLAM_LIVE"}:
+                self.state.map_display_mode = "SLAM_LIVE"
+            elif source in {"FIXED_MAP_READY", "SAVED_SLAM_MAP", "STATIC_MAP", "MAP_FIXED"}:
+                self.state.map_display_mode = "MAP_FIXED"
 
     def cmd_callback(self, msg: Twist) -> None:
         # 역할: 현재 /cmd_vel 선속도/각속도를 리모콘 상태창에 표시한다.
@@ -563,6 +617,13 @@ class WaverRemoteNode(Node):
             self.state.map_free = free
             self.state.map_occupied = occupied
             self.state.map_sequence += 1
+
+    def fixed_map_callback(self, msg: OccupancyGrid) -> None:
+        with self.lock:
+            source = self.state.current_map_source
+            mode = self.state.map_display_mode
+        if source in {"FIXED_MAP_READY", "SAVED_SLAM_MAP", "STATIC_MAP", "MAP_FIXED"} or mode == "MAP_FIXED":
+            self.map_callback(msg)
 
     def global_path_callback(self, msg: Path) -> None:
         # 역할: Nav2/global planner가 만든 전체 경로를 리모콘 지도에 파란 선으로 표시한다.
@@ -763,6 +824,7 @@ class WaverRemoteNode(Node):
             self.state.elevated_targets.clear()
             self.state.map_sequence += 1
             self.state.map_display_mode = "SLAM_LIVE"
+            self.state.current_map_source = "SLAM_LIVE_MAP"
             self.state.map_apply_state = "OLD_MAP_UNAPPLIED_MAPPING_STARTED"
             self.state.auto_status = "mapping session cleared; waiting live /map"
 
@@ -890,7 +952,13 @@ class WaverRemoteNode(Node):
                     self.state.auto_status = f"START_BLOCKED reason={reason}"
                 self.get_logger().warn(f"START_BLOCKED reason={reason}")
                 return
+        if normalized in {"APPLY_FIXED_MAP", "APPLY_MAP", "LOAD_MAP", "START_LOCALIZATION"}:
+            self.stop_optional_process("mapping_process", "mapping")
+        elif normalized == "STOP_MAPPING":
+            self.stop_optional_process("mapping_process", "mapping")
         msg = String(data=normalized)
+        if normalized in {"START_MAPPING", "STOP_MAPPING", "SAVE_MAP", "APPLY_FIXED_MAP", "APPLY_MAP", "LOAD_MAP", "START_LOCALIZATION"}:
+            self.mapping_command_pub.publish(msg)
         self.mission_command_pub.publish(msg)
         self.operator_command_pub.publish(msg)
         self.get_logger().info(f"operator command sent: {normalized}")
@@ -2187,6 +2255,7 @@ class WaverRemotePanel:
             sound = self.state.sound_state
             trial = self.state.gazebo_trial_state
             map_apply = self.state.map_apply_state
+            current_map_source = self.state.current_map_source
             height_filter = self.state.height_filter_debug
             auto = self.state.auto_status
             auto_linear = self.state.latest_auto_linear
@@ -2233,7 +2302,7 @@ class WaverRemotePanel:
         self.camera_var.set(f"camera: {camera}")
         self.sound_var.set(f"sound: {sound}")
         self.trial_var.set(f"trial: {trial}")
-        self.map_apply_var.set(f"map apply: {map_apply}")
+        self.map_apply_var.set(f"map source: {current_map_source}\nmap apply: {map_apply}")
         self.auto_var.set(f"auto: {auto}")
         self.auto_cmd_var.set(
             f"nav2 candidate: {auto_linear:+.2f} m/s, {auto_angular:+.2f} rad/s, "

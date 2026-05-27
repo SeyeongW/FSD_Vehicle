@@ -40,6 +40,7 @@ class GazeboMapPathVisualizerNode(Node):
         self.declare_parameter("active_goal_topic", "/waver/active_nav_goal")
         self.declare_parameter("current_waypoint_topic", "/waver/current_waypoint")
         self.declare_parameter("dynamic_obstacle_topic", "/waver/dynamic_obstacle_map")
+        self.declare_parameter("publish_map", True)
         self.declare_parameter("enable_dynamic_obstacle_detour", False)
         self.declare_parameter("avoidance_corridor_radius_m", 0.55)
         self.declare_parameter("avoidance_offset_m", 0.85)
@@ -58,11 +59,13 @@ class GazeboMapPathVisualizerNode(Node):
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.VOLATILE,
         )
-        self.map_pub = self.create_publisher(
-            OccupancyGrid,
-            str(self.get_parameter("map_topic").value),
-            map_qos,
-        )
+        self.map_pub = None
+        if bool(self.get_parameter("publish_map").value):
+            self.map_pub = self.create_publisher(
+                OccupancyGrid,
+                str(self.get_parameter("map_topic").value),
+                map_qos,
+            )
         self.global_path_pub = self.create_publisher(
             NavPath,
             str(self.get_parameter("global_path_topic").value),
@@ -79,7 +82,7 @@ class GazeboMapPathVisualizerNode(Node):
         self.obstacle: PointStamped | None = None
         self.last_obstacle_time = 0.0
         self.pause_fixed_map = False
-        self.map_msg = self.load_map(str(self.get_parameter("map_yaml").value))
+        self.map_msg = self.load_map(str(self.get_parameter("map_yaml").value)) if self.map_pub is not None else None
 
         self.create_subscription(
             Odometry,
@@ -144,7 +147,7 @@ class GazeboMapPathVisualizerNode(Node):
 
     def publish_tick(self) -> None:
         now = self.get_clock().now().to_msg()
-        if self.map_msg is not None and not self.pause_fixed_map:
+        if self.map_pub is not None and self.map_msg is not None and not self.pause_fixed_map:
             self.map_msg.header.stamp = now
             self.map_pub.publish(self.map_msg)
         if self.odom is None:

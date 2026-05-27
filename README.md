@@ -7,8 +7,11 @@
 - Gazebo world: `ugv_gazebo/worlds/ugv_world.world`
 - Gazebo robot model: `ugv_gazebo/models/ugv_rover/model.sdf`
 - SLAM Mapping 기본값: LiDAR-only `slam_gmapping` on `/scan`
+- Mapping live map: `/map`
+- Applied fixed map: `/map_fixed`
 - 리모콘 UI 직접 `/cmd_vel` 발행 금지: `publish_direct_cmd_vel:=false`
 - 최종 `/cmd_vel` publisher: `safety_cmd_mux_node` 1개만 허용
+- mode authority: `/waver/mode`는 `mission_patrol_manager_node` 1개만 publish
 
 현재 사용자 실험 기준 workspace는 `~/ros2_ws`이다. 소스 repo는
 `~/ros2_ws/FSD_Vehicle`이며, 중복 repo가 colcon에 보이면 반드시 한쪽에
@@ -57,9 +60,9 @@ source install/setup.bash
 
 ---
 
-## 1. Gazebo만 실행
+## 1. Gazebo Mapping Debug 실행
 
-터미널 1에서 공항맵과 `ugv_rover`만 실행한다. 이 명령은 리모콘 UI를 같이 띄우지 않는다.
+공항맵과 `ugv_rover`를 띄우고 SLAM mapping debug stack을 실행한다. 리모콘 UI를 별도 터미널에서 켤 때는 `use_operator_panel:=false`를 사용한다.
 
 ```bash
 cd ~/ros2_ws
@@ -67,9 +70,12 @@ source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
 
-ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
+ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
   use_gui:=true \
   use_operator_panel:=false \
+  mapping_backend:=gmapping \
+  scan_source_slam:=gazebo_laser \
+  scan_source_safety:=gazebo_laser \
   robot_spawn_x:=0.0 \
   robot_spawn_y:=0.0 \
   robot_spawn_z:=0.15
@@ -78,9 +84,10 @@ ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
 명시적으로 world/model 경로를 지정하고 싶으면 다음처럼 설치된 package share 경로를 쓴다.
 
 ```bash
-ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
+ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
   use_gui:=true \
   use_operator_panel:=false \
+  mapping_backend:=gmapping \
   world_file:=$(ros2 pkg prefix ugv_gazebo)/share/ugv_gazebo/worlds/ugv_world.world \
   robot_sdf_file:=$(ros2 pkg prefix ugv_gazebo)/share/ugv_gazebo/models/ugv_rover/model.sdf \
   robot_spawn_x:=0.0 \
@@ -102,8 +109,9 @@ export ROS_DOMAIN_ID=30
 
 ros2 launch ugv_tools waver_operator_panel.launch.py \
   map_topic:=/map \
+  fixed_map_topic:=/map_fixed \
   map_display_mode:=auto \
-  global_path_topic:=/plan \
+  global_path_topic:=/waver/mapping_path \
   local_path_topic:=/local_plan \
   require_scan:=false \
   auto_mode_strategy:=mission_nav2 \
@@ -115,7 +123,7 @@ UI에서 사용하는 주요 버튼:
 - `SLAM MAPPING`: 기존 UI map/trace/path/goal overlay를 clear하고 LiDAR-only SLAM mapping backend를 시작한다.
 - `STOP MAPPING`: mapping motion을 멈추고 저장/적용 대기 상태로 둔다.
 - `SAVE MAP`: 현재 `/map`을 `~/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml`로 저장한다.
-- `APPLY FIXED MAP`: 저장된 map을 다시 `/map`으로 publish하여 UI fixed map으로 적용한다.
+- `APPLY FIXED MAP`: 저장된 map을 `/map_fixed`로 publish하고 UI source를 fixed map으로 전환한다.
 - `START PATROL`: fixed map / localization / mission backend 기준 순찰 시작 요청.
 - `STOP`: goal cancel + STANDBY.
 - `E-STOP`: EMERGENCY latch.
@@ -144,7 +152,7 @@ UI에서 사용하는 주요 버튼:
 2. WASD 또는 방향키로 천천히 주행하며 LiDAR SLAM map 생성
 3. UI에서 `SAVE MAP` 클릭
 4. UI에서 `APPLY FIXED MAP` 클릭
-5. UI map 상태가 `MAP_FIXED_READY` 또는 fixed map 상태인지 확인
+5. UI map 상태가 `map source: FIXED_MAP_READY` 및 `MAP_FIXED_READY`인지 확인
 6. 필요 시 `START PATROL` 클릭
 
 저장되는 map:
@@ -154,7 +162,7 @@ UI에서 사용하는 주요 버튼:
 ~/ros2_ws/FSD_Vehicle/maps/waver_latest_map.pgm
 ```
 
-SLAM 중 UI가 `SLAM_LIVE`로 표시되어야 한다. `APPLY FIXED MAP` 후에는 map grid가 차체 yaw에 따라 같이 회전하지 않고, 로봇 pose/arrow/path만 map 위에서 움직여야 한다.
+SLAM 중 UI가 `SLAM_LIVE`로 표시되어야 한다. mapping 중 `/map` publisher는 SLAM live source 하나여야 하며, fixed map은 `/map_fixed`로 분리된다. `APPLY FIXED MAP` 후에는 map grid가 차체 yaw에 따라 같이 회전하지 않고, 로봇 pose/arrow/path만 map 위에서 움직여야 한다.
 
 ---
 
@@ -170,9 +178,10 @@ source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
 
-ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
+ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
   use_gui:=true \
   use_operator_panel:=true \
+  mapping_backend:=gmapping \
   demo_script:=mapping_workflow_smoke \
   demo_close_on_finish:=true
 ```
@@ -185,9 +194,10 @@ source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
 
-ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
+ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
   use_gui:=true \
   use_operator_panel:=true \
+  mapping_backend:=gmapping \
   demo_script:=mapping_full_coverage \
   demo_close_on_finish:=true
 ```
@@ -288,16 +298,17 @@ source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
 
-ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
+ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
   use_gui:=false \
   use_operator_panel:=true \
+  mapping_backend:=gmapping \
   demo_script:=mapping_workflow_smoke \
   demo_close_on_finish:=true
 ```
 
-최근 검증 기준:
+검증 기준:
 
-- AI 직접 Gazebo + 리모콘 UI 10회 반복 성공
+- 최신 코드 수정 후에는 같은 commit에서 Gazebo + 리모콘 UI 반복 검증을 다시 수집한다.
 - `/scan` 평균 약 13.2 Hz
 - map save/apply 성공
 - depth/RGB-D SLAM topic 미사용
@@ -401,6 +412,7 @@ ros2 topic hz /local_plan
 
 ```bash
 ros2 topic echo /waver/mapping_state
+ros2 topic echo /waver/current_map_source
 ros2 topic echo /waver/map_apply_state
 ros2 topic echo /waver/map_saved_path
 ros2 topic echo /waver/mission_state
@@ -413,6 +425,9 @@ ros2 topic echo /waver/active_nav_goal
 
 ```bash
 ros2 topic info -v /cmd_vel
+ros2 topic info -v /waver/mode
+ros2 topic info -v /map
+ros2 topic info -v /map_fixed
 ros2 topic info -v /waver/manual_cmd_vel
 ros2 topic info -v /waver/cmd_vel_nav2
 ```
@@ -421,6 +436,8 @@ ros2 topic info -v /waver/cmd_vel_nav2
 
 - `/cmd_vel` publisher count = 1
 - `/cmd_vel` publisher node = `safety_cmd_mux_node`
+- `/waver/mode` publisher count = 1
+- `/waver/mode` publisher node = `mission_patrol_manager_node`
 - UI는 `/waver/manual_cmd_vel`만 publish
 - Nav2는 `/waver/cmd_vel_nav2`로 remap
 
@@ -524,7 +541,9 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   enable_waver_base_driver:=false \
   default_mode:=STANDBY \
   safety_max_linear_speed:=0.05 \
-  scan_source:=mid360 \
+  safety_max_angular_speed:=0.20 \
+  scan_source_safety:=mid360 \
+  scan_source_slam:=mid360 \
   odom_source:=ekf \
   map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
   bird_model_path:=$HOME/models/bird_yolov8n.pt
@@ -542,7 +561,8 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   default_mode:=STANDBY \
   safety_max_linear_speed:=0.05 \
   safety_max_angular_speed:=0.20 \
-  scan_source:=mid360 \
+  scan_source_safety:=mid360 \
+  scan_source_slam:=mid360 \
   odom_source:=ekf \
   map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
   bird_model_path:=$HOME/models/bird_yolov8n.pt
@@ -565,7 +585,8 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   default_mode:=STANDBY \
   safety_max_linear_speed:=0.05 \
   safety_max_angular_speed:=0.20 \
-  scan_source:=mid360 \
+  scan_source_safety:=mid360 \
+  scan_source_slam:=mid360 \
   odom_source:=ekf \
   map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
   bird_model_path:=$HOME/models/bird_yolov8n.pt
@@ -621,7 +642,7 @@ ros2 topic echo /gazebo/model_states --once
 ros2 pkg prefix ugv_gazebo
 ```
 
-`gazebo_mapping_mode.launch.py` 기본값은 `ugv_world.world`와 `ugv_rover`를 사용한다.
+`waver_gazebo_mapping_debug.launch.py`와 `gazebo_mapping_mode.launch.py` 기본값은 `ugv_world.world`와 `ugv_rover`를 사용한다.
 
 ### SLAM map이 점처럼 보일 때
 

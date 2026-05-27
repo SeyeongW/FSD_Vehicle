@@ -33,6 +33,14 @@ if [ "$MODE_PUB_COUNT" -ne 1 ]; then
   echo "ERROR: expected exactly one /waver/mode publisher, got $MODE_PUB_COUNT"
   exit 4
 fi
+if ! grep -q 'Node name: mission_patrol_manager_node' /tmp/waver_mode_info.txt; then
+  echo "ERROR: /waver/mode publisher is not mission_patrol_manager_node"
+  exit 4
+fi
+if grep -q 'Node name: mapping_workflow_manager_node' /tmp/waver_mode_info.txt; then
+  echo "ERROR: mapping_workflow_manager_node must not publish /waver/mode"
+  exit 4
+fi
 
 echo
 echo "== /scan and /odom publisher uniqueness =="

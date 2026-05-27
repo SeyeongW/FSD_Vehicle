@@ -117,6 +117,11 @@ pointcloud_lidar_objects_node:
     pointcloud_topic: "/mid360_PointCloud2"
     output_pose_array_topic: "/waver/lidar_objects"
     state_topic: "/waver/lidar_objects_state"
+    target_frame: "base_link"
+    forward_axis: "x"
+    lateral_axis: "y"
+    height_axis: "z"
+    positive_lateral_is_left: true
     min_height_m: 0.35
     max_height_m: 8.0
     min_depth_m: 0.2

@@ -27,6 +27,7 @@ class MappingWorkflowManagerNode(Node):
     def __init__(self) -> None:
         super().__init__("mapping_workflow_manager_node")
         self.declare_parameter("map_topic", "/map")
+        self.declare_parameter("mapping_command_topic", "/waver/mapping_command")
         self.declare_parameter("mission_command_topic", "/waver/mission_command")
         self.declare_parameter("operator_command_topic", "/waver/operator_command")
         self.declare_parameter("save_dir", "~/ros2_ws/FSD_Vehicle/maps")
@@ -36,7 +37,7 @@ class MappingWorkflowManagerNode(Node):
         self.declare_parameter("crop_unknown_border_on_save", True)
         self.declare_parameter("crop_margin_cells", 20)
         self.declare_parameter("known_ratio_min_for_save", 0.01)
-        self.declare_parameter("fixed_map_topic", "/map")
+        self.declare_parameter("fixed_map_topic", "/map_fixed")
         self.declare_parameter("fixed_map_publish_period_sec", 1.0)
 
         state_qos = QoSProfile(depth=1)
@@ -45,18 +46,17 @@ class MappingWorkflowManagerNode(Node):
         self.mapping_state_pub = self.create_publisher(String, "/waver/mapping_state", state_qos)
         self.map_apply_state_pub = self.create_publisher(String, "/waver/map_apply_state", state_qos)
         self.map_saved_path_pub = self.create_publisher(String, "/waver/map_saved_path", state_qos)
+        self.current_map_source_pub = self.create_publisher(String, "/waver/current_map_source", state_qos)
+        self.slam_map_received_pub = self.create_publisher(Bool, "/waver/slam_map_received", 10)
+        self.ui_map_reset_pub = self.create_publisher(Bool, "/waver/ui_map_reset", 10)
         self.mapping_active_pub = self.create_publisher(Bool, "/waver/mapping_active", 10)
         self.mapping_progress_pub = self.create_publisher(Float32, "/waver/mapping_progress", 10)
-        self.mode_pub = self.create_publisher(String, "/waver/mode", 10)
         self.fault_pub = self.create_publisher(String, "/waver/mapping_fault_reason", 10)
         map_qos = QoSProfile(depth=1)
         map_qos.reliability = ReliabilityPolicy.RELIABLE
         map_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
-        self.fixed_map_pub = self.create_publisher(
-            OccupancyGrid,
-            str(self.get_parameter("fixed_map_topic").value),
-            map_qos,
-        )
+        self.fixed_map_qos = map_qos
+        self.fixed_map_pub = None
 
         self.last_map: OccupancyGrid | None = None
         self.fixed_map: OccupancyGrid | None = None
@@ -73,6 +73,12 @@ class MappingWorkflowManagerNode(Node):
             OccupancyGrid,
             str(self.get_parameter("map_topic").value),
             self.map_callback,
+            10,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("mapping_command_topic").value),
+            self.command_callback,
             10,
         )
         self.create_subscription(
@@ -95,6 +101,7 @@ class MappingWorkflowManagerNode(Node):
         known_ratio = self.known_ratio(msg)
         self.mapping_progress_pub.publish(Float32(data=float(known_ratio)))
         if self.mapping_active:
+            self.slam_map_received_pub.publish(Bool(data=True))
             self.mapping_state_pub.publish(String(data=f"SLAM_LIVE known_ratio={known_ratio:.3f}"))
 
     def command_callback(self, msg: String) -> None:
@@ -108,10 +115,13 @@ class MappingWorkflowManagerNode(Node):
         if command == "START_MAPPING":
             self.mapping_active = True
             self.last_map = None
-            self.mode_pub.publish(String(data="MAPPING_AUTO"))
+            self.fixed_map = None
             self.mapping_active_pub.publish(Bool(data=True))
+            self.slam_map_received_pub.publish(Bool(data=False))
+            self.ui_map_reset_pub.publish(Bool(data=True))
+            self.current_map_source_pub.publish(String(data="SLAM_LIVE_MAP"))
             self.map_apply_state_pub.publish(String(data="OLD_MAP_UNAPPLIED_MAPPING_STARTED"))
-            self.mapping_state_pub.publish(String(data="START_MAPPING accepted; waiting for live /map"))
+            self.mapping_state_pub.publish(String(data="MAPPING_ACTIVE waiting_for_live_map"))
         elif command == "SAVE_MAP":
             self.start_save_thread()
         elif command in {"APPLY_FIXED_MAP", "APPLY_MAP", "LOAD_MAP", "START_LOCALIZATION"}:
@@ -125,11 +135,10 @@ class MappingWorkflowManagerNode(Node):
             self.mapping_active = False
             self.mapping_active_pub.publish(Bool(data=False))
             self.mapping_state_pub.publish(String(data=f"{command} accepted"))
-            if command == "EMERGENCY_STOP":
-                self.mode_pub.publish(String(data="EMERGENCY"))
-            elif command == "STOP_MAPPING":
-                self.mode_pub.publish(String(data="STANDBY"))
+            if command == "STOP_MAPPING":
+                self.current_map_source_pub.publish(String(data="MAP_SAVED_NOT_APPLIED" if self.saved_yaml else "NONE"))
                 self.map_apply_state_pub.publish(String(data="MAPPING_STOPPED_SAVE_OR_APPLY_REQUIRED"))
+                self.mapping_state_pub.publish(String(data="MAPPING_STOPPED"))
 
     def start_save_thread(self) -> None:
         if self.saving:
@@ -182,6 +191,7 @@ class MappingWorkflowManagerNode(Node):
                     return
             self.saved_yaml = str(old_yaml)
             self.map_saved_path_pub.publish(String(data=self.saved_yaml))
+            self.current_map_source_pub.publish(String(data="SAVED_SLAM_MAP_NOT_APPLIED"))
             self.map_apply_state_pub.publish(String(data=f"MAP_SAVED_NOT_APPLIED {self.saved_yaml}"))
             self.mapping_state_pub.publish(String(data=f"SAVE_MAP_OK {self.saved_yaml}"))
             self.get_logger().info(f"SAVE_MAP_OK {self.saved_yaml}")
@@ -213,14 +223,20 @@ class MappingWorkflowManagerNode(Node):
             return
         self.mapping_active = False
         self.fixed_map = fixed_map
+        if self.fixed_map_pub is None:
+            self.fixed_map_pub = self.create_publisher(
+                OccupancyGrid,
+                str(self.get_parameter("fixed_map_topic").value),
+                self.fixed_map_qos,
+            )
         self.mapping_active_pub.publish(Bool(data=False))
         self.map_saved_path_pub.publish(String(data=self.saved_yaml))
         self.fixed_map_pub.publish(fixed_map)
         self.last_fixed_map_pub_time = self._now()
+        self.current_map_source_pub.publish(String(data="FIXED_MAP_READY"))
         self.map_apply_state_pub.publish(String(data=f"MAP_FIXED_READY {self.saved_yaml}"))
         self.mapping_state_pub.publish(String(data="MAP_FIXED_READY"))
         self.get_logger().info(f"MAP_FIXED_READY {self.saved_yaml}")
-        self.mode_pub.publish(String(data="STANDBY"))
 
     def tick(self) -> None:
         self.mapping_active_pub.publish(Bool(data=self.mapping_active))
@@ -231,7 +247,8 @@ class MappingWorkflowManagerNode(Node):
             now = self._now()
             if now - self.last_fixed_map_pub_time >= max(0.2, period):
                 self.fixed_map.header.stamp = self.get_clock().now().to_msg()
-                self.fixed_map_pub.publish(self.fixed_map)
+                if self.fixed_map_pub is not None:
+                    self.fixed_map_pub.publish(self.fixed_map)
                 self.last_fixed_map_pub_time = now
 
     @staticmethod

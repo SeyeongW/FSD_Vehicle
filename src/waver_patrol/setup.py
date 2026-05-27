@@ -64,6 +64,7 @@ setup(
             'moving_object_motion_filter_node = waver_patrol.perception.moving_object_motion_filter_node:main',
             'moving_object_goal_relay_node = waver_patrol.perception.moving_object_goal_relay_node:main',
             'bird_detection_pipeline_node = waver_patrol.perception.bird_detection_pipeline_node:main',
+            'mapping_path_publisher_node = waver_patrol.mapping.mapping_path_publisher_node:main',
             'target_body_tracker_node = waver_patrol.control.target_body_tracker_node:main',
             'auto_behavior_mux_node = waver_patrol.control.auto_behavior_mux_node:main',
             'safety_cmd_mux_node = waver_patrol.safety.safety_cmd_mux_node:main',

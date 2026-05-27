@@ -47,7 +47,7 @@ def generate_launch_description() -> LaunchDescription:
             LogInfo(
                 msg=(
                     "Gazebo mapping mode: ugv_world.world + ugv_rover + live /map reveal. "
-                    "Use /waver/mission_command START_MAPPING and SAVE_MAP; saved map is applied back to /map."
+                    "Use /waver/mapping_command START_MAPPING and SAVE_MAP; fixed maps are separated on /map_fixed."
                 )
             ),
             IncludeLaunchDescription(
@@ -65,8 +65,10 @@ def generate_launch_description() -> LaunchDescription:
                     "enable_mission_stack": "true",
                     "enable_radar_command_bridge": "false",
                     "enable_target_goal_manager": "false",
+                    "enable_pointcloud_lidar_objects": "false",
                     "enable_simple_nav2_cmd_sim": "false",
                     "enable_gazebo_map_path_visualizer": "true",
+                    "gazebo_visualizer_publish_map": "false",
                     "enable_moving_object_motion_filter": "false",
                     "enable_cluster_node": "false",
                     "enable_trial_logger": "false",
@@ -86,6 +88,20 @@ def generate_launch_description() -> LaunchDescription:
                         "use_sim_time": True,
                         "save_dir": LaunchConfiguration("save_dir"),
                         "save_basename": LaunchConfiguration("save_basename"),
+                    }
+                ],
+            ),
+            Node(
+                package="waver_patrol",
+                executable="mapping_path_publisher_node",
+                name="mapping_path_publisher_node",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "map_frame": "map",
+                        "odom_frame": "odom",
+                        "base_frame": "base_link",
                     }
                 ],
             ),
@@ -120,8 +136,9 @@ def generate_launch_description() -> LaunchDescription:
                 parameters=[
                     {
                         "map_topic": "/map",
+                        "fixed_map_topic": "/map_fixed",
                         "map_display_mode": "slam_live",
-                        "global_path_topic": "/plan",
+                        "global_path_topic": "/waver/mapping_path",
                         "local_path_topic": "/local_plan",
                         "lidar_required": False,
                         "publish_direct_cmd_vel": False,

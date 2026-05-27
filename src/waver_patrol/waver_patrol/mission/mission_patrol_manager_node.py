@@ -146,6 +146,8 @@ class MissionPatrolManagerNode(Node):
         self.target_mission_id = 0
         self.post_target_resume_cooldown_until = 0.0
         self.target_interrupt_locked = False
+        self.mapping_state = "IDLE"
+        self.mapping_active = False
 
         self.state_pub = self.create_publisher(String, "/waver/mission_state", 10)
         self.event_pub = self.create_publisher(String, "/waver/mission_event", 10)
@@ -160,6 +162,8 @@ class MissionPatrolManagerNode(Node):
         self.create_subscription(Bool, "/waver/return_home_active", lambda m: setattr(self, "return_home_active", bool(m.data)), 10)
         self.create_subscription(PoseStamped, "/waver/return_goal", lambda m: setattr(self, "return_goal", m), 10)
         self.create_subscription(String, str(self.get_parameter("mode_cmd_topic").value), self.mode_callback, 10)
+        self.create_subscription(String, "/waver/mapping_state", self.mapping_state_callback, 10)
+        self.create_subscription(Bool, "/waver/mapping_active", self.mapping_active_callback, 10)
         self.create_subscription(
             String,
             str(self.get_parameter("mission_command_topic").value),
@@ -192,7 +196,59 @@ class MissionPatrolManagerNode(Node):
         self.publish_event("STARTUP", "mission_patrol_manager initialized")
 
     def mode_callback(self, msg: String) -> None:
-        self.mode = msg.data.strip().upper()
+        requested = msg.data.strip().upper()
+        if not requested:
+            return
+        if requested in {"MAPPING", "MAPPING_AUTO", "MAPPING_MANUAL"}:
+            self.mapping_active = True
+            self.clear_mission_for_mapping("mode_cmd")
+            self.set_mode("MAPPING_MANUAL" if requested == "MAPPING_MANUAL" else "MAPPING_AUTO", "mode_cmd")
+            return
+        if requested in {"AUTO", "PATROL"} and (self.mapping_active or self.mode in {"MAPPING_AUTO", "MAPPING_MANUAL"}):
+            self.publish_event("MODE_CMD_BLOCKED", f"requested={requested} reason=mapping_active")
+            return
+        if requested == "RETURN_HOME":
+            self.return_home_active = True
+            self.set_mode("AUTO", "mode_cmd_RETURN_HOME")
+            return
+        if requested == "EMERGENCY":
+            self.estop = True
+            self.handle_stop("mode_cmd_EMERGENCY")
+            self.set_mode("EMERGENCY", "mode_cmd")
+            return
+        if requested in {"AUTO", "PATROL", "MANUAL", "STANDBY"}:
+            self.set_mode("AUTO" if requested == "PATROL" else requested, "mode_cmd")
+
+    def mapping_state_callback(self, msg: String) -> None:
+        state = msg.data.strip()
+        normalized = state.upper()
+        self.mapping_state = normalized
+        mapping_active = (
+            normalized.startswith("MAPPING_ACTIVE")
+            or normalized.startswith("SLAM_LIVE")
+            or normalized.startswith("START_MAPPING")
+        )
+        if mapping_active:
+            self.mapping_active = True
+            self.clear_mission_for_mapping("mapping_state")
+            if self.mode not in {"MAPPING_AUTO", "MAPPING_MANUAL", "EMERGENCY"}:
+                self.set_mode("MAPPING_AUTO", "mapping_state")
+            self.publish_event("MAPPING_MODE_ACTIVE", state)
+        elif normalized.startswith("MAP_FIXED_READY") or normalized.startswith("MAPPING_STOPPED"):
+            self.mapping_active = False
+            if self.mode in {"MAPPING_AUTO", "MAPPING_MANUAL"}:
+                self.set_mode("STANDBY", "mapping_state")
+            self.publish_event("MAPPING_MODE_IDLE", state)
+
+    def mapping_active_callback(self, msg: Bool) -> None:
+        active = bool(msg.data)
+        self.mapping_active = active
+        if active:
+            self.clear_mission_for_mapping("mapping_active_topic")
+            if self.mode not in {"MAPPING_AUTO", "MAPPING_MANUAL", "EMERGENCY"}:
+                self.set_mode("MAPPING_AUTO", "mapping_active_topic")
+        elif self.mode in {"MAPPING_AUTO", "MAPPING_MANUAL"} and self.mapping_state.startswith("MAPPING_STOPPED"):
+            self.set_mode("STANDBY", "mapping_active_topic")
 
     def mission_reset_callback(self, msg: Bool) -> None:
         if not bool(msg.data):
@@ -220,7 +276,28 @@ class MissionPatrolManagerNode(Node):
             return
         self.publish_event("MISSION_COMMAND", command)
 
+        if command == "START_MAPPING":
+            self.mapping_active = True
+            self.clear_mission_for_mapping(command)
+            self.set_mode("MAPPING_AUTO", command)
+            return
+
+        if command == "STOP_MAPPING":
+            self.mapping_active = False
+            self.target_interrupt_locked = False
+            self.cancel_active_goal(command)
+            self.set_mode("STANDBY", command)
+            self.set_state(MissionState.IDLE, command)
+            return
+
+        if command in {"SAVE_MAP", "APPLY_FIXED_MAP", "APPLY_MAP", "LOAD_MAP", "START_LOCALIZATION"}:
+            self.publish_event("MAPPING_COMMAND_FORWARDED", command)
+            return
+
         if command in {"START_PATROL", "RESUME_PATROL", "AUTO_MODE", "GAZEBO_TRIAL_START"}:
+            if self.mapping_active or self.mode in {"MAPPING_AUTO", "MAPPING_MANUAL"}:
+                self.publish_event("START_PATROL_BLOCKED", "mapping_active")
+                return
             self.set_mode("AUTO", command)
             self.estop = False
             self.external_stop = False
@@ -332,6 +409,9 @@ class MissionPatrolManagerNode(Node):
         self.publish_status()
         if self.estop or self.external_stop or self.mode in {"EMERGENCY", "DISABLED"}:
             self.handle_stop("emergency_or_external_stop")
+            return
+        if self.mapping_active or self.mode in {"MAPPING_AUTO", "MAPPING_MANUAL", "MAPPING"}:
+            self.clear_mission_for_mapping("mapping_mode_blocks_patrol")
             return
         if self.mode in {"STANDBY", "MANUAL"}:
             self.cancel_active_goal("mode_blocks_mission")
@@ -609,6 +689,21 @@ class MissionPatrolManagerNode(Node):
         self.goal_handle = None
         self.active_goal_type = NavGoalType.NONE
         self.active_goal_pose = None
+
+    def clear_mission_for_mapping(self, reason: str) -> None:
+        self.return_home_active = False
+        self.object_goal_active = False
+        self.object_goal = None
+        self.sound_request_pub.publish(Bool(data=False))
+        self.target_interrupt_locked = True
+        self.post_target_resume_cooldown_until = 0.0
+        if self.active_goal_type != NavGoalType.NONE or self.goal_handle is not None:
+            self.cancel_active_goal(reason)
+        else:
+            self.active_goal_type = NavGoalType.NONE
+            self.active_goal_pose = None
+        if self.state != MissionState.IDLE:
+            self.set_state(MissionState.IDLE, reason)
 
     def current_waypoint(self) -> Waypoint:
         return self.route.waypoints[self.current_index % len(self.route.waypoints)]

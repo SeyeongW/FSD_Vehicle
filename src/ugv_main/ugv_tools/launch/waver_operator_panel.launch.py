@@ -35,6 +35,7 @@ def generate_launch_description():
     map_save_command = LaunchConfiguration("map_save_command")
     localization_launch_command = LaunchConfiguration("localization_launch_command")
     map_topic = LaunchConfiguration("map_topic")
+    fixed_map_topic = LaunchConfiguration("fixed_map_topic")
     map_display_mode = LaunchConfiguration("map_display_mode")
     amcl_pose_topic = LaunchConfiguration("amcl_pose_topic")
     global_path_topic = LaunchConfiguration("global_path_topic")
@@ -53,6 +54,7 @@ def generate_launch_description():
     gazebo_trial_state_topic = LaunchConfiguration("gazebo_trial_state_topic")
     map_apply_state_topic = LaunchConfiguration("map_apply_state_topic")
     mission_command_topic = LaunchConfiguration("mission_command_topic")
+    mapping_command_topic = LaunchConfiguration("mapping_command_topic")
     mode_cmd_topic = LaunchConfiguration("mode_cmd_topic")
     operator_command_topic = LaunchConfiguration("operator_command_topic")
     publish_direct_cmd_vel = LaunchConfiguration("publish_direct_cmd_vel")
@@ -99,6 +101,7 @@ def generate_launch_description():
                 "auto_waypoints_csv": auto_waypoints_csv,
                 "auto_max_patrol_radius_m": max_patrol_radius_m,
                 "map_topic": map_topic,
+                "fixed_map_topic": fixed_map_topic,
                 "map_display_mode": map_display_mode,
                 "amcl_pose_topic": amcl_pose_topic,
                 "global_path_topic": global_path_topic,
@@ -117,6 +120,7 @@ def generate_launch_description():
                 "gazebo_trial_state_topic": gazebo_trial_state_topic,
                 "map_apply_state_topic": map_apply_state_topic,
                 "mission_command_topic": mission_command_topic,
+                "mapping_command_topic": mapping_command_topic,
                 "mode_cmd_topic": mode_cmd_topic,
                 "operator_command_topic": operator_command_topic,
                 "allow_subprocess_launches": ParameterValue(
@@ -160,6 +164,7 @@ def generate_launch_description():
             DeclareLaunchArgument("map_save_command", default_value=""),
             DeclareLaunchArgument("localization_launch_command", default_value=""),
             DeclareLaunchArgument("map_topic", default_value="/map"),
+            DeclareLaunchArgument("fixed_map_topic", default_value="/map_fixed"),
             DeclareLaunchArgument("map_display_mode", default_value="auto"),
             DeclareLaunchArgument("amcl_pose_topic", default_value="/amcl_pose"),
             DeclareLaunchArgument("global_path_topic", default_value="/plan"),
@@ -178,6 +183,7 @@ def generate_launch_description():
             DeclareLaunchArgument("gazebo_trial_state_topic", default_value="/waver/gazebo_trial_state"),
             DeclareLaunchArgument("map_apply_state_topic", default_value="/waver/map_apply_state"),
             DeclareLaunchArgument("mission_command_topic", default_value="/waver/mission_command"),
+            DeclareLaunchArgument("mapping_command_topic", default_value="/waver/mapping_command"),
             DeclareLaunchArgument("mode_cmd_topic", default_value="/waver/mode_cmd"),
             DeclareLaunchArgument("operator_command_topic", default_value="/waver/operator_command"),
             DeclareLaunchArgument("profile", default_value="real"),

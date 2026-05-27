@@ -5,6 +5,8 @@ from collections import deque
 
 import rclpy
 from geometry_msgs.msg import Pose, PoseArray
+from rcl_interfaces.msg import ParameterDescriptor
+from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.executors import ExternalShutdownException
 from sensor_msgs.msg import PointCloud2
@@ -30,15 +32,18 @@ class PointCloudLidarObjectsNode(Node):
 
     def __init__(self) -> None:
         super().__init__("pointcloud_lidar_objects_node")
+        dynamic_param = ParameterDescriptor(dynamic_typing=True)
         self.declare_parameter("pointcloud_topic", "/mid360_PointCloud2")
         self.declare_parameter("output_pose_array_topic", "/waver/lidar_objects")
         self.declare_parameter("state_topic", "/waver/lidar_objects_state")
-        self.declare_parameter("target_frame", "base_link")
-        self.declare_parameter("forward_axis", "x")
-        self.declare_parameter("lateral_axis", "y")
-        self.declare_parameter("height_axis", "z")
+        self.declare_parameter("target_frame", "base_link", descriptor=dynamic_param)
+        self.declare_parameter("forward_axis", "x", descriptor=dynamic_param)
+        self.declare_parameter("lateral_axis", "y", descriptor=dynamic_param)
+        self.declare_parameter("height_axis", "z", descriptor=dynamic_param)
         self.declare_parameter("positive_lateral_is_left", True)
         self.declare_parameter("require_tf", True)
+        self.declare_parameter("require_tf_transform", True)
+        self.declare_parameter("transform_timeout_sec", 0.1)
         self.declare_parameter("min_height_m", 0.35)
         self.declare_parameter("max_height_m", 8.0)
         self.declare_parameter("min_depth_m", 0.2)
@@ -67,7 +72,14 @@ class PointCloudLidarObjectsNode(Node):
 
     def cloud_callback(self, msg: PointCloud2) -> None:
         try:
-            points, raw_count, frame_id = self._filtered_voxel_points(msg)
+            axis_params = self._axis_params()
+            if axis_params is None:
+                pose_array = PoseArray()
+                pose_array.header = msg.header
+                pose_array.header.frame_id = str(self.get_parameter("target_frame").value or msg.header.frame_id)
+                self.objects_pub.publish(pose_array)
+                return
+            points, raw_count, frame_id = self._filtered_voxel_points(msg, axis_params)
             clusters = self._cluster(points)
             pose_array = PoseArray()
             pose_array.header = msg.header
@@ -98,25 +110,38 @@ class PointCloudLidarObjectsNode(Node):
             self.state_pub.publish(String(data=f"OBJECTS_FAILED fail_safe_no_cmd_vel error={exc}"))
             self.get_logger().warn(f"PointCloud object extraction failed: {exc}")
 
-    def _filtered_voxel_points(self, msg: PointCloud2) -> tuple[list[tuple[float, float, float]], int, str]:
+    def _filtered_voxel_points(
+        self,
+        msg: PointCloud2,
+        axis_params: tuple[str, str, str],
+    ) -> tuple[list[tuple[float, float, float]], int, str]:
         leaf = max(float(self.get_parameter("voxel_leaf_size_m").value), 0.05)
         max_points = int(self.get_parameter("max_points").value)
         voxel: dict[tuple[int, int, int], tuple[float, float, float]] = {}
         raw_count = 0
         target_frame = str(self.get_parameter("target_frame").value).strip()
         source_frame = msg.header.frame_id.strip()
+        require_tf = bool(self.get_parameter("require_tf").value) or bool(
+            self.get_parameter("require_tf_transform").value
+        )
         transform = None
         output_frame = source_frame
         if target_frame and source_frame and target_frame != source_frame:
             if self.tf_buffer is None:
-                if bool(self.get_parameter("require_tf").value):
+                if require_tf:
                     raise RuntimeError(f"TF unavailable source={source_frame} target={target_frame}")
             else:
                 try:
-                    transform = self.tf_buffer.lookup_transform(target_frame, source_frame, rclpy.time.Time())
+                    timeout = Duration(seconds=max(0.0, float(self.get_parameter("transform_timeout_sec").value)))
+                    transform = self.tf_buffer.lookup_transform(
+                        target_frame,
+                        source_frame,
+                        rclpy.time.Time(),
+                        timeout=timeout,
+                    )
                     output_frame = target_frame
                 except TransformException as exc:
-                    if bool(self.get_parameter("require_tf").value):
+                    if require_tf:
                         raise RuntimeError(f"TF_FAIL source={source_frame} target={target_frame}: {exc}") from exc
                     output_frame = source_frame
         for point in point_cloud2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
@@ -130,10 +155,11 @@ class PointCloudLidarObjectsNode(Node):
                 x, y, z = self._transform_xyz(x, y, z, transform)
             if self._is_self_point(x, y, z):
                 continue
+            forward_axis, lateral_axis, height_axis = axis_params
             axes = self._axis_values(x, y, z)
-            depth = axes[str(self.get_parameter("forward_axis").value).strip().lower()]
-            lateral = axes[str(self.get_parameter("lateral_axis").value).strip().lower()]
-            height = axes[str(self.get_parameter("height_axis").value).strip().lower()]
+            depth = axes[forward_axis]
+            lateral = axes[lateral_axis]
+            height = axes[height_axis]
             if not bool(self.get_parameter("positive_lateral_is_left").value):
                 lateral = -lateral
             if depth < float(self.get_parameter("min_depth_m").value) or depth > float(self.get_parameter("max_depth_m").value):
@@ -143,6 +169,32 @@ class PointCloudLidarObjectsNode(Node):
             key = (round(x / leaf), round(y / leaf), round(z / leaf))
             voxel.setdefault(key, (x, y, z))
         return list(voxel.values()), raw_count, output_frame
+
+    def _axis_params(self) -> tuple[str, str, str] | None:
+        axes = []
+        for name, default in (
+            ("forward_axis", "x"),
+            ("lateral_axis", "y"),
+            ("height_axis", "z"),
+        ):
+            value = self.get_parameter(name).value
+            if not isinstance(value, str):
+                self._publish_state(f"PARAM_ERROR {name} must be string, got {type(value).__name__}: {value}")
+                return None
+            axis = value.strip().lower()
+            if axis not in {"x", "y", "z", "-x", "-y", "-z"}:
+                self._publish_state(f"PARAM_ERROR {name} invalid axis={value!r}; expected one of x,y,z,-x,-y,-z")
+                return None
+            axes.append(axis)
+        base_axes = [axis[1:] if axis.startswith("-") else axis for axis in axes]
+        if len(set(base_axes)) != 3:
+            self._publish_state(f"PARAM_ERROR axes must be unique, got forward={axes[0]} lateral={axes[1]} height={axes[2]}")
+            return None
+        return axes[0], axes[1], axes[2]
+
+    def _publish_state(self, text: str) -> None:
+        self.state_pub.publish(String(data=text))
+        self.get_logger().warn(text)
 
     @staticmethod
     def _axis_values(x: float, y: float, z: float) -> dict[str, float]:

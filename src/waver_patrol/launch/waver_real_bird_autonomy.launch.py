@@ -29,8 +29,9 @@ def _validate_real_profile(context, *args, **kwargs):
             raise RuntimeError(f"waver_real_bird_autonomy: {name}=true is forbidden when real_profile=true")
     if value("bird_backend").lower() == "mock_for_sim_only":
         raise RuntimeError("waver_real_bird_autonomy: mock bird backend is forbidden when real_profile=true")
-    if value("scan_source") not in ("mid360", "ldlidar"):
-        raise RuntimeError("waver_real_bird_autonomy: scan_source must be mid360 or ldlidar")
+    scan_source = value("scan_source_safety") or value("scan_source")
+    if scan_source not in ("mid360", "ldlidar"):
+        raise RuntimeError("waver_real_bird_autonomy: scan_source_safety/scan_source must be mid360 or ldlidar")
     if value("odom_source") not in ("ekf", "base", "rf2o"):
         raise RuntimeError("waver_real_bird_autonomy: odom_source must be ekf, base, or rf2o")
     if value("start_serial_bridge").lower() == "true" and not value("serial_port"):
@@ -75,6 +76,8 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("real_profile", default_value="true"),
             DeclareLaunchArgument("command_chain_mode", default_value="safety_mux_final"),
             DeclareLaunchArgument("scan_source", default_value="mid360"),
+            DeclareLaunchArgument("scan_source_safety", default_value="mid360"),
+            DeclareLaunchArgument("scan_source_slam", default_value="mid360"),
             DeclareLaunchArgument("odom_source", default_value="ekf"),
             DeclareLaunchArgument("enable_test_publishers", default_value="false"),
             DeclareLaunchArgument("enable_deep_learning_stub", default_value="false"),
@@ -97,8 +100,8 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("start_serial_bridge", default_value="false"),
             DeclareLaunchArgument("include_existing_ugv_driver", default_value="false"),
             DeclareLaunchArgument("default_mode", default_value="STANDBY"),
-            DeclareLaunchArgument("safety_max_linear_speed", default_value="0.10"),
-            DeclareLaunchArgument("safety_max_angular_speed", default_value="0.35"),
+            DeclareLaunchArgument("safety_max_linear_speed", default_value="0.05"),
+            DeclareLaunchArgument("safety_max_angular_speed", default_value="0.20"),
             DeclareLaunchArgument("serial_port", default_value=""),
             DeclareLaunchArgument("camera_image_topic", default_value="/camera/image_raw"),
             DeclareLaunchArgument("camera_info_topic", default_value="/camera/camera_info"),
@@ -119,7 +122,7 @@ def generate_launch_description() -> LaunchDescription:
                     "-> /waver/cmd_vel_nav2_smooth -> safety_cmd_mux_node -> /cmd_vel -> canonical serial/base driver"
                 )
             ),
-            LogInfo(msg="[WAVER REAL] Test publishers disabled; default mode STANDBY; wheel-on speed cap 0.10 m/s."),
+            LogInfo(msg="[WAVER REAL] Test publishers disabled; default mode STANDBY; first wheel-on speed cap 0.05 m/s, 0.20 rad/s."),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(os.path.join(share, "launch", "waver_nav2_radar_bird_mission.launch.py")),
                 launch_arguments={
@@ -134,7 +137,7 @@ def generate_launch_description() -> LaunchDescription:
                     "enable_sound_stub": "false",
                     "enable_test_publishers": "false",
                     "enable_livox_scan_adapter": PythonExpression(
-                        ["'true' if '", LaunchConfiguration("scan_source"), "' == 'mid360' else 'false'"]
+                        ["'true' if '", LaunchConfiguration("scan_source_safety"), "' == 'mid360' else 'false'"]
                     ),
                     "enable_pointcloud_lidar_objects": LaunchConfiguration("enable_pointcloud_lidar_objects"),
                     "enable_moving_object_map_transform": LaunchConfiguration("enable_moving_object_map_transform"),
@@ -150,7 +153,7 @@ def generate_launch_description() -> LaunchDescription:
                         ["'false' if '", LaunchConfiguration("odom_source"), "' == 'ekf' else 'true'"]
                     ),
                     "enable_ldlidar": PythonExpression(
-                        ["'true' if '", LaunchConfiguration("scan_source"), "' == 'ldlidar' else 'false'"]
+                        ["'true' if '", LaunchConfiguration("scan_source_safety"), "' == 'ldlidar' else 'false'"]
                     ),
                     "enable_rf2o": PythonExpression(
                         ["'true' if '", LaunchConfiguration("odom_source"), "' == 'rf2o' else 'false'"]
