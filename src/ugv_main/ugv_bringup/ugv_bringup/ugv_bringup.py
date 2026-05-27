@@ -6,7 +6,7 @@ import rclpy
 from rclpy.node import Node
 import logging
 import time
-from std_msgs.msg import Header, Float32MultiArray, Float32
+from std_msgs.msg import Header, Float32MultiArray, Float32, String
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Imu, MagneticField
 import math
@@ -111,6 +111,7 @@ class ugv_bringup(Node):
         self.declare_parameter('feedback_only', True)
         requested_port = str(self.get_parameter('serial_port').value).strip()
         selected_port = requested_port if requested_port else serial_port
+        self.selected_port = selected_port
         baudrate = int(self.get_parameter('baudrate').value)
         feedback_only = bool(self.get_parameter('feedback_only').value)
         self.get_logger().warn(
@@ -122,6 +123,10 @@ class ugv_bringup(Node):
         self.imu_mag_publisher_ = self.create_publisher(MagneticField, "imu/mag", 100)
         self.odom_publisher_ = self.create_publisher(Float32MultiArray, "odom/odom_raw", 100)
         self.voltage_publisher_ = self.create_publisher(Float32, "voltage", 50)
+        self.base_state_publisher_ = self.create_publisher(Float32MultiArray, "/waver/base_driver_state_numeric", 10)
+        self.serial_owner_publisher_ = self.create_publisher(Float32MultiArray, "/waver/serial_owner_state_numeric", 10)
+        self.base_state_text_publisher_ = self.create_publisher(String, "/waver/base_driver_state", 10)
+        self.serial_owner_text_publisher_ = self.create_publisher(String, "/waver/serial_owner_state", 10)
         # Initialize the base controller with the UART port and baud rate
         self.base_controller = BaseController(selected_port, baudrate, feedback_only=feedback_only)
         # Timer to periodically execute the feedback loop
@@ -135,6 +140,7 @@ class ugv_bringup(Node):
             self.publish_imu_mag()  # Publish magnetic field data
             self.publish_odom_raw()  # Publish odometry data
             self.publish_voltage()  # Publish voltage data
+            self.publish_driver_state()
 
     # Publish IMU data to the ROS topic "imu/data_raw"
     def publish_imu_data_raw(self):
@@ -183,6 +189,15 @@ class ugv_bringup(Node):
         msg = Float32()
         msg.data = float(voltage_data["v"])/100
         self.voltage_publisher_.publish(msg)  # Publish the voltage data
+
+    def publish_driver_state(self):
+        voltage = float(self.base_controller.base_data.get("v", 0.0)) / 100.0
+        feedback_only = 1.0 if self.base_controller.feedback_only else 0.0
+        self.base_state_publisher_.publish(Float32MultiArray(data=[feedback_only, voltage]))
+        self.serial_owner_publisher_.publish(Float32MultiArray(data=[feedback_only]))
+        state = "FEEDBACK_ONLY" if self.base_controller.feedback_only else "LEGACY_COMMAND_ENABLED"
+        self.base_state_text_publisher_.publish(String(data=f"{state} voltage={voltage:.2f}"))
+        self.serial_owner_text_publisher_.publish(String(data=f"ugv_bringup port={self.selected_port} feedback_only={self.base_controller.feedback_only}"))
                         
 # Main function to initialize the ROS node and start spinning
 def main(args=None):

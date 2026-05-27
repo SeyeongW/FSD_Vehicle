@@ -21,6 +21,11 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("use_rviz", default_value="false"),
             DeclareLaunchArgument("rviz_config", default_value="bringup"),
             DeclareLaunchArgument("start_base_feedback", default_value="false"),
+            DeclareLaunchArgument("feedback_serial_port", default_value=""),
+            DeclareLaunchArgument("feedback_baudrate", default_value="115200"),
+            DeclareLaunchArgument("base_node_executable", default_value="base_node"),
+            DeclareLaunchArgument("enable_ldlidar", default_value="false"),
+            DeclareLaunchArgument("enable_rf2o", default_value="false"),
             LogInfo(
                 msg=(
                     "Starting UGV sensor-only bringup: robot state, lidar and odom only. "
@@ -36,6 +41,11 @@ def generate_launch_description() -> LaunchDescription:
                     "start_driver": "false",
                     "legacy_driver_enabled": "false",
                     "start_base_feedback": LaunchConfiguration("start_base_feedback"),
+                    "feedback_serial_port": LaunchConfiguration("feedback_serial_port"),
+                    "feedback_baudrate": LaunchConfiguration("feedback_baudrate"),
+                    "base_node_executable": LaunchConfiguration("base_node_executable"),
+                    "enable_ldlidar": LaunchConfiguration("enable_ldlidar"),
+                    "enable_rf2o": LaunchConfiguration("enable_rf2o"),
                 }.items(),
             ),
         ]

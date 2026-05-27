@@ -111,6 +111,7 @@ class MissionPatrolManagerNode(Node):
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("global_frame", "map")
         self.declare_parameter("mission_command_topic", "/waver/mission_command")
+        self.declare_parameter("mode_cmd_topic", "/waver/mode_cmd")
         self.declare_parameter("mission_reset_topic", "/waver/mission_reset")
 
         share = get_package_share_directory("waver_patrol")
@@ -158,7 +159,7 @@ class MissionPatrolManagerNode(Node):
         self.create_subscription(Bool, "/waver/object_mission_goal_active", lambda m: setattr(self, "object_goal_active", bool(m.data)), 10)
         self.create_subscription(Bool, "/waver/return_home_active", lambda m: setattr(self, "return_home_active", bool(m.data)), 10)
         self.create_subscription(PoseStamped, "/waver/return_goal", lambda m: setattr(self, "return_goal", m), 10)
-        self.create_subscription(String, "/waver/mode", self.mode_callback, 10)
+        self.create_subscription(String, str(self.get_parameter("mode_cmd_topic").value), self.mode_callback, 10)
         self.create_subscription(
             String,
             str(self.get_parameter("mission_command_topic").value),

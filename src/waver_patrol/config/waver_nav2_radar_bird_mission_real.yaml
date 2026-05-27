@@ -132,6 +132,8 @@ bird_detector_node:
     detections_topic: "/waver/bird_detections_2d"
     confirmed_topic: "/waver/bird_confirmed"
     state_topic: "/waver/bird_detector_state"
+    target_class_topic: "/waver/target_class"
+    target_confidence_topic: "/waver/target_confidence"
     backend: "yolo"
     model_path: ""
     confidence_threshold: 0.65
@@ -151,6 +153,7 @@ bird_3d_fusion_node:
     camera_info_topic: "/camera/camera_info"
     pointcloud_topic: "/mid360_PointCloud2"
     moving_target_valid_topic: "/waver/moving_target_valid"
+    dynamic_targets_topic: "/waver/elevated_dynamic_targets"
     pose_base_topic: "/waver/bird_target_pose_base"
     pose_map_topic: "/waver/bird_target_pose_map"
     valid_topic: "/waver/bird_target_valid"
@@ -166,10 +169,14 @@ bird_3d_fusion_node:
     min_range_m: 1.0
     max_range_m: 30.0
     require_dynamic_valid: true
+    dynamic_association_radius_m: 1.5
+    max_dynamic_target_age_sec: 1.0
+    max_sync_dt_sec: 0.25
+    require_camera_optical_frame: true
 
 safety_cmd_mux_node:
   ros__parameters:
-    nav2_cmd_topic: "/waver/cmd_vel_nav2"
+    nav2_cmd_topic: "/waver/cmd_vel_nav2_smooth"
     cmd_vel_auto_topic: ""
     manual_cmd_vel_topic: "/waver/manual_cmd_vel"
     cmd_vel_out_topic: "/cmd_vel"

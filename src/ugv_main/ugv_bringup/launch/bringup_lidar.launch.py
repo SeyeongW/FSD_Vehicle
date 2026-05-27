@@ -36,6 +36,26 @@ def generate_launch_description():
         'start_base_feedback', default_value='false',
         description='Open legacy base feedback serial reader. Keep false unless the serial port is dedicated to feedback.'
     )
+    feedback_serial_port_arg = DeclareLaunchArgument(
+        'feedback_serial_port', default_value='',
+        description='Serial port for feedback-only ugv_bringup. Leave empty for legacy probing; real profiles should use /dev/serial/by-id.'
+    )
+    feedback_baudrate_arg = DeclareLaunchArgument(
+        'feedback_baudrate', default_value='115200',
+        description='Feedback serial baudrate for ugv_bringup.'
+    )
+    base_node_executable_arg = DeclareLaunchArgument(
+        'base_node_executable', default_value='base_node',
+        description='Use base_node_ekf for /odom_raw output when robot_localization owns /odom and odom->base_link TF.'
+    )
+    enable_ldlidar_arg = DeclareLaunchArgument(
+        'enable_ldlidar', default_value='false',
+        description='Start physical 2D ldlidar scan publisher. Real profile must choose this or Mid360 scan adapter, not both.'
+    )
+    enable_rf2o_arg = DeclareLaunchArgument(
+        'enable_rf2o', default_value='false',
+        description='Start RF2O laser odometry. Real EKF profile keeps this false unless explicitly requested.'
+    )
 
     # Include the robot state launch from the ugv_description package
     robot_state_launch = IncludeLaunchDescription(
@@ -53,7 +73,13 @@ def generate_launch_description():
         package='ugv_bringup',
         executable='ugv_bringup',
         condition=IfCondition(LaunchConfiguration('start_base_feedback')),
-        parameters=[{'feedback_only': True}],
+        parameters=[
+            {
+                'feedback_only': True,
+                'serial_port': LaunchConfiguration('feedback_serial_port'),
+                'baudrate': LaunchConfiguration('feedback_baudrate'),
+            }
+        ],
     )
 
     driver_node = Node(
@@ -78,7 +104,8 @@ def generate_launch_description():
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(get_package_share_directory('ldlidar'), 'launch', 'ldlidar.launch.py')
-                )
+                ),
+                condition=IfCondition(LaunchConfiguration('enable_ldlidar')),
             )
         )
     except PackageNotFoundError:
@@ -89,7 +116,8 @@ def generate_launch_description():
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(get_package_share_directory('rf2o_laser_odometry'), 'launch', 'rf2o_laser_odometry.launch.py')
-                )
+                ),
+                condition=IfCondition(LaunchConfiguration('enable_rf2o')),
             )
         )
     except PackageNotFoundError:
@@ -98,7 +126,7 @@ def generate_launch_description():
     # Define the base node with parameters
     base_node = Node(
         package='ugv_base_node',
-        executable='base_node',
+        executable=LaunchConfiguration('base_node_executable'),
         parameters=[{'pub_odom_tf': LaunchConfiguration('pub_odom_tf')}]
     )
 
@@ -110,6 +138,11 @@ def generate_launch_description():
         start_driver_arg,
         legacy_driver_enabled_arg,
         start_base_feedback_arg,
+        feedback_serial_port_arg,
+        feedback_baudrate_arg,
+        base_node_executable_arg,
+        enable_ldlidar_arg,
+        enable_rf2o_arg,
         LogInfo(
             msg='bringup_lidar.launch.py: legacy serial feedback and ugv_driver default are disabled; final /cmd_vel must pass through safety mux.'
         ),

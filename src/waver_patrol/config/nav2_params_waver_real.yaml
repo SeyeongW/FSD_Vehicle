@@ -241,6 +241,7 @@ lifecycle_manager_navigation:
       - "behavior_server"
       - "bt_navigator"
       - "waypoint_follower"
+      - "velocity_smoother"
 
 lifecycle_manager_localization:
   ros__parameters:

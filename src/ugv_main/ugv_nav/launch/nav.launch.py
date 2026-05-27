@@ -62,6 +62,13 @@ def launch_setup(context, *args, **kwargs):
         launch_arguments={
             'use_rviz': LaunchConfiguration('use_rviz'),
             'rviz_config': 'nav_2d', 
+            'pub_odom_tf': LaunchConfiguration('pub_odom_tf'),
+            'start_base_feedback': LaunchConfiguration('start_base_feedback'),
+            'feedback_serial_port': LaunchConfiguration('feedback_serial_port'),
+            'feedback_baudrate': LaunchConfiguration('feedback_baudrate'),
+            'base_node_executable': LaunchConfiguration('base_node_executable'),
+            'enable_ldlidar': LaunchConfiguration('enable_ldlidar'),
+            'enable_rf2o': LaunchConfiguration('enable_rf2o'),
         }.items()
     )
 
@@ -129,6 +136,13 @@ def generate_launch_description():
         DeclareLaunchArgument('map', default_value=default_map, description='Map YAML for localization/Nav2'),
         DeclareLaunchArgument('params_file', default_value='', description='Override Nav2 params YAML. If empty, use ugv_nav defaults.'),
         DeclareLaunchArgument('use_rviz', default_value='false', description='Whether to launch RViz'),
+        DeclareLaunchArgument('pub_odom_tf', default_value='true', description='Whether base node publishes odom->base_link TF'),
+        DeclareLaunchArgument('start_base_feedback', default_value='false', description='Start feedback-only serial reader in ugv_bringup'),
+        DeclareLaunchArgument('feedback_serial_port', default_value='', description='Feedback serial port for ugv_bringup'),
+        DeclareLaunchArgument('feedback_baudrate', default_value='115200', description='Feedback serial baudrate for ugv_bringup'),
+        DeclareLaunchArgument('base_node_executable', default_value='base_node', description='base_node or base_node_ekf'),
+        DeclareLaunchArgument('enable_ldlidar', default_value='false', description='Start ldlidar /scan publisher'),
+        DeclareLaunchArgument('enable_rf2o', default_value='false', description='Start RF2O odometry'),
         OpaqueFunction(function=launch_setup)
     ])
 

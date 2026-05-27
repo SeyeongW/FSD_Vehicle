@@ -2,16 +2,17 @@
 
 이 문서는 `jo` 브랜치 최신 구조 기준 실행 가이드다.
 
-- 활성 소스 트리: `~/ros2_ws/FSD_Vehicle`
-- 빌드/실행 기준 workspace: `~/ros2_ws/FSD_Vehicle`
+- workspace root: `~/ros2_ws`
+- 활성 소스 repo: `~/ros2_ws/FSD_Vehicle`
 - Gazebo world: `ugv_gazebo/worlds/ugv_world.world`
 - Gazebo robot model: `ugv_gazebo/models/ugv_rover/model.sdf`
 - SLAM Mapping 기본값: LiDAR-only `slam_gmapping` on `/scan`
 - 리모콘 UI 직접 `/cmd_vel` 발행 금지: `publish_direct_cmd_vel:=false`
 - 최종 `/cmd_vel` publisher: `safety_cmd_mux_node` 1개만 허용
 
-현재 사용자 실험 기준은 `~/ros2_ws/FSD_Vehicle`이다. 이 폴더 안에서
-`colcon build`, Gazebo, 리모콘 UI, SLAM mapping, 실차 dry-run을 실행한다.
+현재 사용자 실험 기준 workspace는 `~/ros2_ws`이다. 소스 repo는
+`~/ros2_ws/FSD_Vehicle`이며, 중복 repo가 colcon에 보이면 반드시 한쪽에
+`COLCON_IGNORE`를 둔다.
 
 ---
 
@@ -34,8 +35,10 @@ SLAM 지표는 조류탐지 자율주행을 가능하게 하는 support gate다.
 ## 0. 공통 준비
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
+rosdep install --from-paths FSD_Vehicle/src --ignore-src -r -y
+bash FSD_Vehicle/src/waver_patrol/scripts/waver_duplicate_package_check.sh
 colcon build --packages-select \
   ugv_description ugv_bringup ugv_tools waver_patrol ugv_slam ugv_gazebo \
   --symlink-install
@@ -46,7 +49,7 @@ export ROS_DOMAIN_ID=30
 전체 빌드를 확인하려면 다음을 사용한다.
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 colcon build --symlink-install
 source install/setup.bash
@@ -59,7 +62,7 @@ source install/setup.bash
 터미널 1에서 공항맵과 `ugv_rover`만 실행한다. 이 명령은 리모콘 UI를 같이 띄우지 않는다.
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -92,7 +95,7 @@ ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
 터미널 2에서 시각화 리모콘만 실행한다. 이 명령은 Gazebo를 실행하지 않는다.
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -162,7 +165,7 @@ SLAM 중 UI가 `SLAM_LIVE`로 표시되어야 한다. `APPLY FIXED MAP` 후에�
 ### 빠른 smoke test
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -177,7 +180,7 @@ ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
 ### 넓은 공항맵 coverage test
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -202,7 +205,7 @@ ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
 ### 단일 조류탐지 Gazebo 실행
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -220,7 +223,7 @@ ros2 launch waver_patrol gazebo_bird_detection_validation.launch.py \
 ### 리모콘 UI만 실행
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -238,7 +241,7 @@ ros2 launch ugv_tools waver_operator_panel.launch.py \
 ### 10회 조류탐지 Gazebo/UI 반복 검증
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -249,7 +252,7 @@ USE_GUI=true \
 TRIAL_DURATION_SEC=6 \
 HZ_SAMPLE_SEC=5 \
 OUTPUT_ROOT=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/bird_detection_10runs \
-bash src/waver_patrol/scripts/run_bird_detection_gazebo_ui_trials.sh
+bash FSD_Vehicle/src/waver_patrol/scripts/run_bird_detection_gazebo_ui_trials.sh
 ```
 
 생성 주요 파일:
@@ -280,7 +283,7 @@ ros2 topic info -v /cmd_vel
 GUI 부하 없이 Gazebo/SLAM/UI command path를 검증한다.
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -323,7 +326,7 @@ ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
 WASD/manual 이동, `SAVE MAP`, `APPLY FIXED MAP`, `START PATROL`, `STOP`을 반복 검증한다.
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -331,7 +334,7 @@ export ROS_DOMAIN_ID=30
 RUNS=10 \
 TRIAL_TIMEOUT_SEC=220 \
 OUTPUT_ROOT=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs \
-bash src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
+bash FSD_Vehicle/src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
 ```
 
 최신 clean run 요약:
@@ -345,7 +348,7 @@ bash src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
 SLAM 보정 후 full coverage 단일 재검증:
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -354,7 +357,7 @@ RUNS=1 \
 TRIAL_TIMEOUT_SEC=380 \
 DEMO_SCRIPT=mapping_full_coverage \
 OUTPUT_ROOT=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/slam_fix_full_coverage \
-bash src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
+bash FSD_Vehicle/src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
 ```
 
 결과 summary는 `experiments_result/paper_ready/slam_fix_full_coverage/`에 저장된다.
@@ -366,12 +369,12 @@ bash src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
 이 스크립트는 Gazebo/SLAM backend가 이미 떠 있는 상태에서 `/map` 변화, 저장, 적용 상태를 기록하는 보조 검사다. 단독으로 Gazebo나 gmapping을 띄우는 명령이 아니다.
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
 
-python3 src/waver_patrol/scripts/run_mapping_mode_check.py \
+python3 FSD_Vehicle/src/waver_patrol/scripts/run_mapping_mode_check.py \
   --output-root ~/ros2_ws/FSD_Vehicle/experiments_result \
   --experiment-name mapping_mode_manual \
   --duration-sec 60 \
@@ -461,7 +464,7 @@ and ego_motion_compensated == true
 실차를 움직이지 않고 topic, map, localization, mission, safety path만 확인한다.
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -486,7 +489,7 @@ ros2 launch waver_patrol waver_nav2_radar_bird_mission.launch.py \
 리모콘 UI는 별도 터미널에서 실행한다.
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -511,15 +514,18 @@ ros2 launch ugv_tools waver_operator_panel.launch.py \
 ### Dry-run / no serial
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
 
 ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   start_serial_bridge:=false \
+  enable_waver_base_driver:=false \
   default_mode:=STANDBY \
   safety_max_linear_speed:=0.05 \
+  scan_source:=mid360 \
+  odom_source:=ekf \
   map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
   bird_model_path:=$HOME/models/bird_yolov8n.pt
 ```
@@ -530,11 +536,14 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
 
 ```bash
 ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
-  start_serial_bridge:=true \
+  enable_waver_base_driver:=true \
+  start_serial_bridge:=false \
   serial_port:=/dev/serial/by-id/<WAVER_SERIAL_ID> \
   default_mode:=STANDBY \
   safety_max_linear_speed:=0.05 \
   safety_max_angular_speed:=0.20 \
+  scan_source:=mid360 \
+  odom_source:=ekf \
   map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
   bird_model_path:=$HOME/models/bird_yolov8n.pt
 ```
@@ -544,17 +553,20 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
 아래 명령은 wheel-off와 dry-run 점검을 통과한 뒤에만 사용한다.
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
 
 ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
-  start_serial_bridge:=true \
+  enable_waver_base_driver:=true \
+  start_serial_bridge:=false \
   serial_port:=/dev/serial/by-id/<WAVER_SERIAL_ID> \
   default_mode:=STANDBY \
-  safety_max_linear_speed:=0.10 \
-  safety_max_angular_speed:=0.35 \
+  safety_max_linear_speed:=0.05 \
+  safety_max_angular_speed:=0.20 \
+  scan_source:=mid360 \
+  odom_source:=ekf \
   map:=$HOME/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
   bird_model_path:=$HOME/models/bird_yolov8n.pt
 ```
@@ -567,9 +579,11 @@ ros2 topic hz /scan
 ros2 topic hz /odom
 ros2 run tf2_ros tf2_echo odom base_link
 ros2 topic echo /waver/safety_state
-ros2 topic echo /waver/serial_bridge_state
-bash src/waver_patrol/scripts/waver_cmd_chain_check.sh
-bash src/waver_patrol/scripts/waver_bird_autonomy_health_check.sh
+ros2 topic echo /waver/base_driver_state
+bash FSD_Vehicle/src/waver_patrol/scripts/waver_duplicate_package_check.sh
+bash FSD_Vehicle/src/waver_patrol/scripts/waver_real_preflight_check.sh --strict
+bash FSD_Vehicle/src/waver_patrol/scripts/waver_cmd_chain_check.sh
+bash FSD_Vehicle/src/waver_patrol/scripts/waver_bird_autonomy_health_check.sh
 ```
 
 금지 조건:
@@ -586,7 +600,7 @@ bash src/waver_patrol/scripts/waver_bird_autonomy_health_check.sh
 ## 11. RViz 선택 실행
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ros2_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 

@@ -26,8 +26,9 @@ class LivoxPointCloudToScanNode(Node):
       - Let Gazebo Livox `/mid360` or a real 3D LiDAR feed Waver's final safety mux.
       - Keep aerial/bird detection separate: this node only creates a ground-obstacle
         LaserScan for stop/slow-down logic, not a height classifier.
-      - Fail safe by publishing sparse/empty scans when the cloud is unusable, which
-        makes `safety_cmd_mux_node` stop when `require_scan=true`.
+      - Distinguish a healthy clear outdoor scene from a broken scan. Healthy clear
+        rays are published as range_max; stale/empty sensor data is reported as
+        DEGRADED_* so the safety mux can stop.
     """
 
     def __init__(self) -> None:
@@ -50,6 +51,7 @@ class LivoxPointCloudToScanNode(Node):
         self.declare_parameter("max_points", 60000)
         self.declare_parameter("min_raw_points", 50)
         self.declare_parameter("min_used_points", 10)
+        self.declare_parameter("clear_empty_obstacle_scan", True)
 
         self.scan_pub = self.create_publisher(LaserScan, str(self.get_parameter("scan_topic").value), 10)
         self.state_pub = self.create_publisher(String, str(self.get_parameter("state_topic").value), 10)
@@ -57,22 +59,26 @@ class LivoxPointCloudToScanNode(Node):
 
     def cloud_callback(self, msg: PointCloud2) -> None:
         try:
+            if not msg.header.frame_id:
+                raise RuntimeError("PointCloud2 header.frame_id is empty")
             scan, used, total = self._cloud_to_scan(msg)
+            if total < int(self.get_parameter("min_raw_points").value):
+                state = "DEGRADED_LOW_COVERAGE"
+            elif used > 0:
+                state = "OK_OBSTACLE"
+            else:
+                state = "OK_CLEAR"
         except Exception as exc:
             self.get_logger().warn(f"PointCloud2 projection failed; publishing degraded scan: {exc}")
-            scan = self._empty_scan(msg)
+            scan = self._empty_scan(msg, clear=False)
             used = 0
             total = 0
-        state = "POINTCLOUD_TO_SCAN_OK"
-        if total < int(self.get_parameter("min_raw_points").value):
-            state = "DEGRADED_NO_POINTS"
-        elif used < int(self.get_parameter("min_used_points").value):
-            state = "DEGRADED_NO_GROUND_OBSTACLE_POINTS"
+            state = "DEGRADED_TF_FAIL" if "TF" in str(exc).upper() else "DEGRADED_FRAME_EMPTY"
         self.scan_pub.publish(scan)
-        self.state_pub.publish(String(data=f"{state} frame={scan.header.frame_id} used={used} total={total}"))
+        self.state_pub.publish(String(data=f"{state} frame={scan.header.frame_id} obstacle_points={used} raw_points={total}"))
 
     def _cloud_to_scan(self, msg: PointCloud2) -> tuple[LaserScan, int, int]:
-        scan = self._empty_scan(msg)
+        scan = self._empty_scan(msg, clear=bool(self.get_parameter("clear_empty_obstacle_scan").value))
         bins = len(scan.ranges)
         used = 0
         total = 0
@@ -105,7 +111,7 @@ class LivoxPointCloudToScanNode(Node):
                 used += 1
         return scan, used, total
 
-    def _empty_scan(self, msg: PointCloud2) -> LaserScan:
+    def _empty_scan(self, msg: PointCloud2, clear: bool = True) -> LaserScan:
         angle_min = float(self.get_parameter("angle_min_rad").value)
         angle_max = float(self.get_parameter("angle_max_rad").value)
         angle_increment = max(float(self.get_parameter("angle_increment_rad").value), math.radians(0.25))
@@ -119,7 +125,8 @@ class LivoxPointCloudToScanNode(Node):
         scan.scan_time = 0.1
         scan.range_min = float(self.get_parameter("range_min_m").value)
         scan.range_max = float(self.get_parameter("range_max_m").value)
-        scan.ranges = [math.inf] * bins
+        fill = scan.range_max if clear else math.inf
+        scan.ranges = [fill] * bins
         return scan
 
     def _axis_param(self, name: str, default: str) -> str:

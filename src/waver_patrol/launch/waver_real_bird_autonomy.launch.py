@@ -29,11 +29,30 @@ def _validate_real_profile(context, *args, **kwargs):
             raise RuntimeError(f"waver_real_bird_autonomy: {name}=true is forbidden when real_profile=true")
     if value("bird_backend").lower() == "mock_for_sim_only":
         raise RuntimeError("waver_real_bird_autonomy: mock bird backend is forbidden when real_profile=true")
+    if value("scan_source") not in ("mid360", "ldlidar"):
+        raise RuntimeError("waver_real_bird_autonomy: scan_source must be mid360 or ldlidar")
+    if value("odom_source") not in ("ekf", "base", "rf2o"):
+        raise RuntimeError("waver_real_bird_autonomy: odom_source must be ekf, base, or rf2o")
     if value("start_serial_bridge").lower() == "true" and not value("serial_port"):
         raise RuntimeError(
             "waver_real_bird_autonomy: start_serial_bridge=true requires serial_port, "
             "prefer /dev/serial/by-id/<WAVER_SERIAL_ID>"
         )
+    if value("enable_waver_base_driver").lower() == "true":
+        if not value("serial_port"):
+            raise RuntimeError("waver_real_bird_autonomy: enable_waver_base_driver=true requires serial_port")
+        if value("start_serial_bridge").lower() == "true" or value("start_base_feedback").lower() == "true":
+            raise RuntimeError(
+                "waver_real_bird_autonomy: enable_waver_base_driver=true forbids split serial nodes "
+                "(start_serial_bridge/start_base_feedback must be false)"
+            )
+    if value("start_serial_bridge").lower() == "true" and value("start_base_feedback").lower() == "true":
+        raise RuntimeError(
+            "waver_real_bird_autonomy: split command and feedback serial owners are forbidden in real profile. "
+            "Use enable_waver_base_driver=true for one serial owner."
+        )
+    if value("start_base_feedback").lower() == "true" and not value("feedback_serial_port"):
+        raise RuntimeError("waver_real_bird_autonomy: start_base_feedback=true requires feedback_serial_port")
     return []
 
 
@@ -41,6 +60,7 @@ def generate_launch_description() -> LaunchDescription:
     share = get_package_share_directory("waver_patrol")
     default_nav2_params = os.path.join(share, "config", "nav2_params_waver_real.yaml")
     default_mission_params = os.path.join(share, "config", "waver_nav2_radar_bird_mission_real.yaml")
+    default_ekf_params = os.path.join(share, "config", "ekf_waver_real.yaml")
     default_map = os.path.expanduser("~/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml")
 
     common = [
@@ -54,11 +74,20 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             DeclareLaunchArgument("real_profile", default_value="true"),
             DeclareLaunchArgument("command_chain_mode", default_value="safety_mux_final"),
+            DeclareLaunchArgument("scan_source", default_value="mid360"),
+            DeclareLaunchArgument("odom_source", default_value="ekf"),
             DeclareLaunchArgument("enable_test_publishers", default_value="false"),
             DeclareLaunchArgument("enable_deep_learning_stub", default_value="false"),
             DeclareLaunchArgument("enable_bird_detector", default_value="true"),
             DeclareLaunchArgument("enable_bird_3d_fusion", default_value="true"),
+            DeclareLaunchArgument("enable_robot_localization", default_value="true"),
+            DeclareLaunchArgument("enable_waver_base_driver", default_value="false"),
+            DeclareLaunchArgument("start_base_feedback", default_value="false"),
+            DeclareLaunchArgument("feedback_serial_port", default_value=""),
+            DeclareLaunchArgument("feedback_baudrate", default_value="115200"),
             DeclareLaunchArgument("enable_livox_scan_adapter", default_value="true"),
+            DeclareLaunchArgument("enable_ldlidar", default_value="false"),
+            DeclareLaunchArgument("enable_rf2o", default_value="false"),
             DeclareLaunchArgument("enable_pointcloud_lidar_objects", default_value="true"),
             DeclareLaunchArgument("enable_moving_object_map_transform", default_value="true"),
             DeclareLaunchArgument("enable_moving_object_motion_filter", default_value="true"),
@@ -77,6 +106,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("map", default_value=default_map),
             DeclareLaunchArgument("nav2_params_file", default_value=default_nav2_params),
+            DeclareLaunchArgument("ekf_params_file", default_value=default_ekf_params),
             DeclareLaunchArgument("mission_params_file", default_value=default_mission_params),
             DeclareLaunchArgument("bird_model_path", default_value=""),
             DeclareLaunchArgument("bird_backend", default_value="yolo"),
@@ -85,8 +115,8 @@ def generate_launch_description() -> LaunchDescription:
             LogInfo(msg="[WAVER REAL] Branch must be jo. Check before wheel-on: git branch --show-current"),
             LogInfo(
                 msg=(
-                    "[WAVER REAL] Command chain: Nav2 -> /waver/cmd_vel_nav2 -> safety_cmd_mux_node "
-                    "-> /cmd_vel -> canonical serial/base driver"
+                    "[WAVER REAL] Command chain: Nav2 -> /waver/cmd_vel_nav2_raw -> velocity_smoother "
+                    "-> /waver/cmd_vel_nav2_smooth -> safety_cmd_mux_node -> /cmd_vel -> canonical serial/base driver"
                 )
             ),
             LogInfo(msg="[WAVER REAL] Test publishers disabled; default mode STANDBY; wheel-on speed cap 0.10 m/s."),
@@ -103,11 +133,28 @@ def generate_launch_description() -> LaunchDescription:
                     "enable_deep_learning_stub": "false",
                     "enable_sound_stub": "false",
                     "enable_test_publishers": "false",
-                    "enable_livox_scan_adapter": LaunchConfiguration("enable_livox_scan_adapter"),
+                    "enable_livox_scan_adapter": PythonExpression(
+                        ["'true' if '", LaunchConfiguration("scan_source"), "' == 'mid360' else 'false'"]
+                    ),
                     "enable_pointcloud_lidar_objects": LaunchConfiguration("enable_pointcloud_lidar_objects"),
                     "enable_moving_object_map_transform": LaunchConfiguration("enable_moving_object_map_transform"),
                     "enable_moving_object_motion_filter": LaunchConfiguration("enable_moving_object_motion_filter"),
                     "start_serial_bridge": LaunchConfiguration("start_serial_bridge"),
+                    "start_base_feedback": LaunchConfiguration("start_base_feedback"),
+                    "feedback_serial_port": LaunchConfiguration("feedback_serial_port"),
+                    "feedback_baudrate": LaunchConfiguration("feedback_baudrate"),
+                    "base_node_executable": PythonExpression(
+                        ["'base_node_ekf' if '", LaunchConfiguration("odom_source"), "' == 'ekf' else 'base_node'"]
+                    ),
+                    "pub_odom_tf": PythonExpression(
+                        ["'false' if '", LaunchConfiguration("odom_source"), "' == 'ekf' else 'true'"]
+                    ),
+                    "enable_ldlidar": PythonExpression(
+                        ["'true' if '", LaunchConfiguration("scan_source"), "' == 'ldlidar' else 'false'"]
+                    ),
+                    "enable_rf2o": PythonExpression(
+                        ["'true' if '", LaunchConfiguration("odom_source"), "' == 'rf2o' else 'false'"]
+                    ),
                     "include_existing_ugv_driver": "false",
                     "serial_port": LaunchConfiguration("serial_port"),
                     "require_explicit_serial_port": "true",
@@ -117,9 +164,62 @@ def generate_launch_description() -> LaunchDescription:
                     "safety_max_angular_speed": LaunchConfiguration("safety_max_angular_speed"),
                     "pointcloud_topic": LaunchConfiguration("pointcloud_topic"),
                     "scan_topic": LaunchConfiguration("scan_topic"),
+                    "enable_velocity_smoother": LaunchConfiguration("enable_velocity_smoother"),
+                    "nav2_controller_cmd_topic": PythonExpression(
+                        [
+                            "'/waver/cmd_vel_nav2_raw' if '",
+                            LaunchConfiguration("enable_velocity_smoother"),
+                            "' == 'true' else '/waver/cmd_vel_nav2'",
+                        ]
+                    ),
+                    "velocity_smoother_input_topic": "/waver/cmd_vel_nav2_raw",
+                    "velocity_smoother_output_topic": "/waver/cmd_vel_nav2_smooth",
+                    "safety_nav2_cmd_topic": PythonExpression(
+                        [
+                            "'/waver/cmd_vel_nav2_smooth' if '",
+                            LaunchConfiguration("enable_velocity_smoother"),
+                            "' == 'true' else '/waver/cmd_vel_nav2'",
+                        ]
+                    ),
                     "remap_nav2_cmd_vel": "true",
                     "use_rviz": "false",
                 }.items(),
+            ),
+            Node(
+                package="robot_localization",
+                executable="ekf_node",
+                name="ekf_filter_node",
+                output="screen",
+                condition=IfCondition(
+                    PythonExpression(
+                        [
+                            "'",
+                            LaunchConfiguration("enable_robot_localization"),
+                            "' == 'true' and '",
+                            LaunchConfiguration("odom_source"),
+                            "' == 'ekf'",
+                        ]
+                    )
+                ),
+                parameters=[
+                    LaunchConfiguration("ekf_params_file"),
+                    {"use_sim_time": ParameterValue(LaunchConfiguration("use_sim_time"), value_type=bool)},
+                ],
+            ),
+            Node(
+                package="waver_patrol",
+                executable="waver_base_driver_node",
+                name="waver_base_driver_node",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_waver_base_driver")),
+                parameters=[
+                    *common,
+                    {
+                        "serial_port": ParameterValue(LaunchConfiguration("serial_port"), value_type=str),
+                        "cmd_vel_topic": "/cmd_vel",
+                        "cmd_timeout_s": 0.3,
+                    },
+                ],
             ),
             Node(
                 package="waver_patrol",

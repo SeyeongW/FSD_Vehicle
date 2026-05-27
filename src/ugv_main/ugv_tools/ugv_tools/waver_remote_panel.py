@@ -5,7 +5,7 @@
 역할:
   - 작은 Tkinter 창에서 Waver 수동 조작과 자율순찰 시작/정지를 한 곳에 모은다.
   - MANUAL 모드에서는 방향 버튼/키보드 입력을 /waver/manual_cmd_vel 후보로 발행한다.
-  - AUTO 버튼은 /waver/mode=AUTO를 발행해 Waver mission/Nav2 백엔드를 시작/재개시킨다.
+  - AUTO 버튼은 /waver/mode_cmd=AUTO를 발행해 mission manager가 mode authority로 전환한다.
   - AUTO 주행 중 방향키를 누르면 AUTO 모드는 유지하고 manual 후보만 잠깐 올려
     safety_cmd_mux_node가 수동 override 후 다시 Nav2 경로로 복귀하게 한다.
   - 최종 /cmd_vel은 기본적으로 safety_cmd_mux_node만 발행한다.
@@ -109,7 +109,7 @@ class WaverRemoteNode(Node):
     역할:
       - 기본 실차 모드에서는 GUI 입력을 `/waver/manual_cmd_vel` 후보로만 발행한다.
       - 최종 `/cmd_vel`은 `safety_cmd_mux_node`가 단독으로 발행하게 둔다.
-      - AUTO 버튼은 `/waver/mode=AUTO`를 발행해 mission/Nav2 백엔드를 시작 또는 재개시킨다.
+      - AUTO 버튼은 `/waver/mode_cmd=AUTO`를 발행해 mission manager가 검증 후 `/waver/mode`를 바꾼다.
       - 레거시 Gazebo 단독 실험이 필요할 때만 `publish_direct_cmd_vel:=true`로 직접 `/cmd_vel`을 낸다.
     """
 
@@ -147,6 +147,7 @@ class WaverRemoteNode(Node):
         self.declare_parameter("target_confidence_topic", "/waver/target_confidence")
         self.declare_parameter("bird_confirmed_topic", "/waver/bird_confirmed")
         self.declare_parameter("mode_topic", "/waver/mode")
+        self.declare_parameter("mode_cmd_topic", "/waver/mode_cmd")
         self.declare_parameter("mission_command_topic", "/waver/mission_command")
         self.declare_parameter("operator_command_topic", "/waver/operator_command")
         self.declare_parameter("keyboard_state_topic", "/waver/operator_keyboard_state")
@@ -252,7 +253,7 @@ class WaverRemoteNode(Node):
         self.cmd_pub = self.create_publisher(Twist, self.cmd_output_topic, 10)
         self.mode_pub = self.create_publisher(
             String,
-            str(self.get_parameter("mode_topic").value),
+            str(self.get_parameter("mode_cmd_topic").value),
             10,
         )
         self.mission_command_pub = self.create_publisher(
@@ -882,6 +883,13 @@ class WaverRemoteNode(Node):
         normalized = command.strip().upper()
         if not normalized:
             return
+        if normalized in {"START_PATROL", "AUTO_MODE", "GAZEBO_TRIAL_START"}:
+            reason = self.start_patrol_block_reason()
+            if reason:
+                with self.lock:
+                    self.state.auto_status = f"START_BLOCKED reason={reason}"
+                self.get_logger().warn(f"START_BLOCKED reason={reason}")
+                return
         msg = String(data=normalized)
         self.mission_command_pub.publish(msg)
         self.operator_command_pub.publish(msg)
@@ -920,6 +928,46 @@ class WaverRemoteNode(Node):
             self.emergency_stop()
         elif normalized == "CLEAR_EMERGENCY_STOP":
             self.reset_estop()
+
+    def start_patrol_block_reason(self) -> str:
+        if self.profile != "real":
+            return ""
+        reasons: list[str] = []
+        try:
+            cmd_publishers = self.get_publishers_info_by_topic(self.final_cmd_vel_topic)
+            if len(cmd_publishers) != 1:
+                reasons.append(f"cmd_vel_publishers={len(cmd_publishers)}")
+            elif "safety_cmd_mux" not in cmd_publishers[0].node_name:
+                reasons.append(f"cmd_vel_owner={cmd_publishers[0].node_name}")
+        except Exception as exc:
+            reasons.append(f"cmd_vel_audit_error={exc}")
+        try:
+            mode_publishers = self.get_publishers_info_by_topic(str(self.get_parameter("mode_topic").value))
+            if len(mode_publishers) != 1:
+                reasons.append(f"mode_publishers={len(mode_publishers)}")
+        except Exception as exc:
+            reasons.append(f"mode_audit_error={exc}")
+        with self.lock:
+            safety = self.state.safety_state.upper()
+            battery = self.state.battery_state.upper()
+            map_ok = self.state.map_received
+            pose_age = time.monotonic() - self.last_amcl_pose_time if self.last_amcl_pose_time else 999.0
+            estop = self.state.emergency_stop
+            camera = self.state.camera_state.upper()
+        if estop:
+            reasons.append("emergency_stop_active")
+        if not map_ok:
+            reasons.append("map_not_loaded")
+        if pose_age > 2.0:
+            reasons.append(f"localization_stale={pose_age:.1f}s")
+        if not safety or safety == "UNKNOWN" or any(token in safety for token in ("STOP", "EMERGENCY", "FAULT")):
+            reasons.append(f"safety_state={safety or 'UNKNOWN'}")
+        if any(token in battery for token in ("CRITICAL", "STALE_STOP", "BATTERY_STALE_STOP")):
+            reasons.append(f"battery_state={battery}")
+        if "MODEL_MISSING" in camera:
+            with self.lock:
+                self.state.auto_status = "PATROL_ONLY_NO_BIRD_APPROACH"
+        return ", ".join(reasons)
 
     def subprocess_allowed_for(self, label: str) -> bool:
         if label == "mapping":
@@ -1105,8 +1153,8 @@ class WaverRemoteNode(Node):
             self.cmd_pub.publish(msg)
 
     def publish_mode(self, force: bool = False) -> None:
-        # 역할: 모드 문자열을 /waver/mode로 발행해 다른 노드가 GUI 상태를 알 수 있게 한다.
-        # change-only 발행은 late subscriber가 AUTO를 놓칠 수 있으므로 0.5초마다 heartbeat로 재발행한다.
+        # 역할: operator panel은 real profile에서 /waver/mode를 직접 소유하지 않고
+        # /waver/mode_cmd 후보만 낸다. 최종 /waver/mode는 mission manager가 발행한다.
         with self.lock:
             mode = self.state.mode
         now = time.monotonic()

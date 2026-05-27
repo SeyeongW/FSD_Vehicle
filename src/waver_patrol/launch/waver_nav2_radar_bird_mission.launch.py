@@ -31,6 +31,17 @@ def generate_launch_description() -> LaunchDescription:
     use_nav2 = LaunchConfiguration("use_nav2")
     pointcloud_topic = LaunchConfiguration("pointcloud_topic")
     scan_topic = LaunchConfiguration("scan_topic")
+    nav2_controller_cmd_topic = LaunchConfiguration("nav2_controller_cmd_topic")
+    velocity_smoother_input_topic = LaunchConfiguration("velocity_smoother_input_topic")
+    velocity_smoother_output_topic = LaunchConfiguration("velocity_smoother_output_topic")
+    safety_nav2_cmd_topic = LaunchConfiguration("safety_nav2_cmd_topic")
+    start_base_feedback = LaunchConfiguration("start_base_feedback")
+    feedback_serial_port = LaunchConfiguration("feedback_serial_port")
+    feedback_baudrate = LaunchConfiguration("feedback_baudrate")
+    base_node_executable = LaunchConfiguration("base_node_executable")
+    pub_odom_tf = LaunchConfiguration("pub_odom_tf")
+    enable_ldlidar = LaunchConfiguration("enable_ldlidar")
+    enable_rf2o = LaunchConfiguration("enable_rf2o")
 
     common = [config_file, {"use_sim_time": ParameterValue(use_sim_time, value_type=bool)}]
     serial_condition = IfCondition(
@@ -48,9 +59,9 @@ def generate_launch_description() -> LaunchDescription:
     ugv_nav_include = GroupAction(
         condition=IfCondition(use_nav2),
         actions=[
-            LogInfo(msg="Nav2 enabled: remapping Nav2 /cmd_vel output to /waver/cmd_vel_nav2 before safety mux."),
-            SetRemap(src="/cmd_vel", dst="/waver/cmd_vel_nav2", condition=IfCondition(LaunchConfiguration("remap_nav2_cmd_vel"))),
-            SetRemap(src="cmd_vel", dst="/waver/cmd_vel_nav2", condition=IfCondition(LaunchConfiguration("remap_nav2_cmd_vel"))),
+            LogInfo(msg="Nav2 enabled: remapping Nav2 controller output to the configured safety candidate topic."),
+            SetRemap(src="/cmd_vel", dst=nav2_controller_cmd_topic, condition=IfCondition(LaunchConfiguration("remap_nav2_cmd_vel"))),
+            SetRemap(src="cmd_vel", dst=nav2_controller_cmd_topic, condition=IfCondition(LaunchConfiguration("remap_nav2_cmd_vel"))),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     [FindPackageShare("ugv_nav"), "/launch/nav.launch.py"]
@@ -61,6 +72,13 @@ def generate_launch_description() -> LaunchDescription:
                     "use_rviz": LaunchConfiguration("use_rviz"),
                     "map": LaunchConfiguration("map"),
                     "params_file": LaunchConfiguration("nav2_params_file"),
+                    "pub_odom_tf": pub_odom_tf,
+                    "start_base_feedback": start_base_feedback,
+                    "feedback_serial_port": feedback_serial_port,
+                    "feedback_baudrate": feedback_baudrate,
+                    "base_node_executable": base_node_executable,
+                    "enable_ldlidar": enable_ldlidar,
+                    "enable_rf2o": enable_rf2o,
                 }.items(),
             ),
         ],
@@ -82,6 +100,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_radar_command_bridge", default_value="true"),
             DeclareLaunchArgument("enable_target_goal_manager", default_value="true"),
             DeclareLaunchArgument("enable_safety_cmd_mux", default_value="true"),
+            DeclareLaunchArgument("enable_velocity_smoother", default_value="false"),
             DeclareLaunchArgument("enable_battery_return", default_value="true"),
             DeclareLaunchArgument("enable_deep_learning_stub", default_value="false"),
             DeclareLaunchArgument("enable_sound_stub", default_value="false"),
@@ -110,12 +129,23 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_moving_object_motion_filter", default_value="true"),
             DeclareLaunchArgument("enable_moving_object_goal_relay", default_value="false"),
             DeclareLaunchArgument("require_robot_pose_for_goal", default_value="true"),
+            DeclareLaunchArgument("start_base_feedback", default_value="false"),
+            DeclareLaunchArgument("feedback_serial_port", default_value=""),
+            DeclareLaunchArgument("feedback_baudrate", default_value="115200"),
+            DeclareLaunchArgument("base_node_executable", default_value="base_node"),
+            DeclareLaunchArgument("pub_odom_tf", default_value="true"),
+            DeclareLaunchArgument("enable_ldlidar", default_value="false"),
+            DeclareLaunchArgument("enable_rf2o", default_value="false"),
             DeclareLaunchArgument("pointcloud_topic", default_value="/mid360_PointCloud2"),
             DeclareLaunchArgument("pointcloud_target_frame", default_value="base_link"),
             DeclareLaunchArgument("pointcloud_forward_axis", default_value="x"),
             DeclareLaunchArgument("pointcloud_lateral_axis", default_value="y"),
             DeclareLaunchArgument("pointcloud_height_axis", default_value="z"),
             DeclareLaunchArgument("pointcloud_positive_lateral_is_left", default_value="true"),
+            DeclareLaunchArgument("nav2_controller_cmd_topic", default_value="/waver/cmd_vel_nav2"),
+            DeclareLaunchArgument("velocity_smoother_input_topic", default_value="/waver/cmd_vel_nav2_raw"),
+            DeclareLaunchArgument("velocity_smoother_output_topic", default_value="/waver/cmd_vel_nav2_smooth"),
+            DeclareLaunchArgument("safety_nav2_cmd_topic", default_value="/waver/cmd_vel_nav2"),
             DeclareLaunchArgument("moving_object_input_topic", default_value="/waver/lidar_objects"),
             DeclareLaunchArgument("moving_object_input_type", default_value="pose_array"),
             DeclareLaunchArgument("moving_object_output_topic", default_value="/waver/lidar_objects_map"),
@@ -267,6 +297,21 @@ def generate_launch_description() -> LaunchDescription:
                 ],
             ),
             Node(
+                package="nav2_velocity_smoother",
+                executable="velocity_smoother",
+                name="velocity_smoother",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_velocity_smoother")),
+                parameters=[
+                    LaunchConfiguration("nav2_params_file"),
+                    {"use_sim_time": ParameterValue(use_sim_time, value_type=bool)},
+                ],
+                remappings=[
+                    ("cmd_vel", velocity_smoother_input_topic),
+                    ("cmd_vel_smoothed", velocity_smoother_output_topic),
+                ],
+            ),
+            Node(
                 package="waver_patrol",
                 executable="radar_command_bridge_node",
                 name="radar_command_bridge_node",
@@ -378,7 +423,7 @@ def generate_launch_description() -> LaunchDescription:
                         "max_linear_speed": ParameterValue(LaunchConfiguration("safety_max_linear_speed"), value_type=float),
                         "max_angular_speed": ParameterValue(LaunchConfiguration("safety_max_angular_speed"), value_type=float),
                         "mode_default": default_mode,
-                        "nav2_cmd_topic": "/waver/cmd_vel_nav2",
+                        "nav2_cmd_topic": safety_nav2_cmd_topic,
                         "cmd_vel_auto_topic": "",
                         "scan_topic": scan_topic,
                     },

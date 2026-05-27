@@ -8,7 +8,7 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, Float32, String
 from vision_msgs.msg import BoundingBox2D, Detection2D, Detection2DArray, ObjectHypothesisWithPose
 
 
@@ -29,6 +29,8 @@ class BirdDetectorNode(Node):
         self.declare_parameter("detections_topic", "/waver/bird_detections_2d")
         self.declare_parameter("confirmed_topic", "/waver/bird_confirmed")
         self.declare_parameter("state_topic", "/waver/bird_detector_state")
+        self.declare_parameter("target_class_topic", "/waver/target_class")
+        self.declare_parameter("target_confidence_topic", "/waver/target_confidence")
         self.declare_parameter("backend", "yolo")
         self.declare_parameter("model_path", "")
         self.declare_parameter("confidence_threshold", 0.65)
@@ -48,6 +50,8 @@ class BirdDetectorNode(Node):
         self.detections_pub = self.create_publisher(Detection2DArray, str(self.get_parameter("detections_topic").value), 10)
         self.confirmed_pub = self.create_publisher(Bool, str(self.get_parameter("confirmed_topic").value), 10)
         self.state_pub = self.create_publisher(String, str(self.get_parameter("state_topic").value), 10)
+        self.target_class_pub = self.create_publisher(String, str(self.get_parameter("target_class_topic").value), 10)
+        self.target_confidence_pub = self.create_publisher(Float32, str(self.get_parameter("target_confidence_topic").value), 10)
 
         self.camera_info: CameraInfo | None = None
         self.last_image_time = 0.0
@@ -102,10 +106,13 @@ class BirdDetectorNode(Node):
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
             detections = self._run_yolo(cv_image, msg)
             confirmed = self._update_confirmation(bool(detections.detections))
+            best_confidence = self._best_confidence(detections)
             self.detections_pub.publish(detections)
             self.confirmed_pub.publish(Bool(data=confirmed))
+            self.target_class_pub.publish(String(data="bird" if confirmed else "none"))
+            self.target_confidence_pub.publish(Float32(data=float(best_confidence if confirmed else 0.0)))
             self.state_pub.publish(
-                String(data=f"OK detections={len(detections.detections)} confirmed={confirmed}")
+                String(data=f"OK detections={len(detections.detections)} confirmed={confirmed} best_confidence={best_confidence:.3f}")
             )
         except Exception as exc:  # pragma: no cover - hardware/model dependent
             self._publish_empty(msg, f"INFERENCE_ERROR error={exc}")
@@ -162,7 +169,17 @@ class BirdDetectorNode(Node):
         self.detections_pub.publish(out)
         self.confirm_window.append(False)
         self.confirmed_pub.publish(Bool(data=False))
+        self.target_class_pub.publish(String(data="none"))
+        self.target_confidence_pub.publish(Float32(data=0.0))
         self.state_pub.publish(String(data=f"{state} bird_confirmed=false"))
+
+    @staticmethod
+    def _best_confidence(detections: Detection2DArray) -> float:
+        best = 0.0
+        for det in detections.detections:
+            for result in det.results:
+                best = max(best, float(result.hypothesis.score))
+        return best
 
     def _update_confirmation(self, detected: bool) -> bool:
         self.confirm_window.append(bool(detected))
@@ -172,11 +189,15 @@ class BirdDetectorNode(Node):
     def health_tick(self) -> None:
         if self.last_image_time == 0.0:
             self.confirmed_pub.publish(Bool(data=False))
+            self.target_class_pub.publish(String(data="none"))
+            self.target_confidence_pub.publish(Float32(data=0.0))
             self.state_pub.publish(String(data="CAMERA_WAITING bird_confirmed=false"))
             return
         if self._now() - self.last_image_time > float(self.get_parameter("camera_stale_sec").value):
             self.confirm_window.clear()
             self.confirmed_pub.publish(Bool(data=False))
+            self.target_class_pub.publish(String(data="none"))
+            self.target_confidence_pub.publish(Float32(data=0.0))
             self.state_pub.publish(String(data="CAMERA_STALE bird_confirmed=false"))
 
     def _now(self) -> float:

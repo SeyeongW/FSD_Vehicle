@@ -22,8 +22,39 @@ if ! grep -E 'safety_cmd_mux_node|collision_monitor' /tmp/waver_cmd_vel_info.txt
 fi
 
 echo
+echo "== /waver/mode authority =="
+ros2 topic info -v /waver/mode > /tmp/waver_mode_info.txt 2>/dev/null || {
+  echo "ERROR: /waver/mode is not visible"
+  exit 4
+}
+cat /tmp/waver_mode_info.txt
+MODE_PUB_COUNT="$(grep -c 'Endpoint type: PUBLISHER' /tmp/waver_mode_info.txt || true)"
+if [ "$MODE_PUB_COUNT" -ne 1 ]; then
+  echo "ERROR: expected exactly one /waver/mode publisher, got $MODE_PUB_COUNT"
+  exit 4
+fi
+
+echo
+echo "== /scan and /odom publisher uniqueness =="
+for topic in /scan /odom; do
+  name="$(printf '%s' "$topic" | tr '/' '_')"
+  file="/tmp/waver_${name}_info.txt"
+  ros2 topic info -v "$topic" > "$file" 2>/dev/null || {
+    echo "ERROR: $topic is not visible"
+    exit 5
+  }
+  cat "$file"
+  COUNT="$(grep -c 'Endpoint type: PUBLISHER' "$file" || true)"
+  if [ "$COUNT" -ne 1 ]; then
+    echo "ERROR: expected exactly one $topic publisher, got $COUNT"
+    exit 5
+  fi
+done
+
+echo
 echo "== Candidate command topics =="
 ros2 topic info -v /waver/manual_cmd_vel 2>/dev/null || true
+ros2 topic info -v /waver/cmd_vel_nav2_raw 2>/dev/null || true
 ros2 topic info -v /waver/cmd_vel_nav2 2>/dev/null || true
 ros2 topic info -v /waver/cmd_vel_nav2_smooth 2>/dev/null || true
 

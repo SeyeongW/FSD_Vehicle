@@ -49,6 +49,7 @@ setup(
             'slam_nav_patrol = waver_patrol.apps.slam_nav_patrol:main',
             'risk_self_test = waver_patrol.apps.risk_self_test:main',
             'serial_cmd_vel_bridge = waver_patrol.bridges.serial_cmd_vel_bridge:main',
+            'waver_base_driver_node = waver_patrol.bridges.waver_base_driver_node:main',
             'cmd_vel_to_json = waver_patrol.bridges.cmd_vel_to_json:main',
             'teleop_node = waver_patrol.teleop.teleop_node:main',
             'fixed_waypoint_patrol_node = waver_patrol.patrol.fixed_waypoint_patrol_node:main',

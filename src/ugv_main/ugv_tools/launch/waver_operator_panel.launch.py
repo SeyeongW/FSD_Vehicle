@@ -3,7 +3,7 @@
 
 역할:
   - 조작 PC나 Jetson 데스크톱에서 시각화 리모콘만 실행한다.
-  - 버튼/키보드는 `/waver/manual_cmd_vel` 후보만 발행하고, AUTO 버튼은 `/waver/mode=AUTO`를 발행한다.
+  - 버튼/키보드는 `/waver/manual_cmd_vel` 후보만 발행하고, AUTO 버튼은 `/waver/mode_cmd=AUTO`를 발행한다.
   - 최종 `/cmd_vel`은 Jetson backend의 `safety_cmd_mux_node` 하나만 발행해야 한다.
   - serial bridge는 절대 여기서 실행하지 않는다. 실차 serial은 Jetson backend에서만 잡는다.
 
@@ -53,6 +53,7 @@ def generate_launch_description():
     gazebo_trial_state_topic = LaunchConfiguration("gazebo_trial_state_topic")
     map_apply_state_topic = LaunchConfiguration("map_apply_state_topic")
     mission_command_topic = LaunchConfiguration("mission_command_topic")
+    mode_cmd_topic = LaunchConfiguration("mode_cmd_topic")
     operator_command_topic = LaunchConfiguration("operator_command_topic")
     publish_direct_cmd_vel = LaunchConfiguration("publish_direct_cmd_vel")
     profile = LaunchConfiguration("profile")
@@ -116,6 +117,7 @@ def generate_launch_description():
                 "gazebo_trial_state_topic": gazebo_trial_state_topic,
                 "map_apply_state_topic": map_apply_state_topic,
                 "mission_command_topic": mission_command_topic,
+                "mode_cmd_topic": mode_cmd_topic,
                 "operator_command_topic": operator_command_topic,
                 "allow_subprocess_launches": ParameterValue(
                     allow_subprocess_launches, value_type=bool
@@ -176,6 +178,7 @@ def generate_launch_description():
             DeclareLaunchArgument("gazebo_trial_state_topic", default_value="/waver/gazebo_trial_state"),
             DeclareLaunchArgument("map_apply_state_topic", default_value="/waver/map_apply_state"),
             DeclareLaunchArgument("mission_command_topic", default_value="/waver/mission_command"),
+            DeclareLaunchArgument("mode_cmd_topic", default_value="/waver/mode_cmd"),
             DeclareLaunchArgument("operator_command_topic", default_value="/waver/operator_command"),
             DeclareLaunchArgument("profile", default_value="real"),
             DeclareLaunchArgument("publish_direct_cmd_vel", default_value="false"),
@@ -192,7 +195,7 @@ def generate_launch_description():
             LogInfo(
                 msg=(
                     "Waver operator panel: visual remote only. It publishes "
-                    "/waver/manual_cmd_vel and /waver/mode; final /cmd_vel must come "
+                    "/waver/manual_cmd_vel and /waver/mode_cmd; final /waver/mode and /cmd_vel must come "
                     "from safety_cmd_mux_node on the Jetson backend. Gazebo launch "
                     "commands are blocked from this panel; the SLAM mapping button may "
                     "start only the configured mapping backend."

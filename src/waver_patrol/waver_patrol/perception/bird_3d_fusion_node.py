@@ -5,8 +5,10 @@ import time
 
 import rclpy
 from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseArray
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, PointCloud2
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Bool, String
@@ -31,6 +33,7 @@ class Bird3DFusionNode(Node):
         self.declare_parameter("camera_info_topic", "/camera/camera_info")
         self.declare_parameter("pointcloud_topic", "/mid360_PointCloud2")
         self.declare_parameter("moving_target_valid_topic", "/waver/moving_target_valid")
+        self.declare_parameter("dynamic_targets_topic", "/waver/elevated_dynamic_targets")
         self.declare_parameter("pose_base_topic", "/waver/bird_target_pose_base")
         self.declare_parameter("pose_map_topic", "/waver/bird_target_pose_map")
         self.declare_parameter("valid_topic", "/waver/bird_target_valid")
@@ -50,6 +53,10 @@ class Bird3DFusionNode(Node):
         self.declare_parameter("camera_info_stale_sec", 5.0)
         self.declare_parameter("pointcloud_stale_sec", 0.5)
         self.declare_parameter("require_dynamic_valid", True)
+        self.declare_parameter("dynamic_association_radius_m", 1.5)
+        self.declare_parameter("max_dynamic_target_age_sec", 1.0)
+        self.declare_parameter("max_sync_dt_sec", 0.25)
+        self.declare_parameter("require_camera_optical_frame", True)
 
         self.camera_info: CameraInfo | None = None
         self.camera_info_time = 0.0
@@ -57,6 +64,8 @@ class Bird3DFusionNode(Node):
         self.detections_time = 0.0
         self.bird_confirmed = False
         self.dynamic_valid = False
+        self.dynamic_targets: list[PoseStamped] = []
+        self.dynamic_targets_time = 0.0
         self.last_cloud_time = 0.0
 
         if Buffer is not None:
@@ -76,6 +85,7 @@ class Bird3DFusionNode(Node):
         self.create_subscription(Bool, str(self.get_parameter("bird_confirmed_topic").value), lambda m: setattr(self, "bird_confirmed", bool(m.data)), 10)
         self.create_subscription(CameraInfo, str(self.get_parameter("camera_info_topic").value), self.camera_info_callback, 10)
         self.create_subscription(Bool, str(self.get_parameter("moving_target_valid_topic").value), lambda m: setattr(self, "dynamic_valid", bool(m.data)), 10)
+        self.create_subscription(PoseArray, str(self.get_parameter("dynamic_targets_topic").value), self.dynamic_targets_callback, 10)
         self.create_subscription(PointCloud2, str(self.get_parameter("pointcloud_topic").value), self.cloud_callback, 5)
         self.create_timer(0.2, self.health_tick)
 
@@ -87,19 +97,35 @@ class Bird3DFusionNode(Node):
         self.detections = msg
         self.detections_time = self._now()
 
+    def dynamic_targets_callback(self, msg: PoseArray) -> None:
+        targets: list[PoseStamped] = []
+        for pose in msg.poses:
+            stamped = PoseStamped()
+            stamped.header = msg.header
+            stamped.pose = pose
+            targets.append(stamped)
+        self.dynamic_targets = targets
+        self.dynamic_targets_time = self._now()
+
     def cloud_callback(self, msg: PointCloud2) -> None:
         self.last_cloud_time = self._now()
         if not self.bird_confirmed:
             self._reject("BIRD_NOT_CONFIRMED")
             return
-        if bool(self.get_parameter("require_dynamic_valid").value) and not self.dynamic_valid:
-            self._reject("DYNAMIC_NOT_VALID")
-            return
         if self.camera_info is None or self._now() - self.camera_info_time > float(self.get_parameter("camera_info_stale_sec").value):
             self._reject("CAMERA_INFO_STALE")
             return
+        if not self.camera_info.header.frame_id:
+            self._reject("CALIBRATION_MISSING camera_info_frame_empty")
+            return
+        if bool(self.get_parameter("require_camera_optical_frame").value) and "optical" not in self.camera_info.header.frame_id:
+            self._reject(f"CALIBRATION_MISSING camera_frame_not_optical:{self.camera_info.header.frame_id}")
+            return
         if self.detections is None or self._now() - self.detections_time > float(self.get_parameter("detections_stale_sec").value):
             self._reject("DETECTION_STALE")
+            return
+        if self._stamp_delta_sec(msg.header.stamp, self.detections.header.stamp) > float(self.get_parameter("max_sync_dt_sec").value):
+            self._reject("SYNC_DT_TOO_LARGE")
             return
         detection = self._best_detection(self.detections)
         if detection is None:
@@ -123,6 +149,10 @@ class Bird3DFusionNode(Node):
             if map_pose is None:
                 self._reject("TF_FAIL_MAP")
                 return
+            dynamic_ok, dynamic_reason = self._associated_dynamic_target(map_pose)
+            if bool(self.get_parameter("require_dynamic_valid").value) and not dynamic_ok:
+                self._reject(dynamic_reason)
+                return
             self.valid_pub.publish(Bool(data=True))
             self.pose_base_pub.publish(base_pose)
             self.pose_map_pub.publish(map_pose)
@@ -131,7 +161,8 @@ class Bird3DFusionNode(Node):
                 String(
                     data=(
                         "VALID bird_confirmed=true z_valid=true dynamic_valid=true "
-                        f"height={height:.3f} range={target_range:.3f} source=PointCloud2"
+                        f"height={height:.3f} range={target_range:.3f} source=PointCloud2 "
+                        f"dynamic_reason={dynamic_reason}"
                     )
                 )
             )
@@ -151,12 +182,12 @@ class Bird3DFusionNode(Node):
         return best
 
     def _centroid_from_cloud(self, msg: PointCloud2, detection: Detection2D, info: CameraInfo) -> tuple[float, float, float]:
-        camera_frame = info.header.frame_id or msg.header.frame_id
+        camera_frame = info.header.frame_id
         transform = None
         if msg.header.frame_id != camera_frame:
             if self.tf_buffer is None:
                 raise RuntimeError("tf2 unavailable")
-            transform = self.tf_buffer.lookup_transform(camera_frame, msg.header.frame_id, rclpy.time.Time())
+            transform = self.tf_buffer.lookup_transform(camera_frame, msg.header.frame_id, Time.from_msg(msg.header.stamp))
         fx, fy = float(info.k[0]), float(info.k[4])
         cx, cy = float(info.k[2]), float(info.k[5])
         if fx == 0.0 or fy == 0.0:
@@ -200,7 +231,7 @@ class Bird3DFusionNode(Node):
             if self.tf_buffer is None:
                 return None
             try:
-                transform = self.tf_buffer.lookup_transform(target_frame, source_frame, rclpy.time.Time())
+                transform = self.tf_buffer.lookup_transform(target_frame, source_frame, Time.from_msg(stamp))
                 x, y, z = self._transform_xyz(x, y, z, transform)
             except TransformException:
                 return None
@@ -245,6 +276,46 @@ class Bird3DFusionNode(Node):
         marker.color.b = 0.3
         marker.color.a = 0.9
         self.marker_pub.publish(marker)
+
+    def _associated_dynamic_target(self, map_pose: PoseStamped) -> tuple[bool, str]:
+        if self._now() - self.dynamic_targets_time > float(self.get_parameter("max_dynamic_target_age_sec").value):
+            return False, "DYNAMIC_TARGET_STALE"
+        radius = float(self.get_parameter("dynamic_association_radius_m").value)
+        best = math.inf
+        for target in self.dynamic_targets:
+            target_map = target if target.header.frame_id == map_pose.header.frame_id else self._transform_pose(target, map_pose.header.frame_id)
+            if target_map is None:
+                continue
+            dx = target_map.pose.position.x - map_pose.pose.position.x
+            dy = target_map.pose.position.y - map_pose.pose.position.y
+            dz = target_map.pose.position.z - map_pose.pose.position.z
+            best = min(best, math.sqrt(dx * dx + dy * dy + dz * dz))
+        if best <= radius:
+            return True, f"DYNAMIC_ASSOCIATED distance={best:.3f}"
+        return False, f"DYNAMIC_ASSOCIATION_FAILED nearest={best if math.isfinite(best) else -1.0:.3f} radius={radius:.3f}"
+
+    def _transform_pose(self, pose: PoseStamped, target_frame: str) -> PoseStamped | None:
+        if self.tf_buffer is None:
+            return None
+        try:
+            transform = self.tf_buffer.lookup_transform(target_frame, pose.header.frame_id, Time.from_msg(pose.header.stamp))
+            x, y, z = self._transform_xyz(pose.pose.position.x, pose.pose.position.y, pose.pose.position.z, transform)
+        except Exception:
+            return None
+        out = PoseStamped()
+        out.header.stamp = pose.header.stamp
+        out.header.frame_id = target_frame
+        out.pose.position.x = x
+        out.pose.position.y = y
+        out.pose.position.z = z
+        out.pose.orientation = pose.pose.orientation
+        return out
+
+    @staticmethod
+    def _stamp_delta_sec(a, b) -> float:
+        if (a.sec == 0 and a.nanosec == 0) or (b.sec == 0 and b.nanosec == 0):
+            return 0.0
+        return abs((float(a.sec) + float(a.nanosec) * 1e-9) - (float(b.sec) + float(b.nanosec) * 1e-9))
 
     def _reject(self, reason: str) -> None:
         self.valid_pub.publish(Bool(data=False))
