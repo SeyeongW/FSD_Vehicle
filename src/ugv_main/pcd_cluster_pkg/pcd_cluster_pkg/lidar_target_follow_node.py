@@ -324,6 +324,9 @@ def main(args: list[str] | None = None) -> None:
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except RuntimeError as exc:
+        if rclpy.ok() and "Unable to convert call argument" not in str(exc):
+            raise
     finally:
         node.publish_stop_if_enabled()
         node.destroy_node()
