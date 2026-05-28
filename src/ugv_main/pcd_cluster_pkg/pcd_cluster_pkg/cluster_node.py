@@ -6,12 +6,14 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.duration import Duration
+from rclpy.executors import ExternalShutdownException
 
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs_py import point_cloud2
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point, Pose, PoseArray, Twist
 from nav_msgs.msg import Odometry
+from std_msgs.msg import String
 
 from sklearn.cluster import DBSCAN
 
@@ -25,15 +27,42 @@ class ClusterNode(Node):
         # -------------------------
         # ROS interfaces
         # -------------------------
+        self.declare_parameter('pointcloud_topic', '/mid360_PointCloud2')
+        self.declare_parameter('odom_topic', '/odom')
+        self.declare_parameter('marker_topic', '/cluster_markers')
+        self.declare_parameter('filtered_points_topic', '/filtered_points')
+        self.declare_parameter('state_topic', '/waver/lidar_objects_state')
+        self.declare_parameter('target_frame', 'odom')
+        self.declare_parameter('ground_z_limit', 0.25)
+        self.declare_parameter('roi_min_range', 0.3)
+        self.declare_parameter('roi_max_range', 15.0)
+        self.declare_parameter('dbscan_eps', 0.7)
+        self.declare_parameter('dbscan_min_samples', 8)
+        self.declare_parameter('min_cluster_points', 15)
+        self.declare_parameter('trackable_max_size_x', 2.0)
+        self.declare_parameter('trackable_max_size_y', 2.0)
+        self.declare_parameter('trackable_max_size_z', 1.5)
+        self.declare_parameter('trackable_min_centroid_z', 0.2)
+        self.declare_parameter('max_input_points', 3000)
+
+        pointcloud_topic = str(self.get_parameter('pointcloud_topic').value)
+        odom_topic = str(self.get_parameter('odom_topic').value)
         self.sub = self.create_subscription(
-            PointCloud2, '/mid360_PointCloud2', self.callback, 10
+            PointCloud2, pointcloud_topic, self.callback, 10
         )
         self.odom_sub = self.create_subscription(
-            Odometry, '/odom', self.odom_callback, 10
+            Odometry, odom_topic, self.odom_callback, 10
         )
 
-        self.marker_pub = self.create_publisher(Marker, '/cluster_markers', 10)
-        self.pcd_pub = self.create_publisher(PointCloud2, '/filtered_points', 10)
+        self.marker_pub = self.create_publisher(
+            Marker, str(self.get_parameter('marker_topic').value), 10
+        )
+        self.pcd_pub = self.create_publisher(
+            PointCloud2, str(self.get_parameter('filtered_points_topic').value), 10
+        )
+        self.state_pub = self.create_publisher(
+            String, str(self.get_parameter('state_topic').value), 10
+        )
         self.declare_parameter('enable_cmd_vel_output', False)
         self.declare_parameter('lidar_objects_topic', '/waver/lidar_objects')
         self.enable_cmd_vel_output = bool(self.get_parameter('enable_cmd_vel_output').value)
@@ -49,12 +78,12 @@ class ClusterNode(Node):
         # -------------------------
         # Parameters
         # -------------------------
-        self.target_frame = 'odom'
+        self.target_frame = str(self.get_parameter('target_frame').value)
 
         # ROI / filtering
-        self.ground_z_limit = 0.25
-        self.roi_min_range = 0.3
-        self.roi_max_range = 15.0
+        self.ground_z_limit = float(self.get_parameter('ground_z_limit').value)
+        self.roi_min_range = float(self.get_parameter('roi_min_range').value)
+        self.roi_max_range = float(self.get_parameter('roi_max_range').value)
 
         # Remove robot body points
         self.self_x = (-0.6, 0.6)
@@ -62,15 +91,16 @@ class ClusterNode(Node):
         self.self_z = (-0.3, 0.8)
 
         # DBSCAN
-        self.dbscan_eps = 0.7
-        self.dbscan_min_samples = 8
-        self.min_cluster_points = 15
+        self.dbscan_eps = float(self.get_parameter('dbscan_eps').value)
+        self.dbscan_min_samples = int(self.get_parameter('dbscan_min_samples').value)
+        self.min_cluster_points = int(self.get_parameter('min_cluster_points').value)
+        self.max_input_points = int(self.get_parameter('max_input_points').value)
 
         # Trackable candidate filter
-        self.trackable_max_size_x = 2.0
-        self.trackable_max_size_y = 2.0
-        self.trackable_max_size_z = 1.5
-        self.trackable_min_centroid_z = 0.2
+        self.trackable_max_size_x = float(self.get_parameter('trackable_max_size_x').value)
+        self.trackable_max_size_y = float(self.get_parameter('trackable_max_size_y').value)
+        self.trackable_max_size_z = float(self.get_parameter('trackable_max_size_z').value)
+        self.trackable_min_centroid_z = float(self.get_parameter('trackable_min_centroid_z').value)
 
         # Tracking
         self.track_match_dist = 3.0
@@ -109,7 +139,10 @@ class ClusterNode(Node):
 
         if self.enable_cmd_vel_output:
             self.get_logger().warn('enable_cmd_vel_output=true: this bypasses Waver safety mux and is not allowed on the real robot.')
-        self.get_logger().info('Lock-stable cluster tracking node started; /cmd_vel direct output is disabled by default.')
+        self.get_logger().info(
+            f'Lock-stable cluster tracking node started: {pointcloud_topic} -> '
+            f'{self.get_parameter("lidar_objects_topic").value}; /cmd_vel direct output is disabled by default.'
+        )
 
     # =========================================================
     # Callbacks
@@ -119,9 +152,11 @@ class ClusterNode(Node):
 
     def callback(self, msg: PointCloud2):
         raw_points = []
+        raw_count = 0
 
         # 1) ROI filtering
         for p in point_cloud2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
+            raw_count += 1
             x, y, z = p
             r = math.sqrt(x * x + y * y)
 
@@ -132,6 +167,9 @@ class ClusterNode(Node):
             self.display_clusters = []
             self.clear_markers(msg.header.stamp, msg.header.frame_id)
             self.publish_lidar_objects(msg.header, [])
+            self.publish_state(
+                f"NO_CLUSTER source_frame={msg.header.frame_id} raw={raw_count} roi={len(raw_points)}"
+            )
             self.update_tracks_no_detection()
             self.stop_robot()
             return
@@ -144,13 +182,17 @@ class ClusterNode(Node):
             self.display_clusters = []
             self.clear_markers(msg.header.stamp, msg.header.frame_id)
             self.publish_lidar_objects(msg.header, [])
+            self.publish_state(
+                f"NO_CLUSTER source_frame={msg.header.frame_id} raw={raw_count} roi={len(raw_points)} non_self={len(non_self)}"
+            )
             self.update_tracks_no_detection()
             self.stop_robot()
             return
 
         # Optional light downsampling for stability/speed
-        if len(non_self) > 3000:
-            non_self = non_self[::2]
+        if self.max_input_points > 0 and len(non_self) > self.max_input_points:
+            stride = max(1, math.ceil(len(non_self) / self.max_input_points))
+            non_self = non_self[::stride]
 
         # Publish filtered cloud
         filtered_msg = self.create_pointcloud2(non_self, msg.header)
@@ -167,6 +209,7 @@ class ClusterNode(Node):
 
         detections = []
         self.display_clusters = []
+        display_count = 0
 
         # 4) Build display clusters and tracking detections
         for label in unique_labels:
@@ -187,6 +230,7 @@ class ClusterNode(Node):
             sz = max(z_max - z_min, 0.1)
 
             # Display all valid clusters
+            display_count += 1
             self.display_clusters.append({
                 'id': int(label),
                 'local_centroid': local_centroid,
@@ -226,6 +270,12 @@ class ClusterNode(Node):
         else:
             self.update_tracks_no_detection()
         self.publish_lidar_objects(msg.header, detections)
+        self.publish_state(
+            f"CLUSTER_OK frame={msg.header.frame_id} target_frame={self.target_frame} "
+            f"raw={raw_count} roi={len(raw_points)} clustered_points={len(non_self)} "
+            f"clusters={display_count} detections={len(detections)} tracks={len(self.tracks)} "
+            f"locked={self.locked_target_id}"
+        )
 
         # 6) Publish markers
         self.publish_all_markers(msg.header)
@@ -449,6 +499,9 @@ class ClusterNode(Node):
             pose_array.poses.append(pose)
         self.objects_pub.publish(pose_array)
 
+    def publish_state(self, text):
+        self.state_pub.publish(String(data=text))
+
     # =========================================================
     # TF / Point utilities
     # =========================================================
@@ -617,12 +670,17 @@ def main(args=None):
 
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except RuntimeError as exc:
+        if rclpy.ok() and "Unable to convert call argument" not in str(exc):
+            raise
     finally:
-        node.stop_robot()
+        if rclpy.ok():
+            node.stop_robot()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

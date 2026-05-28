@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'cluster_node = pcd_cluster_pkg.cluster_node:main',
             'cluster_node_backup = pcd_cluster_pkg.cluster_node_backup:main',
+            'lidar_target_follow_node = pcd_cluster_pkg.lidar_target_follow_node:main',
         ],
     },
 )

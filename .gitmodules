@@ -1,0 +1,9 @@
+[submodule "src/Livox-SDK2"]
+	path = src/Livox-SDK2
+	url = https://github.com/Livox-SDK/Livox-SDK2.git
+[submodule "src/livox_laser_simulation_RO2"]
+	path = src/livox_laser_simulation_RO2
+	url = https://github.com/stm32f303ret6/livox_laser_simulation_RO2.git
+[submodule "src/livox_ros_driver2"]
+	path = src/livox_ros_driver2
+	url = https://github.com/Livox-SDK/livox_ros_driver2.git

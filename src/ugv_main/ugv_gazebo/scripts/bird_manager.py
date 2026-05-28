@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import math
+import os
 import random
 import time
 from dataclasses import dataclass
@@ -102,14 +103,29 @@ class BirdManager(Node):
     def __init__(self):
         super().__init__('bird_manager')
 
+        self.declare_parameter(
+            'active_birds',
+            os.environ.get('BIRD_MANAGER_ACTIVE_BIRDS', 'bird_single'),
+        )
+        self.declare_parameter('publish_waver_detection_topics', True)
+        self.declare_parameter('z_min_m', 5.0)
+        self.declare_parameter('z_max_m', 8.0)
+        self.declare_parameter('min_xy_radius_m', 0.0)
+        self.publish_waver_detection_topics = bool(
+            self.get_parameter('publish_waver_detection_topics').value
+        )
+
         # 15x15 map, leave room from the 2m boundary wall.
         self.x_min = -6.5
         self.x_max = 6.5
         self.y_min = -6.5
         self.y_max = 6.5
 
-        self.z_min = 5.0
-        self.z_max = 8.0
+        self.z_min = float(self.get_parameter('z_min_m').value)
+        self.z_max = float(self.get_parameter('z_max_m').value)
+        if self.z_max < self.z_min:
+            self.z_min, self.z_max = self.z_max, self.z_min
+        self.min_xy_radius = max(0.0, float(self.get_parameter('min_xy_radius_m').value))
 
         self.dt = 0.08
         self.busy = False
@@ -142,33 +158,51 @@ class BirdManager(Node):
         self.obstacle_metrics = {}
         self.last_obstacle_status_time = 0.0
 
+        active_names = [
+            name.strip()
+            for name in str(self.get_parameter('active_birds').value).split(',')
+            if name.strip()
+        ]
+        if not active_names:
+            active_names = ['bird_single']
+
         self.birds = [
-            BirdConfig('bird_single', 2.2, 0.6, 1.0),
+            BirdConfig(name, 2.2, 0.6, 1.0)
+            for name in active_names
         ]
 
         self.runtime = {bird.name: BirdRuntime() for bird in self.birds}
 
         self.bird_pose_pub = self.create_publisher(PoseStamped, '/bird/nearest_pose', 10)
         self.bird_visible_pub = self.create_publisher(Bool, '/bird/visible', 10)
-        self.dynamic_targets_pub = self.create_publisher(
-            PoseArray, '/waver/elevated_dynamic_targets', 10
-        )
-        self.dynamic_obstacle_state_pub = self.create_publisher(
-            String, '/waver/dynamic_obstacle_state', 10
-        )
-        self.height_filter_debug_pub = self.create_publisher(
-            String, '/waver/height_filter_debug', 10
-        )
-        self.target_class_pub = self.create_publisher(String, '/waver/target_class', 10)
-        self.target_confidence_pub = self.create_publisher(
-            Float32, '/waver/target_confidence', 10
-        )
-        self.bird_confirmed_pub = self.create_publisher(Bool, '/waver/bird_confirmed', 10)
-        self.classification_state_pub = self.create_publisher(
-            String, '/waver/classification_state', 10
-        )
+        self.dynamic_targets_pub = None
+        self.dynamic_obstacle_state_pub = None
+        self.height_filter_debug_pub = None
+        self.target_class_pub = None
+        self.target_confidence_pub = None
+        self.bird_confirmed_pub = None
+        self.classification_state_pub = None
+        if self.publish_waver_detection_topics:
+            self.dynamic_targets_pub = self.create_publisher(
+                PoseArray, '/waver/elevated_dynamic_targets', 10
+            )
+            self.dynamic_obstacle_state_pub = self.create_publisher(
+                String, '/waver/dynamic_obstacle_state', 10
+            )
+            self.height_filter_debug_pub = self.create_publisher(
+                String, '/waver/height_filter_debug', 10
+            )
+            self.target_class_pub = self.create_publisher(String, '/waver/target_class', 10)
+            self.target_confidence_pub = self.create_publisher(
+                Float32, '/waver/target_confidence', 10
+            )
+            self.bird_confirmed_pub = self.create_publisher(Bool, '/waver/bird_confirmed', 10)
+            self.classification_state_pub = self.create_publisher(
+                String, '/waver/classification_state', 10
+            )
 
-        self.pick_new_target('bird_single')
+        for bird in self.birds:
+            self.pick_new_target(bird.name)
         self.service_timer = self.create_timer(1.0, self.connect_services_if_ready)
         self.timer = self.create_timer(self.dt, self.update_all)
         self.get_logger().info('bird_manager started')
@@ -230,9 +264,19 @@ class BirdManager(Node):
         )
 
     def pick_random_target(self):
+        for _ in range(40):
+            x = random.uniform(self.x_min, self.x_max)
+            y = random.uniform(self.y_min, self.y_max)
+            if horizontal_len(x, y) >= self.min_xy_radius:
+                return (x, y, random.uniform(self.z_min, self.z_max))
+        angle = random.uniform(-math.pi, math.pi)
+        radius = min(
+            self.min_xy_radius,
+            min(abs(self.x_min), abs(self.x_max), abs(self.y_min), abs(self.y_max)),
+        )
         return (
-            random.uniform(self.x_min, self.x_max),
-            random.uniform(self.y_min, self.y_max),
+            radius * math.cos(angle),
+            radius * math.sin(angle),
             random.uniform(self.z_min, self.z_max),
         )
 
@@ -488,6 +532,15 @@ class BirdManager(Node):
         elif z > self.z_max - 1.0:
             vz -= (z - (self.z_max - 1.0)) * 1.5
 
+        radius = horizontal_len(x, y)
+        if self.min_xy_radius > 0.0 and radius < self.min_xy_radius:
+            if radius < 1e-6:
+                vx += self.min_xy_radius * 1.4
+            else:
+                push = (self.min_xy_radius - radius) * 1.4
+                vx += (x / radius) * push
+                vy += (y / radius) * push
+
         return (vx, vy, vz)
 
     def publish_detection(self, pos):
@@ -595,6 +648,8 @@ class BirdManager(Node):
 
     def publish_dynamic_obstacles(self):
         if not rclpy_ok():
+            return
+        if not self.publish_waver_detection_topics or self.dynamic_targets_pub is None:
             return
 
         msg = PoseArray()

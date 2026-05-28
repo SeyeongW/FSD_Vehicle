@@ -326,6 +326,7 @@
         </material>
       </visual>
       <sensor name='livox' type='ray'>
+        <always_on>true</always_on>
         <visualize>true</visualize>
         <update_rate>10</update_rate>
         <plugin name='livox_plugin' filename='libros2_livox.so'>
@@ -358,7 +359,7 @@
           <visualize>false</visualize>
           <samples>40000</samples>
           <downsample>1</downsample>
-	  <csv_file_name>/home/seyeongw/ros2_ws/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv</csv_file_name>
+          <csv_file_name>/home/chotaehyun/ros2_ws2/FSD_Vehicle/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv</csv_file_name>
           <topic>mid360</topic>
         </plugin>
       </sensor>

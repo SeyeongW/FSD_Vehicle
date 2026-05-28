@@ -121,6 +121,13 @@ class MovingObjectMotionFilterNode(Node):
         self.declare_parameter("pause_new_target_trigger_during_yaw_alignment", True)
         self.declare_parameter("pause_new_target_trigger_during_mapping", True)
         self.declare_parameter("publish_markers", True)
+        self.declare_parameter("publish_detection_classification", False)
+        self.declare_parameter("detected_target_class", "lidar_elevated_dynamic_object")
+        self.declare_parameter("detected_target_confidence", 0.80)
+        self.declare_parameter("target_class_topic", "/waver/target_class")
+        self.declare_parameter("target_confidence_topic", "/waver/target_confidence")
+        self.declare_parameter("bird_confirmed_topic", "/waver/bird_confirmed")
+        self.declare_parameter("classification_state_topic", "/waver/classification_state")
 
         self.track = TrackState()
         self.last_msg_time = 0.0
@@ -145,6 +152,34 @@ class MovingObjectMotionFilterNode(Node):
         self.marker_pub = self.create_publisher(MarkerArray, str(self.get_parameter("marker_topic").value), 10)
         self.ego_debug_pub = self.create_publisher(String, str(self.get_parameter("ego_debug_topic").value), 10)
         self.height_debug_pub = self.create_publisher(String, str(self.get_parameter("height_debug_topic").value), 10)
+        self.publish_detection_classification = bool(
+            self.get_parameter("publish_detection_classification").value
+        )
+        self.target_class_pub = None
+        self.target_confidence_pub = None
+        self.bird_confirmed_pub = None
+        self.classification_state_pub = None
+        if self.publish_detection_classification:
+            self.target_class_pub = self.create_publisher(
+                String,
+                str(self.get_parameter("target_class_topic").value),
+                10,
+            )
+            self.target_confidence_pub = self.create_publisher(
+                Float32,
+                str(self.get_parameter("target_confidence_topic").value),
+                10,
+            )
+            self.bird_confirmed_pub = self.create_publisher(
+                Bool,
+                str(self.get_parameter("bird_confirmed_topic").value),
+                10,
+            )
+            self.classification_state_pub = self.create_publisher(
+                String,
+                str(self.get_parameter("classification_state_topic").value),
+                10,
+            )
 
         self.create_subscription(PoseArray, str(self.get_parameter("input_topic").value), self.objects_callback, 10)
         if bool(self.get_parameter("subscribe_raw_input").value):
@@ -368,6 +403,7 @@ class MovingObjectMotionFilterNode(Node):
             self.dynamic_motion_pub.publish(Float32(data=float(metrics["compensated_motion_m"])))
             self.ego_debug_pub.publish(String(data=state))
             self.height_debug_pub.publish(String(data=state))
+            self._publish_detection_classification(valid, state)
         except Exception as exc:
             if rclpy.ok():
                 self.get_logger().warn(f"Skipping elevated-dynamic state publish: {exc}")
@@ -403,6 +439,31 @@ class MovingObjectMotionFilterNode(Node):
         except Exception as exc:
             if rclpy.ok():
                 self.get_logger().warn(f"Skipping elevated-dynamic track publish: {exc}")
+
+    def _publish_detection_classification(self, valid: bool, state: str) -> None:
+        if not self.publish_detection_classification:
+            return
+        if (
+            self.target_class_pub is None
+            or self.target_confidence_pub is None
+            or self.bird_confirmed_pub is None
+            or self.classification_state_pub is None
+        ):
+            return
+        target_class = str(self.get_parameter("detected_target_class").value) if valid else "unknown"
+        confidence = float(self.get_parameter("detected_target_confidence").value) if valid else 0.0
+        self.target_class_pub.publish(String(data=target_class))
+        self.target_confidence_pub.publish(Float32(data=confidence))
+        self.bird_confirmed_pub.publish(Bool(data=bool(valid)))
+        self.classification_state_pub.publish(
+            String(
+                data=(
+                    f"LIDAR_TARGET_VALID class={target_class} confidence={confidence:.2f}"
+                    if valid
+                    else f"LIDAR_TARGET_INVALID {state}"
+                )
+            )
+        )
 
     def _markers(self, valid: bool, pose: Pose, classification: str) -> MarkerArray:
         markers = MarkerArray()

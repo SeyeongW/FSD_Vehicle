@@ -41,6 +41,7 @@ class PointCloudLidarObjectsNode(Node):
         self.declare_parameter("lateral_axis", "y", descriptor=dynamic_param)
         self.declare_parameter("height_axis", "z", descriptor=dynamic_param)
         self.declare_parameter("positive_lateral_is_left", True)
+        self.declare_parameter("depth_mode", "forward")
         self.declare_parameter("require_tf", True)
         self.declare_parameter("require_tf_transform", True)
         self.declare_parameter("transform_timeout_sec", 0.1)
@@ -72,6 +73,7 @@ class PointCloudLidarObjectsNode(Node):
 
     def cloud_callback(self, msg: PointCloud2) -> None:
         try:
+            source_frame = msg.header.frame_id
             axis_params = self._axis_params()
             if axis_params is None:
                 pose_array = PoseArray()
@@ -101,7 +103,7 @@ class PointCloudLidarObjectsNode(Node):
             self.state_pub.publish(
                 String(
                     data=(
-                        f"{state} frame={pose_array.header.frame_id} source_frame={msg.header.frame_id} "
+                        f"{state} frame={pose_array.header.frame_id} source_frame={source_frame} "
                         f"raw={raw_count} voxels={len(points)} clusters={len(pose_array.poses)}"
                     )
                 )
@@ -162,6 +164,9 @@ class PointCloudLidarObjectsNode(Node):
             height = axes[height_axis]
             if not bool(self.get_parameter("positive_lateral_is_left").value):
                 lateral = -lateral
+            depth_mode = str(self.get_parameter("depth_mode").value).strip().lower()
+            if depth_mode in {"radial", "range", "horizontal_range", "xy"}:
+                depth = math.hypot(depth, lateral)
             if depth < float(self.get_parameter("min_depth_m").value) or depth > float(self.get_parameter("max_depth_m").value):
                 continue
             if height < float(self.get_parameter("min_height_m").value) or height > float(self.get_parameter("max_height_m").value):

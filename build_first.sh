@@ -8,6 +8,11 @@ cd "$WS_ROOT"
 # ROS2 환경 소싱 (필수)
 source /opt/ros/humble/setup.bash
 
+# gitlink로 들어온 외부 패키지가 비어 있으면 빌드 시 Livox/Gazebo 플러그인이 누락된다.
+if [ -f "$WS_ROOT/.gitmodules" ]; then
+    git submodule update --init --recursive
+fi
+
 # 기존 빌드 캐시가 다른 경로에서 만들어졌으면 자동 삭제
 if [ -f "build/apriltag/CMakeCache.txt" ]; then
     CACHED_PATH=$(grep "CMAKE_CACHEFILE_DIR" build/apriltag/CMakeCache.txt 2>/dev/null | cut -d= -f2)
@@ -70,6 +75,7 @@ colcon build --packages-select \
 colcon build --packages-select \
     ugv_bringup ugv_chat_ai ugv_description ugv_gazebo \
     ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app ugv_lidar_detection \
+    pcd_cluster_pkg waver_patrol \
     livox_ros_driver2 livox_laser_simulation_RO2 \
     --symlink-install
 

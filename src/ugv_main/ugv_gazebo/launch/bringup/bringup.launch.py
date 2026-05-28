@@ -40,17 +40,22 @@ def generate_launch_description():
         os.path.dirname(os.path.dirname(get_package_share_directory('gazebo_ros'))),
         'lib'
     )
+    ugv_model = os.environ.get('UGV_MODEL', 'ugv_rover')
 
     world = os.path.join(pkg_share, 'worlds', 'ugv_world.world')
+    robot_sdf = os.path.join(pkg_share, 'models', ugv_model, 'model.sdf')
+    robot_urdf = os.path.join(pkg_share, 'urdf', f'{ugv_model}.urdf')
 
     bird_manager_py = _find_script('bird_manager.py', pkg_share)
 
     print(f'[bringup] bird_manager.py -> {bird_manager_py}')
 
+    use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     use_gui = LaunchConfiguration('use_gui', default='true')
+    spawn_robot = LaunchConfiguration('spawn_robot', default='true')
     enable_bird_manager = LaunchConfiguration('enable_bird_manager', default='true')
     enable_trial_logger = LaunchConfiguration('enable_trial_logger', default='false')
-    trial_log_dir = LaunchConfiguration('trial_log_dir', default='~/ros2_ws/bird_patrol_data')
+    trial_log_dir = LaunchConfiguration('trial_log_dir', default='~/ros2_ws2/bird_patrol_data')
     trial_session_name = LaunchConfiguration('trial_session_name', default='bird_patrol_10m')
 
     gazebo_model_database_uri = SetEnvironmentVariable(
@@ -102,6 +107,35 @@ def generate_launch_description():
         condition=IfCondition(use_gui),
     )
 
+    robot_state_publisher_cmd = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='robot_state_publisher',
+        arguments=[robot_urdf],
+        parameters=[{'use_sim_time': use_sim_time}],
+        output='screen',
+        condition=IfCondition(spawn_robot),
+    )
+
+    spawn_ugv_cmd = TimerAction(
+        period=3.0,
+        condition=IfCondition(spawn_robot),
+        actions=[
+            Node(
+                package='gazebo_ros',
+                executable='spawn_entity.py',
+                arguments=[
+                    '-entity', ugv_model,
+                    '-file', robot_sdf,
+                    '-x', LaunchConfiguration('robot_spawn_x'),
+                    '-y', LaunchConfiguration('robot_spawn_y'),
+                    '-z', LaunchConfiguration('robot_spawn_z'),
+                ],
+                output='screen',
+            )
+        ],
+    )
+
     run_bird_manager_cmd = TimerAction(
         period=4.0,
         condition=IfCondition(enable_bird_manager),
@@ -143,9 +177,13 @@ def generate_launch_description():
     ld = LaunchDescription()
     ld.add_action(DeclareLaunchArgument('use_sim_time', default_value='true'))
     ld.add_action(DeclareLaunchArgument('use_gui', default_value='true'))
+    ld.add_action(DeclareLaunchArgument('spawn_robot', default_value='true'))
+    ld.add_action(DeclareLaunchArgument('robot_spawn_x', default_value='0.0'))
+    ld.add_action(DeclareLaunchArgument('robot_spawn_y', default_value='0.0'))
+    ld.add_action(DeclareLaunchArgument('robot_spawn_z', default_value='0.15'))
     ld.add_action(DeclareLaunchArgument('enable_bird_manager', default_value='true'))
     ld.add_action(DeclareLaunchArgument('enable_trial_logger', default_value='false'))
-    ld.add_action(DeclareLaunchArgument('trial_log_dir', default_value='~/ros2_ws/bird_patrol_data'))
+    ld.add_action(DeclareLaunchArgument('trial_log_dir', default_value='~/ros2_ws2/bird_patrol_data'))
     ld.add_action(DeclareLaunchArgument('trial_session_name', default_value='bird_patrol_10m'))
     ld.add_action(gazebo_model_database_uri)
     ld.add_action(gazebo_model_path)
@@ -153,6 +191,8 @@ def generate_launch_description():
     ld.add_action(gazebo_plugin_path)
     ld.add_action(gzserver_cmd)
     ld.add_action(gzclient_cmd)
+    ld.add_action(robot_state_publisher_cmd)
+    ld.add_action(spawn_ugv_cmd)
     ld.add_action(run_bird_manager_cmd)
     ld.add_action(run_trial_logger_cmd)
 

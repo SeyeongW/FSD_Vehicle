@@ -25,6 +25,7 @@ from launch.substitutions import (
     PythonExpression,
 )
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -55,11 +56,36 @@ def generate_launch_description():
     scripted_keys = LaunchConfiguration("scripted_keys")
     remote_demo_script = LaunchConfiguration("remote_demo_script")
     remote_demo_close_on_finish = LaunchConfiguration("remote_demo_close_on_finish")
+    remote_publish_direct_cmd_vel = LaunchConfiguration("remote_publish_direct_cmd_vel")
     data_log_dir = LaunchConfiguration("data_log_dir")
     data_session_name = LaunchConfiguration("data_session_name")
+    start_lidar_perception = LaunchConfiguration("start_lidar_perception")
+    publish_bird_manager_targets = LaunchConfiguration("publish_bird_manager_targets")
+    bird_manager_active_birds = LaunchConfiguration("bird_manager_active_birds")
+    bird_manager_z_min_m = LaunchConfiguration("bird_manager_z_min_m")
+    bird_manager_z_max_m = LaunchConfiguration("bird_manager_z_max_m")
+    bird_manager_min_xy_radius_m = LaunchConfiguration("bird_manager_min_xy_radius_m")
+    pointcloud_topic = LaunchConfiguration("pointcloud_topic")
+    pointcloud_target_frame = LaunchConfiguration("pointcloud_target_frame")
+    lidar_object_min_height_m = LaunchConfiguration("lidar_object_min_height_m")
+    lidar_object_max_height_m = LaunchConfiguration("lidar_object_max_height_m")
+    elevated_target_min_height_m = LaunchConfiguration("elevated_target_min_height_m")
+    start_lidar_target_follow = LaunchConfiguration("start_lidar_target_follow")
+    lidar_follow_enable_cmd_vel = LaunchConfiguration("lidar_follow_enable_cmd_vel")
+    lidar_follow_warning_distance_m = LaunchConfiguration("lidar_follow_warning_distance_m")
+    lidar_follow_start_distance_m = LaunchConfiguration("lidar_follow_start_distance_m")
+    lidar_follow_hold_distance_m = LaunchConfiguration("lidar_follow_hold_distance_m")
+    lidar_follow_max_track_distance_m = LaunchConfiguration("lidar_follow_max_track_distance_m")
 
     default_world = PathJoinSubstitution([ugv_gazebo_share, "worlds", "ugv_world.world"])
     model_file = PathJoinSubstitution([ugv_gazebo_share, "models", model, "model.sdf"])
+    robot_urdf = PathJoinSubstitution(
+        [
+            ugv_gazebo_share,
+            "urdf",
+            PythonExpression(["'", model, "' + '.urdf'"]),
+        ]
+    )
     minimal_world = PathJoinSubstitution(
         [ugv_tools_share, "worlds", "waver_flat.world"]
     )
@@ -124,6 +150,11 @@ def generate_launch_description():
                 spawn_ugv,
                 "' == 'true'",
             ]
+        )
+    )
+    original_model_condition = IfCondition(
+        PythonExpression(
+            ["'", use_minimal_model, "' == 'false'"]
         )
     )
 
@@ -260,6 +291,157 @@ def generate_launch_description():
         condition=spawn_minimal_condition,
     )
 
+    # 역할: livox -> base_link 및 base_link -> base_footprint 정적 TF를 제공해
+    # PointCloud2 객체 후보를 Waver 공통 좌표계로 변환할 수 있게 한다.
+    robot_state_publisher_node = Node(
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        name="robot_state_publisher",
+        arguments=[robot_urdf],
+        parameters=[{"use_sim_time": True}],
+        output="screen",
+        condition=original_model_condition,
+    )
+
+    # 역할: pcd_cluster_pkg가 Gazebo Livox PointCloud2를 DBSCAN 클러스터링하고
+    # 실제 LiDAR 객체 후보 /waver/lidar_objects를 만든다.
+    # bird_manager는 모델 이동만 담당하고 Waver target 토픽은 이 체인이 만든다.
+    pcd_cluster_node = TimerAction(
+        period=7.0,
+        actions=[
+            Node(
+                package="pcd_cluster_pkg",
+                executable="cluster_node",
+                name="pcd_cluster_node",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "pointcloud_topic": pointcloud_topic,
+                        "odom_topic": "/odom",
+                        "lidar_objects_topic": "/waver/lidar_objects",
+                        "state_topic": "/waver/lidar_objects_state",
+                        "marker_topic": "/cluster_markers",
+                        "filtered_points_topic": "/filtered_points",
+                        "target_frame": "odom",
+                        "ground_z_limit": 2.0,
+                        "roi_min_range": 0.2,
+                        "roi_max_range": 20.0,
+                        "dbscan_eps": 0.75,
+                        "dbscan_min_samples": 3,
+                        "min_cluster_points": 3,
+                        "trackable_max_size_x": 2.5,
+                        "trackable_max_size_y": 2.5,
+                        "trackable_max_size_z": 2.0,
+                        "trackable_min_centroid_z": 2.0,
+                        "max_input_points": 12000,
+                        "enable_cmd_vel_output": False,
+                    }
+                ],
+            )
+        ],
+        condition=IfCondition(start_lidar_perception),
+    )
+
+    moving_object_map_transform_node = TimerAction(
+        period=7.5,
+        actions=[
+            Node(
+                package="waver_patrol",
+                executable="moving_object_map_transform_node",
+                name="moving_object_map_transform_node",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "input_topic": "/waver/lidar_objects",
+                        "input_type": "pose_array",
+                        "output_pose_array_topic": "/waver/lidar_objects_map",
+                        "debug_marker_topic": "/waver/moving_objects_map_marker",
+                        "target_frame": "odom",
+                        "fallback_frame": "odom",
+                        "base_frame": "base_link",
+                        "use_latest_tf": True,
+                    }
+                ],
+            )
+        ],
+        condition=IfCondition(start_lidar_perception),
+    )
+
+    # 역할: LiDAR가 계속 갱신하는 최종 동적 타깃 좌표를 받아
+    # 거리별 경고/목표 발행/차체 방향 추적 명령을 수행한다.
+    lidar_target_follow_node = TimerAction(
+        period=8.5,
+        actions=[
+            Node(
+                package="pcd_cluster_pkg",
+                executable="lidar_target_follow_node",
+                name="lidar_target_follow_node",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "target_topic": "/waver/elevated_dynamic_targets",
+                        "odom_topic": "/odom",
+                        "cmd_vel_topic": "/cmd_vel",
+                        "goal_topic": "/waver/object_mission_goal",
+                        "state_topic": "/waver/lidar_target_follow_state",
+                        "sound_status_topic": "/waver/sound_mission_status",
+                        "sound_request_topic": "/waver/sound_alert_request",
+                        "enable_cmd_vel_output": ParameterValue(
+                            lidar_follow_enable_cmd_vel,
+                            value_type=bool,
+                        ),
+                        "min_target_height_m": ParameterValue(elevated_target_min_height_m, value_type=float),
+                        "max_target_height_m": ParameterValue(lidar_object_max_height_m, value_type=float),
+                        "warning_distance_m": ParameterValue(lidar_follow_warning_distance_m, value_type=float),
+                        "follow_start_distance_m": ParameterValue(lidar_follow_start_distance_m, value_type=float),
+                        "hold_distance_m": ParameterValue(lidar_follow_hold_distance_m, value_type=float),
+                        "goal_standoff_m": ParameterValue(lidar_follow_hold_distance_m, value_type=float),
+                        "max_track_distance_m": ParameterValue(lidar_follow_max_track_distance_m, value_type=float),
+                    }
+                ],
+            )
+        ],
+        condition=IfCondition(start_lidar_target_follow),
+    )
+
+    moving_object_motion_filter_node = TimerAction(
+        period=8.0,
+        actions=[
+            Node(
+                package="waver_patrol",
+                executable="moving_object_motion_filter_node",
+                name="moving_object_motion_filter_node",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "input_topic": "/waver/lidar_objects_map",
+                        "raw_input_topic": "/waver/lidar_objects",
+                        "target_min_height_m": ParameterValue(elevated_target_min_height_m, value_type=float),
+                        "target_max_height_m": 30.0,
+                        "z_source_mode": "pointcloud",
+                        "require_3d_z_source": True,
+                        "min_dynamic_motion_m": 0.2,
+                        "min_dynamic_velocity_mps": 0.05,
+                        "min_tracking_duration_sec": 0.6,
+                        "require_consecutive_dynamic_frames": 2,
+                        "track_match_gate_m": 3.0,
+                        "max_sample_step_m": 4.0,
+                        "elevated_targets_topic": "/waver/elevated_dynamic_targets",
+                        "height_debug_topic": "/waver/height_filter_debug",
+                        "publish_detection_classification": True,
+                        "detected_target_class": "bird",
+                        "detected_target_confidence": 0.80,
+                    }
+                ],
+            )
+        ],
+        condition=IfCondition(start_lidar_perception),
+    )
+
     # 역할: Gazebo /odom과 /scan을 이용해 저속 waypoint patrol 후보를 검증한다.
     patrol_node = TimerAction(
         period=6.0,
@@ -323,6 +505,19 @@ def generate_launch_description():
                 executable="bird_manager.py",
                 name="bird_manager",
                 output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "active_birds": bird_manager_active_birds,
+                        "publish_waver_detection_topics": ParameterValue(
+                            publish_bird_manager_targets,
+                            value_type=bool,
+                        ),
+                        "z_min_m": ParameterValue(bird_manager_z_min_m, value_type=float),
+                        "z_max_m": ParameterValue(bird_manager_z_max_m, value_type=float),
+                        "min_xy_radius_m": ParameterValue(bird_manager_min_xy_radius_m, value_type=float),
+                    }
+                ],
             )
         ],
         condition=IfCondition(start_bird_manager),
@@ -343,9 +538,12 @@ def generate_launch_description():
                         "use_sim_time": True,
                         "cmd_vel_topic": "/cmd_vel",
                         "manual_cmd_vel_topic": "/waver/manual_cmd_vel",
-                        "auto_cmd_vel_topic": "/waver/cmd_vel_auto",
+                        "auto_cmd_vel_topic": "/cmd_vel",
                         "profile": "gazebo",
-                        "publish_direct_cmd_vel": True,
+                        "publish_direct_cmd_vel": ParameterValue(
+                            remote_publish_direct_cmd_vel,
+                            value_type=bool,
+                        ),
                         "allow_subprocess_launches": True,
                         "auto_mode_strategy": "legacy_subprocess",
                         "auto_command": "ros2 run ugv_tools waver_gazebo_patrol",
@@ -405,8 +603,25 @@ def generate_launch_description():
         DeclareLaunchArgument("start_data_logger", default_value="true"),
         DeclareLaunchArgument("start_scripted_keyboard", default_value="false"),
         DeclareLaunchArgument("start_remote_panel", default_value="false"),
+        DeclareLaunchArgument("start_lidar_perception", default_value="true"),
+        DeclareLaunchArgument("publish_bird_manager_targets", default_value="false"),
+        DeclareLaunchArgument("bird_manager_active_birds", default_value="bird_test_target"),
+        DeclareLaunchArgument("bird_manager_z_min_m", default_value="3.0"),
+        DeclareLaunchArgument("bird_manager_z_max_m", default_value="4.5"),
+        DeclareLaunchArgument("bird_manager_min_xy_radius_m", default_value="3.5"),
+        DeclareLaunchArgument("pointcloud_topic", default_value="/mid360_PointCloud2"),
+        DeclareLaunchArgument("pointcloud_target_frame", default_value="base_link"),
+        DeclareLaunchArgument("lidar_object_min_height_m", default_value="3.0"),
+        DeclareLaunchArgument("lidar_object_max_height_m", default_value="8.0"),
+        DeclareLaunchArgument("elevated_target_min_height_m", default_value="3.0"),
+        DeclareLaunchArgument("start_lidar_target_follow", default_value="false"),
+        DeclareLaunchArgument("lidar_follow_enable_cmd_vel", default_value="false"),
+        DeclareLaunchArgument("lidar_follow_warning_distance_m", default_value="3.0"),
+        DeclareLaunchArgument("lidar_follow_start_distance_m", default_value="3.0"),
+        DeclareLaunchArgument("lidar_follow_hold_distance_m", default_value="1.8"),
+        DeclareLaunchArgument("lidar_follow_max_track_distance_m", default_value="15.0"),
         DeclareLaunchArgument("use_minimal_model", default_value="false"),
-        DeclareLaunchArgument("spawn_ugv", default_value="false"),
+        DeclareLaunchArgument("spawn_ugv", default_value="true"),
         DeclareLaunchArgument("require_scan", default_value="false"),
         DeclareLaunchArgument("min_valid_scan_points", default_value="0"),
         DeclareLaunchArgument("control_config_file", default_value=default_control_config),
@@ -420,7 +635,8 @@ def generate_launch_description():
         DeclareLaunchArgument("scripted_keys", default_value="wwaaddk"),
         DeclareLaunchArgument("remote_demo_script", default_value=""),
         DeclareLaunchArgument("remote_demo_close_on_finish", default_value="false"),
-        DeclareLaunchArgument("data_log_dir", default_value="~/ros2_ws/bird_patrol_data"),
+        DeclareLaunchArgument("remote_publish_direct_cmd_vel", default_value="true"),
+        DeclareLaunchArgument("data_log_dir", default_value="~/ros2_ws2/bird_patrol_data"),
         DeclareLaunchArgument("data_session_name", default_value="bird_patrol_10m"),
     ]
 
@@ -436,9 +652,14 @@ def generate_launch_description():
             gzserver_original,
             gzserver_minimal,
             gzclient,
+            robot_state_publisher_node,
             spawn_ugv_original,
             spawn_ugv_minimal,
             bird_manager_node,
+            pcd_cluster_node,
+            moving_object_map_transform_node,
+            moving_object_motion_filter_node,
+            lidar_target_follow_node,
             patrol_node,
             data_logger_node,
             scripted_keyboard_node,
