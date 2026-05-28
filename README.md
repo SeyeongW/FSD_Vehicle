@@ -1,21 +1,3 @@
-# Waver Gazebo / Real-Vehicle Run Guide
-
-이 문서는 `jo` 브랜치 최신 구조 기준 실행 가이드다.
-
-- workspace root: `~/ros2_ws`
-- 활성 소스 repo: `~/ros2_ws/FSD_Vehicle`
-- Gazebo world: `ugv_gazebo/worlds/ugv_world.world`
-- Gazebo robot model: `ugv_gazebo/models/ugv_rover/model.sdf`
-- SLAM Mapping 기본값: LiDAR-only `slam_gmapping` on `/scan`
-- Mapping live map: `/map`
-- Applied fixed map: `/map_fixed`
-- 리모콘 UI 직접 `/cmd_vel` 발행 금지: `publish_direct_cmd_vel:=false`
-- 최종 `/cmd_vel` publisher: `safety_cmd_mux_node` 1개만 허용
-- mode authority: `/waver/mode`는 `mission_patrol_manager_node` 1개만 publish
-
-현재 사용자 실험 기준 workspace는 `~/ros2_ws`이다. 소스 repo는
-`~/ros2_ws/FSD_Vehicle`이며, 중복 repo가 colcon에 보이면 반드시 한쪽에
-`COLCON_IGNORE`를 둔다.
 
 ---
 
@@ -49,15 +31,6 @@ source install/setup.bash
 export ROS_DOMAIN_ID=30
 ```
 
-전체 빌드를 확인하려면 다음을 사용한다.
-
-```bash
-cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
-colcon build --symlink-install
-source install/setup.bash
-```
-
 ---
 
 ## 1. Gazebo Mapping Debug 실행
@@ -81,25 +54,10 @@ ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
   robot_spawn_z:=0.15
 ```
 
-명시적으로 world/model 경로를 지정하고 싶으면 다음처럼 설치된 package share 경로를 쓴다.
-
-```bash
-ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
-  use_gui:=true \
-  use_operator_panel:=false \
-  mapping_backend:=gmapping \
-  world_file:=$(ros2 pkg prefix ugv_gazebo)/share/ugv_gazebo/worlds/ugv_world.world \
-  robot_sdf_file:=$(ros2 pkg prefix ugv_gazebo)/share/ugv_gazebo/models/ugv_rover/model.sdf \
-  robot_spawn_x:=0.0 \
-  robot_spawn_y:=0.0 \
-  robot_spawn_z:=0.15
-```
 
 ---
 
 ## 2. 리모콘 UI만 실행
-
-터미널 2에서 시각화 리모콘만 실행한다. 이 명령은 Gazebo를 실행하지 않는다.
 
 ```bash
 cd ~/ros2_ws
@@ -140,7 +98,6 @@ UI에서 사용하는 주요 버튼:
 - `R`: RESET
 - `P`: AUTO/PATROL 요청
 
-주의: 키보드/WASD는 `/waver/manual_cmd_vel`만 publish한다. 실차 기본값에서 UI가 `/cmd_vel`을 직접 publish하면 안 된다.
 
 ---
 
@@ -166,105 +123,6 @@ SLAM 중 UI가 `SLAM_LIVE`로 표시되어야 한다. mapping 중 `/map` publish
 
 ---
 
-## 4. Gazebo + UI 통합 자동 검증
-
-리모콘 UI까지 한 번에 띄워 자동으로 버튼/키보드 경로를 검증한다.
-
-### 빠른 smoke test
-
-```bash
-cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=30
-
-ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
-  use_gui:=true \
-  use_operator_panel:=true \
-  mapping_backend:=gmapping \
-  demo_script:=mapping_workflow_smoke \
-  demo_close_on_finish:=true
-```
-
-### 넓은 공항맵 coverage test
-
-```bash
-cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=30
-
-ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
-  use_gui:=true \
-  use_operator_panel:=true \
-  mapping_backend:=gmapping \
-  demo_script:=mapping_full_coverage \
-  demo_close_on_finish:=true
-```
-
-`mapping_full_coverage`는 smoke보다 오래 주행해 공항맵의 더 넓은 부분을 SLAM으로 채운다. 논문용 “넓은 map coverage” 데이터는 이 명령 또는 수동 WASD coverage 후 저장한 map을 사용한다.
-
----
-
-## 4-1. Gazebo 조류탐지 + UI 검증
-
-현재 `jo` 브랜치에는 Gazebo model-state ground truth를 사용하는 synthetic bird detector/localizer/tracker/trigger 검증 node가 있다.
-
-주의: 이 검증은 실제 YOLO/실카메라 mAP가 아니다. 실제 조류 detector 성능 주장은 labeled bird image/video dataset과 detector model 평가가 추가로 필요하다.
-
-### 단일 조류탐지 Gazebo 실행
-
-```bash
-cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=30
-
-ros2 launch waver_patrol gazebo_bird_detection_validation.launch.py \
-  use_gui:=true \
-  use_operator_panel:=false \
-  scenario_id:=B3_DYNAMIC_BIRD_HIGH \
-  expected_bird:=true \
-  expected_mission_trigger:=true \
-  move_target_model:=true \
-  output_dir:=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/manual_bird_trial/csv
-```
-
-### 리모콘 UI만 실행
-
-```bash
-cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=30
-
-ros2 launch ugv_tools waver_operator_panel.launch.py \
-  map_topic:=/map \
-  map_display_mode:=auto \
-  global_path_topic:=/plan \
-  local_path_topic:=/local_plan \
-  require_scan:=false \
-  auto_mode_strategy:=mission_nav2 \
-  publish_direct_cmd_vel:=false
-```
-
-### 10회 조류탐지 Gazebo/UI 반복 검증
-
-```bash
-cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=30
-
-RUNS=10 \
-REQUIRED_SUCCESSES=10 \
-USE_GUI=true \
-TRIAL_DURATION_SEC=6 \
-HZ_SAMPLE_SEC=5 \
-OUTPUT_ROOT=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/bird_detection_10runs \
-bash FSD_Vehicle/src/waver_patrol/scripts/run_bird_detection_gazebo_ui_trials.sh
-```
-
 생성 주요 파일:
 
 ```text
@@ -284,27 +142,8 @@ ros2 topic echo /bird/mission_target
 ros2 topic info -v /cmd_vel
 ```
 
-자세한 설명은 `src/waver_patrol/docs/bird_detection_autonomy_validation.md`를 참고한다.
 
 ---
-
-## 5. Headless 검증
-
-GUI 부하 없이 Gazebo/SLAM/UI command path를 검증한다.
-
-```bash
-cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=30
-
-ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
-  use_gui:=false \
-  use_operator_panel:=true \
-  mapping_backend:=gmapping \
-  demo_script:=mapping_workflow_smoke \
-  demo_close_on_finish:=true
-```
 
 검증 기준:
 
@@ -329,69 +168,7 @@ ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
 ~/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs/
 ```
 
-실험 산출물은 GitHub에 올리지 않는다.
-
-### 논문용 10회 반복 검증
-
-다음 스크립트는 Gazebo 공항맵, `ugv_rover`, 리모콘 UI를 직접 띄우고 UI handler 경로로 `SLAM MAPPING`,
-WASD/manual 이동, `SAVE MAP`, `APPLY FIXED MAP`, `START PATROL`, `STOP`을 반복 검증한다.
-
-```bash
-cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=30
-
-RUNS=10 \
-TRIAL_TIMEOUT_SEC=220 \
-OUTPUT_ROOT=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs \
-bash FSD_Vehicle/src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
-```
-
-최신 clean run 요약:
-
-- success_rate: 10/10
-- scan_hz_mean_avg: 약 13.2 Hz
-- map_known_ratio_mean: 약 0.20
-- direct_cmd_vel_violation_count: 0
-- final_pass_label: `PASS`
-
-SLAM 보정 후 full coverage 단일 재검증:
-
-```bash
-cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=30
-
-RUNS=1 \
-TRIAL_TIMEOUT_SEC=380 \
-DEMO_SCRIPT=mapping_full_coverage \
-OUTPUT_ROOT=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/slam_fix_full_coverage \
-bash FSD_Vehicle/src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
-```
-
-결과 summary는 `experiments_result/paper_ready/slam_fix_full_coverage/`에 저장된다.
-
 ---
-
-## 6. Mapping workflow checker
-
-이 스크립트는 Gazebo/SLAM backend가 이미 떠 있는 상태에서 `/map` 변화, 저장, 적용 상태를 기록하는 보조 검사다. 단독으로 Gazebo나 gmapping을 띄우는 명령이 아니다.
-
-```bash
-cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=30
-
-python3 FSD_Vehicle/src/waver_patrol/scripts/run_mapping_mode_check.py \
-  --output-root ~/ros2_ws/FSD_Vehicle/experiments_result \
-  --experiment-name mapping_mode_manual \
-  --duration-sec 60 \
-  --save-after-sec 40 \
-  --apply-after-sec 48
-```
 
 ---
 
@@ -463,16 +240,6 @@ ros2 topic echo /waver/height_filter_debug
 ros2 topic echo /waver/ego_motion_compensation_debug
 ```
 
-최종 target 조건:
-
-```text
-object_height_m >= 3.0
-and z_valid == true
-and dynamic_filter_pass == true
-and ego_motion_compensated == true
-```
-
-3m는 이동 거리가 아니라 높이 기준이다.
 
 ---
 
@@ -607,53 +374,5 @@ bash FSD_Vehicle/src/waver_patrol/scripts/waver_cmd_chain_check.sh
 bash FSD_Vehicle/src/waver_patrol/scripts/waver_bird_autonomy_health_check.sh
 ```
 
-금지 조건:
 
-- `/cmd_vel` publisher가 2개 이상
-- `ugv_driver`가 실차 profile에서 직접 serial/cmd_vel 경로를 소유
-- `/scan` stale
-- localization/TF 실패
-- E-STOP active
-- serial bridge 중복 실행
 
----
-
-## 11. RViz 선택 실행
-
-```bash
-cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-
-rviz2 -d src/waver_patrol/rviz/pre_real_gazebo_validation.rviz
-```
-
-RViz Fixed Frame은 `map`으로 둔다.
-
----
-
-## 12. 문제별 빠른 확인
-
-### Gazebo에서 rover가 안 보일 때
-
-```bash
-ros2 node list | grep gazebo
-ros2 topic echo /gazebo/model_states --once
-ros2 pkg prefix ugv_gazebo
-```
-
-`waver_gazebo_mapping_debug.launch.py`와 `gazebo_mapping_mode.launch.py` 기본값은 `ugv_world.world`와 `ugv_rover`를 사용한다.
-
-### SLAM map이 점처럼 보일 때
-
-```bash
-ros2 topic hz /scan
-ros2 topic echo /map --once
-ros2 topic echo /waver/mapping_state
-```
-
-UI는 known free cell과 occupied cell을 같이 그린다. 그래도 map이 작으면 SLAM이 실패한 것이 아니라 coverage가 부족한 경우가 많다. `mapping_full_coverage` 또는 수동 WASD로 더 넓게 주행한 뒤 `SAVE MAP`을 누른다.
-
-### 리모콘이 Gazebo를 같이 띄우는 것처럼 보일 때
-
-UI-only 명령은 `ros2 launch ugv_tools waver_operator_panel.launch.py ...`이다. 이 명령은 Gazebo를 띄우지 않는다. 단, `SLAM MAPPING` 버튼은 설정된 `mapping_launch_command`에 따라 gmapping backend만 시작할 수 있다.
