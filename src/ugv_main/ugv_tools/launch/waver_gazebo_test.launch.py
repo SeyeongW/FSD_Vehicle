@@ -39,9 +39,12 @@ def generate_launch_description():
     gui = LaunchConfiguration("gui")
     start_gazebo = LaunchConfiguration("start_gazebo")
     start_patrol = LaunchConfiguration("start_patrol")
+    start_bird_manager = LaunchConfiguration("start_bird_manager")
+    start_data_logger = LaunchConfiguration("start_data_logger")
     start_scripted_keyboard = LaunchConfiguration("start_scripted_keyboard")
     start_remote_panel = LaunchConfiguration("start_remote_panel")
     use_minimal_model = LaunchConfiguration("use_minimal_model")
+    spawn_ugv = LaunchConfiguration("spawn_ugv")
     require_scan = LaunchConfiguration("require_scan")
     min_valid_scan_points = LaunchConfiguration("min_valid_scan_points")
     control_config_file = LaunchConfiguration("control_config_file")
@@ -52,6 +55,8 @@ def generate_launch_description():
     scripted_keys = LaunchConfiguration("scripted_keys")
     remote_demo_script = LaunchConfiguration("remote_demo_script")
     remote_demo_close_on_finish = LaunchConfiguration("remote_demo_close_on_finish")
+    data_log_dir = LaunchConfiguration("data_log_dir")
+    data_session_name = LaunchConfiguration("data_session_name")
 
     default_world = PathJoinSubstitution([ugv_gazebo_share, "worlds", "ugv_world.world"])
     model_file = PathJoinSubstitution([ugv_gazebo_share, "models", model, "model.sdf"])
@@ -65,7 +70,7 @@ def generate_launch_description():
         [ugv_tools_share, "config", "waver_4wd_control.yaml"]
     )
     default_waypoint_file = PathJoinSubstitution(
-        [ugv_tools_share, "waypoints", "waver_3m_patrol.yaml"]
+        [ugv_tools_share, "waypoints", "waver_10m_patrol.yaml"]
     )
 
     # 역할: start_gazebo와 minimal/original 선택을 함께 반영하는 조건을 만든다.
@@ -92,6 +97,32 @@ def generate_launch_description():
                 "' == 'true' and '",
                 start_remote_panel,
                 "' == 'false'",
+            ]
+        )
+    )
+    spawn_original_condition = IfCondition(
+        PythonExpression(
+            [
+                "'",
+                start_gazebo,
+                "' == 'true' and '",
+                use_minimal_model,
+                "' == 'false' and '",
+                spawn_ugv,
+                "' == 'true'",
+            ]
+        )
+    )
+    spawn_minimal_condition = IfCondition(
+        PythonExpression(
+            [
+                "'",
+                start_gazebo,
+                "' == 'true' and '",
+                use_minimal_model,
+                "' == 'true' and '",
+                spawn_ugv,
+                "' == 'true'",
             ]
         )
     )
@@ -199,7 +230,7 @@ def generate_launch_description():
                 output="screen",
             )
         ],
-        condition=original_gazebo_condition,
+        condition=spawn_original_condition,
     )
 
     # 역할: 렌더 센서 없는 최소 Waver 시험 모델을 spawn한다.
@@ -226,7 +257,7 @@ def generate_launch_description():
                 output="screen",
             )
         ],
-        condition=minimal_gazebo_condition,
+        condition=spawn_minimal_condition,
     )
 
     # 역할: Gazebo /odom과 /scan을 이용해 저속 waypoint patrol 후보를 검증한다.
@@ -283,6 +314,20 @@ def generate_launch_description():
         condition=scripted_keyboard_condition,
     )
 
+    # 역할: 15 m Gazebo map의 bird_single을 5~8 m 고도에서 움직이고 target 토픽을 발행한다.
+    bird_manager_node = TimerAction(
+        period=4.0,
+        actions=[
+            Node(
+                package="ugv_gazebo",
+                executable="bird_manager.py",
+                name="bird_manager",
+                output="screen",
+            )
+        ],
+        condition=IfCondition(start_bird_manager),
+    )
+
     # 역할: Gazebo에서 시각화 리모콘을 함께 띄워 방향타/MANUAL/AUTO 버튼을 검증한다.
     remote_panel_node = TimerAction(
         period=6.0,
@@ -299,7 +344,9 @@ def generate_launch_description():
                         "cmd_vel_topic": "/cmd_vel",
                         "manual_cmd_vel_topic": "/waver/manual_cmd_vel",
                         "auto_cmd_vel_topic": "/waver/cmd_vel_auto",
+                        "profile": "gazebo",
                         "publish_direct_cmd_vel": True,
+                        "allow_subprocess_launches": True,
                         "auto_mode_strategy": "legacy_subprocess",
                         "auto_command": "ros2 run ugv_tools waver_gazebo_patrol",
                         "manual_override_returns_to_auto": False,
@@ -323,6 +370,30 @@ def generate_launch_description():
         condition=IfCondition(start_remote_panel),
     )
 
+    # 역할: 논문/실험용 CSV와 summary JSON을 1초 간격으로 저장한다.
+    data_logger_node = TimerAction(
+        period=7.0,
+        actions=[
+            Node(
+                package="ugv_gazebo",
+                executable="gazebo_trial_data_logger.py",
+                name="gazebo_trial_data_logger",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "output_dir": data_log_dir,
+                        "session_name": data_session_name,
+                        "sample_period_s": 1.0,
+                        "map_side_m": 15.0,
+                        "patrol_side_m": 10.0,
+                    }
+                ],
+            )
+        ],
+        condition=IfCondition(start_data_logger),
+    )
+
     # 역할: ros2 launch에서 사용자가 바로 볼 수 있는 기본값을 한곳에 모은다.
     launch_arguments = [
         DeclareLaunchArgument("model", default_value="ugv_rover"),
@@ -330,9 +401,12 @@ def generate_launch_description():
         DeclareLaunchArgument("gui", default_value="false"),
         DeclareLaunchArgument("start_gazebo", default_value="true"),
         DeclareLaunchArgument("start_patrol", default_value="true"),
+        DeclareLaunchArgument("start_bird_manager", default_value="true"),
+        DeclareLaunchArgument("start_data_logger", default_value="true"),
         DeclareLaunchArgument("start_scripted_keyboard", default_value="false"),
         DeclareLaunchArgument("start_remote_panel", default_value="false"),
         DeclareLaunchArgument("use_minimal_model", default_value="false"),
+        DeclareLaunchArgument("spawn_ugv", default_value="false"),
         DeclareLaunchArgument("require_scan", default_value="false"),
         DeclareLaunchArgument("min_valid_scan_points", default_value="0"),
         DeclareLaunchArgument("control_config_file", default_value=default_control_config),
@@ -341,11 +415,13 @@ def generate_launch_description():
             "waypoints_csv",
             default_value="",
         ),
-        DeclareLaunchArgument("max_patrol_radius_m", default_value="3.0"),
+        DeclareLaunchArgument("max_patrol_radius_m", default_value="7.2"),
         DeclareLaunchArgument("loop_count", default_value="1"),
         DeclareLaunchArgument("scripted_keys", default_value="wwaaddk"),
         DeclareLaunchArgument("remote_demo_script", default_value=""),
         DeclareLaunchArgument("remote_demo_close_on_finish", default_value="false"),
+        DeclareLaunchArgument("data_log_dir", default_value="~/ros2_ws/bird_patrol_data"),
+        DeclareLaunchArgument("data_session_name", default_value="bird_patrol_10m"),
     ]
 
     return LaunchDescription(
@@ -362,7 +438,9 @@ def generate_launch_description():
             gzclient,
             spawn_ugv_original,
             spawn_ugv_minimal,
+            bird_manager_node,
             patrol_node,
+            data_logger_node,
             scripted_keyboard_node,
             remote_panel_node,
         ]

@@ -2,23 +2,21 @@
 
 import math
 import random
+import time
 from dataclasses import dataclass
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.utilities import ok as rclpy_ok
 from gazebo_msgs.srv import SetEntityState, GetEntityState
 from gazebo_msgs.msg import EntityState
-from geometry_msgs.msg import PoseStamped
-from std_msgs.msg import Bool
+from geometry_msgs.msg import PoseArray, PoseStamped
+from std_msgs.msg import Bool, Float32, String
 
 
 def clamp(v, vmin, vmax):
     return max(vmin, min(v, vmax))
-
-
-def vec_add(a, b):
-    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
 
 
 def vec_sub(a, b):
@@ -78,12 +76,9 @@ def euler_to_quaternion(roll, pitch, yaw):
 @dataclass
 class BirdConfig:
     name: str
-    is_swarm: bool
     max_speed: float
     min_speed: float
     arrival_threshold: float
-    neighbor_radius: float
-    separation_radius: float
 
 
 @dataclass
@@ -100,10 +95,6 @@ class BirdRuntime:
     vy: float = 0.0
     vz: float = 0.0
 
-    offset_x: float = 0.0
-    offset_y: float = 0.0
-    offset_z: float = 0.0
-
     initialized: bool = False
 
 
@@ -111,13 +102,12 @@ class BirdManager(Node):
     def __init__(self):
         super().__init__('bird_manager')
 
-        # 50x50 범위 (0,0 중심)
-        self.x_min = -15.0
-        self.x_max = 15.0
-        self.y_min = -15.0
-        self.y_max = 15.0
+        # 15x15 map, leave room from the 2m boundary wall.
+        self.x_min = -6.5
+        self.x_max = 6.5
+        self.y_min = -6.5
+        self.y_max = 6.5
 
-        # 낮춘 고도 범위
         self.z_min = 5.0
         self.z_max = 8.0
 
@@ -135,102 +125,108 @@ class BirdManager(Node):
         self.max_roll_rate = math.radians(45.0)
         self.bank_from_turn_gain = 0.45
 
-        self.slowdown_radius_single = 26.0
-        self.slowdown_radius_swarm = 18.0
+        self.slowdown_radius_single = 4.0
         self.goal_damping_gain = 0.18
         self.vertical_damping_gain = 0.20
 
-        # 0,0 중심 swarm center
-        self.swarm_center_x = 0.0
-        self.swarm_center_y = 0.0
-        self.swarm_center_z = 6.5
-        self.swarm_target_x = 0.0
-        self.swarm_target_y = 0.0
-        self.swarm_target_z = 6.5
-
-        # swarm 중심 이동 속도도 절반
-        self.swarm_center_speed = 2.0
-        self.swarm_center_arrival_threshold = 8.0
-
-        self.weight_seek = 1.7
-        self.weight_separation = 2.6
-        self.weight_alignment = 1.2
-        self.weight_cohesion = 0.8
-        self.weight_center_follow = 1.6
-
         self.state_fail_count = {}
+        self.service_log_time = 0.0
+        self.services_ready = False
+        self.set_service_name = ''
+        self.get_service_name = ''
+        self.set_cli = None
+        self.get_cli = None
+        self.tracking_start_wall = None
+        self.tracking_start_text = 'waiting'
+        self.last_metric_samples = {}
+        self.obstacle_metrics = {}
+        self.last_obstacle_status_time = 0.0
 
         self.birds = [
-            BirdConfig('bird_single', False, 3.0, 0.75, 7.0, 0.0, 0.0),
-            # BirdConfig('bird_swarm_1', True, 2.5, 0.75, 4.5, 22.0, 7.0),
-            # BirdConfig('bird_swarm_2', True, 2.5, 0.75, 4.5, 22.0, 7.0),
-            # BirdConfig('bird_swarm_3', True, 2.5, 0.75, 4.5, 22.0, 7.0),
-            # BirdConfig('bird_swarm_4', True, 2.5, 0.75, 4.5, 22.0, 7.0),
-            # BirdConfig('bird_swarm_5', True, 2.5, 0.75, 4.5, 22.0, 7.0),
+            BirdConfig('bird_single', 2.2, 0.6, 1.0),
         ]
 
         self.runtime = {bird.name: BirdRuntime() for bird in self.birds}
 
-        swarm_offsets = [
-            (-6.0, 0.0, 0.0),
-            (6.0, 0.0, 0.0),
-            (-3.0, -5.5, 1.0),
-            (3.0, -5.5, -1.0),
-            (0.0, 6.0, 0.6),
-        ]
-
-        idx = 0
-        for bird in self.birds:
-            if bird.is_swarm:
-                ox, oy, oz = swarm_offsets[idx]
-                self.runtime[bird.name].offset_x = ox
-                self.runtime[bird.name].offset_y = oy
-                self.runtime[bird.name].offset_z = oz
-                idx += 1
-
-        self.set_service_name = self.find_service_name(
-            preferred=['/gazebo/set_entity_state', '/set_entity_state'],
-            service_type='gazebo_msgs/srv/SetEntityState'
-        )
-        self.get_service_name = self.find_service_name(
-            preferred=['/gazebo/get_entity_state', '/get_entity_state'],
-            service_type='gazebo_msgs/srv/GetEntityState'
-        )
-
-        self.set_cli = self.create_client(SetEntityState, self.set_service_name)
-        self.get_cli = self.create_client(GetEntityState, self.get_service_name)
-
-        while not self.set_cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info(f'{self.set_service_name} waiting...')
-        while not self.get_cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info(f'{self.get_service_name} waiting...')
-
         self.bird_pose_pub = self.create_publisher(PoseStamped, '/bird/nearest_pose', 10)
         self.bird_visible_pub = self.create_publisher(Bool, '/bird/visible', 10)
+        self.dynamic_targets_pub = self.create_publisher(
+            PoseArray, '/waver/elevated_dynamic_targets', 10
+        )
+        self.dynamic_obstacle_state_pub = self.create_publisher(
+            String, '/waver/dynamic_obstacle_state', 10
+        )
+        self.height_filter_debug_pub = self.create_publisher(
+            String, '/waver/height_filter_debug', 10
+        )
+        self.target_class_pub = self.create_publisher(String, '/waver/target_class', 10)
+        self.target_confidence_pub = self.create_publisher(
+            Float32, '/waver/target_confidence', 10
+        )
+        self.bird_confirmed_pub = self.create_publisher(Bool, '/waver/bird_confirmed', 10)
+        self.classification_state_pub = self.create_publisher(
+            String, '/waver/classification_state', 10
+        )
 
         self.pick_new_target('bird_single')
-        self.pick_new_swarm_target()
-
+        self.service_timer = self.create_timer(1.0, self.connect_services_if_ready)
         self.timer = self.create_timer(self.dt, self.update_all)
         self.get_logger().info('bird_manager started')
 
     def find_service_name(self, preferred, service_type):
-        for _ in range(50):
-            services = self.get_service_names_and_types()
+        services = self.get_service_names_and_types()
 
-            for name, types in services:
-                if service_type in types and name in preferred:
-                    return name
+        for name, types in services:
+            if service_type in types and name in preferred:
+                return name
 
-            for name, types in services:
-                if service_type in types:
-                    return name
+        for name, types in services:
+            if service_type in types:
+                return name
 
-            rclpy.spin_once(self, timeout_sec=0.2)
+        return ''
 
-        raise RuntimeError(
-            f'Could not find service type {service_type}. '
-            f'Available services: {self.get_service_names_and_types()}'
+    def connect_services_if_ready(self):
+        if self.services_ready:
+            return
+
+        set_name = self.find_service_name(
+            preferred=['/gazebo/set_entity_state', '/set_entity_state'],
+            service_type='gazebo_msgs/srv/SetEntityState'
+        )
+        get_name = self.find_service_name(
+            preferred=['/gazebo/get_entity_state', '/get_entity_state'],
+            service_type='gazebo_msgs/srv/GetEntityState'
+        )
+
+        if not set_name or not get_name:
+            now = time.monotonic()
+            if now - self.service_log_time > 5.0:
+                self.service_log_time = now
+                self.get_logger().warn(
+                    'Waiting for Gazebo entity state services. '
+                    'Check that libgazebo_ros_state.so is loaded if this persists.'
+                )
+            return
+
+        if self.set_cli is None or self.set_service_name != set_name:
+            self.set_service_name = set_name
+            self.set_cli = self.create_client(SetEntityState, self.set_service_name)
+        if self.get_cli is None or self.get_service_name != get_name:
+            self.get_service_name = get_name
+            self.get_cli = self.create_client(GetEntityState, self.get_service_name)
+
+        if not self.set_cli.wait_for_service(timeout_sec=0.2):
+            self.get_logger().info(f'{self.set_service_name} waiting...')
+            return
+        if not self.get_cli.wait_for_service(timeout_sec=0.2):
+            self.get_logger().info(f'{self.get_service_name} waiting...')
+            return
+
+        self.services_ready = True
+        self.service_timer.cancel()
+        self.get_logger().info(
+            f'Gazebo entity state services ready: {self.get_service_name}, {self.set_service_name}'
         )
 
     def pick_random_target(self):
@@ -247,41 +243,11 @@ class BirdManager(Node):
         rt.target_y = ty
         rt.target_z = tz
 
-    def pick_new_swarm_target(self):
-        self.swarm_target_x, self.swarm_target_y, self.swarm_target_z = self.pick_random_target()
-
-    def update_swarm_center(self):
-        dx = self.swarm_target_x - self.swarm_center_x
-        dy = self.swarm_target_y - self.swarm_center_y
-        dz = self.swarm_target_z - self.swarm_center_z
-        dist = math.sqrt(dx * dx + dy * dy + dz * dz)
-
-        if dist < self.swarm_center_arrival_threshold:
-            self.pick_new_swarm_target()
-            dx = self.swarm_target_x - self.swarm_center_x
-            dy = self.swarm_target_y - self.swarm_center_y
-            dz = self.swarm_target_z - self.swarm_center_z
-            dist = math.sqrt(dx * dx + dy * dy + dz * dz)
-
-        if dist < 1e-6:
-            return
-
-        if dist < 30.0:
-            target_speed = max(1.5, self.swarm_center_speed * (dist / 30.0))
-        else:
-            target_speed = self.swarm_center_speed
-
-        step = min(target_speed * self.dt, dist)
-
-        self.swarm_center_x = clamp(self.swarm_center_x + dx / dist * step, self.x_min, self.x_max)
-        self.swarm_center_y = clamp(self.swarm_center_y + dy / dist * step, self.y_min, self.y_max)
-        self.swarm_center_z = clamp(self.swarm_center_z + dz / dist * step, self.z_min, self.z_max)
-
     def update_all(self):
         if self.busy:
             return
-
-        self.update_swarm_center()
+        if not self.services_ready or self.get_cli is None or self.set_cli is None:
+            return
 
         self.busy = True
         self.current_states = {}
@@ -323,6 +289,7 @@ class BirdManager(Node):
 
         if not self.current_states:
             self.publish_detection(None)
+            self.publish_dynamic_obstacles()
             self.busy = False
             return
 
@@ -333,6 +300,7 @@ class BirdManager(Node):
                 continue
             self.move_one_bird(bird, world_info)
 
+        self.publish_dynamic_obstacles()
         self.publish_nearest_bird()
         self.busy = False
 
@@ -407,98 +375,6 @@ class BirdManager(Node):
 
         return vec_limit(desired_vel, bird.max_speed)
 
-    def compute_swarm_velocity(self, bird, world_info):
-        rt = self.runtime[bird.name]
-        pos = world_info[bird.name]['pos']
-        vel = world_info[bird.name]['vel']
-
-        formation_target = (
-            self.swarm_center_x + rt.offset_x,
-            self.swarm_center_y + rt.offset_y,
-            self.swarm_center_z + rt.offset_z
-        )
-        to_form = vec_sub(formation_target, pos)
-        dist_to_form = vec_len(to_form)
-
-        if dist_to_form < self.slowdown_radius_swarm:
-            seek_speed = bird.min_speed + (bird.max_speed - bird.min_speed) * (dist_to_form / self.slowdown_radius_swarm)
-            seek_speed = clamp(seek_speed, bird.min_speed, bird.max_speed)
-        else:
-            seek_speed = bird.max_speed
-
-        seek = vec_mul(vec_norm(to_form), seek_speed)
-
-        sep = (0.0, 0.0, 0.0)
-        align_sum = (0.0, 0.0, 0.0)
-        coh_sum = (0.0, 0.0, 0.0)
-        count_align = 0
-        count_coh = 0
-
-        for other in self.birds:
-            if other.name == bird.name or not other.is_swarm:
-                continue
-            if other.name not in world_info:
-                continue
-
-            other_pos = world_info[other.name]['pos']
-            other_vel = world_info[other.name]['vel']
-
-            diff = vec_sub(pos, other_pos)
-            d = vec_len(diff)
-            if d < 1e-6:
-                continue
-
-            if d < bird.separation_radius:
-                push = vec_mul(vec_norm(diff), (bird.separation_radius - d) / bird.separation_radius)
-                sep = vec_add(sep, push)
-
-            if d < bird.neighbor_radius:
-                align_sum = vec_add(align_sum, other_vel)
-                coh_sum = vec_add(coh_sum, other_pos)
-                count_align += 1
-                count_coh += 1
-
-        alignment = (0.0, 0.0, 0.0)
-        cohesion = (0.0, 0.0, 0.0)
-
-        if count_align > 0:
-            avg_vel = vec_mul(align_sum, 1.0 / count_align)
-            alignment = vec_sub(avg_vel, vel)
-
-        if count_coh > 0:
-            avg_pos = vec_mul(coh_sum, 1.0 / count_coh)
-            cohesion = vec_sub(avg_pos, pos)
-
-        center_follow = vec_sub(
-            (self.swarm_center_x, self.swarm_center_y, self.swarm_center_z),
-            pos
-        )
-
-        desired = (0.0, 0.0, 0.0)
-        desired = vec_add(desired, vec_mul(seek, self.weight_seek))
-        desired = vec_add(desired, vec_mul(vec_norm(sep), bird.max_speed * self.weight_separation))
-        desired = vec_add(desired, vec_mul(vec_norm(alignment), bird.max_speed * self.weight_alignment))
-        desired = vec_add(desired, vec_mul(vec_norm(cohesion), bird.max_speed * self.weight_cohesion))
-        desired = vec_add(desired, vec_mul(vec_norm(center_follow), bird.max_speed * self.weight_center_follow * 0.5))
-
-        if dist_to_form < self.slowdown_radius_swarm:
-            desired = vec_sub(desired, vec_mul(vel, self.goal_damping_gain))
-
-        desired = (
-            desired[0],
-            desired[1],
-            desired[2] - vel[2] * self.vertical_damping_gain
-        )
-
-        limited = vec_limit(desired, bird.max_speed)
-        speed = vec_len(limited)
-
-        if speed < bird.min_speed:
-            n = vec_norm(limited if speed > 1e-6 else to_form)
-            limited = vec_mul(n, bird.min_speed)
-
-        return limited
-
     def move_one_bird(self, bird, world_info):
         state = self.current_states[bird.name]
         rt = self.runtime[bird.name]
@@ -509,10 +385,7 @@ class BirdManager(Node):
         pos = (x, y, z)
         vel = (rt.vx, rt.vy, rt.vz)
 
-        if bird.is_swarm:
-            desired_vel = self.compute_swarm_velocity(bird, world_info)
-        else:
-            desired_vel = self.compute_single_seek_velocity(bird, pos, vel)
+        desired_vel = self.compute_single_seek_velocity(bird, pos, vel)
 
         desired_vel = self.apply_boundary_soft_push(pos, desired_vel)
         desired_vel = vec_limit(desired_vel, bird.max_speed)
@@ -588,6 +461,7 @@ class BirdManager(Node):
 
         req = SetEntityState.Request()
         req.state = new_state
+        self.current_states[bird.name] = new_state
 
         future = self.set_cli.call_async(req)
         future.add_done_callback(lambda fut, name=bird.name: self.on_set_done(fut, name))
@@ -596,8 +470,7 @@ class BirdManager(Node):
         x, y, z = pos
         vx, vy, vz = vel
 
-        # 50x50 범위에 맞춰 margin 축소
-        margin = 5.0
+        margin = 1.0
         push_gain = 1.2
 
         if x < self.x_min + margin:
@@ -618,25 +491,165 @@ class BirdManager(Node):
         return (vx, vy, vz)
 
     def publish_detection(self, pos):
+        # 역할: Gazebo trial 종료 순간 context가 닫혀도 테스트용 bird manager가
+        # traceback을 남기지 않도록 publish 경로를 방어한다.
+        if not rclpy_ok():
+            return
         visible_msg = Bool()
         pose_msg = PoseStamped()
         pose_msg.header.stamp = self.get_clock().now().to_msg()
         pose_msg.header.frame_id = 'world'
 
-        if pos is None:
-            visible_msg.data = False
+        try:
+            if pos is None:
+                visible_msg.data = False
+                self.bird_visible_pub.publish(visible_msg)
+                self.bird_pose_pub.publish(pose_msg)
+                return
+
+            visible_msg.data = True
+            pose_msg.pose.position.x = pos[0]
+            pose_msg.pose.position.y = pos[1]
+            pose_msg.pose.position.z = pos[2]
+            pose_msg.pose.orientation.w = 1.0
+
             self.bird_visible_pub.publish(visible_msg)
             self.bird_pose_pub.publish(pose_msg)
+        except Exception:
             return
 
-        visible_msg.data = True
-        pose_msg.pose.position.x = pos[0]
-        pose_msg.pose.position.y = pos[1]
-        pose_msg.pose.position.z = pos[2]
-        pose_msg.pose.orientation.w = 1.0
+    def start_tracking_if_needed(self):
+        if self.tracking_start_wall is not None:
+            return
+        self.tracking_start_wall = time.time()
+        self.tracking_start_text = time.strftime(
+            '%Y-%m-%d %H:%M:%S %Z',
+            time.localtime(self.tracking_start_wall),
+        )
+        self.get_logger().info(f'dynamic obstacle tracking started at {self.tracking_start_text}')
 
-        self.bird_visible_pub.publish(visible_msg)
-        self.bird_pose_pub.publish(pose_msg)
+    def update_obstacle_metrics(self, now):
+        for bird in self.birds:
+            state = self.current_states.get(bird.name)
+            if state is None:
+                continue
+            x = float(state.pose.position.x)
+            y = float(state.pose.position.y)
+            z = float(state.pose.position.z)
+            rt = self.runtime[bird.name]
+            prev = self.last_metric_samples.get(bird.name)
+
+            if prev is None:
+                dt = 0.0
+                dx = 0.0
+                dy = 0.0
+                dz = 0.0
+                speed = vec_len((rt.vx, rt.vy, rt.vz))
+            else:
+                prev_t, prev_x, prev_y, prev_z = prev
+                dt = max(1e-6, now - prev_t)
+                dx = x - prev_x
+                dy = y - prev_y
+                dz = z - prev_z
+                speed = vec_len((dx, dy, dz)) / dt
+
+            if horizontal_len(dx, dy) > 1e-4:
+                direction_deg = math.degrees(math.atan2(dy, dx))
+            elif horizontal_len(rt.vx, rt.vy) > 1e-4:
+                direction_deg = math.degrees(math.atan2(rt.vy, rt.vx))
+            else:
+                direction_deg = 0.0
+
+            self.obstacle_metrics[bird.name] = {
+                'x': x,
+                'y': y,
+                'z': z,
+                'dx': dx,
+                'dy': dy,
+                'dz': dz,
+                'sample_dt': dt,
+                'speed': speed,
+                'direction_deg': direction_deg,
+            }
+            self.last_metric_samples[bird.name] = (now, x, y, z)
+
+    def build_obstacle_status_text(self):
+        names = [
+            bird.name for bird in self.birds
+            if bird.name in self.current_states and bird.name in self.obstacle_metrics
+        ]
+        if not names:
+            return f'start={self.tracking_start_text} | count=0 | no moving dynamic obstacle'
+
+        lines = [f'start={self.tracking_start_text} | count={len(names)} | interval=1.0s']
+        for index, name in enumerate(names, start=1):
+            metric = self.obstacle_metrics[name]
+            lines.append(
+                f'{index}:{name} '
+                f'xyz=({metric["x"]:+.2f},{metric["y"]:+.2f},{metric["z"]:+.2f}) '
+                f'd1s=({metric["dx"]:+.2f},{metric["dy"]:+.2f},{metric["dz"]:+.2f}) '
+                f'speed={metric["speed"]:.2f}m/s '
+                f'dir={metric["direction_deg"]:+.0f}deg'
+            )
+        return '\n'.join(lines)
+
+    def publish_dynamic_obstacles(self):
+        if not rclpy_ok():
+            return
+
+        msg = PoseArray()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'odom'
+
+        for bird in self.birds:
+            state = self.current_states.get(bird.name)
+            if state is None:
+                continue
+            msg.poses.append(state.pose)
+
+        try:
+            self.dynamic_targets_pub.publish(msg)
+        except Exception:
+            return
+
+        now = time.monotonic()
+        has_obstacles = bool(msg.poses)
+        if has_obstacles:
+            self.start_tracking_if_needed()
+
+        if now - self.last_obstacle_status_time < 1.0 and self.last_obstacle_status_time > 0.0:
+            return
+        self.last_obstacle_status_time = now
+        if has_obstacles:
+            self.update_obstacle_metrics(now)
+
+        status_text = self.build_obstacle_status_text()
+        status_msg = String()
+        status_msg.data = status_text
+        height_msg = String()
+        height_msg.data = status_text
+        class_msg = String()
+        class_msg.data = (
+            f'bird tracking active: {len(msg.poses)} dynamic obstacle(s)'
+            if has_obstacles
+            else 'waiting for dynamic obstacle'
+        )
+        target_msg = String()
+        target_msg.data = 'bird' if has_obstacles else 'unknown'
+        confidence_msg = Float32()
+        confidence_msg.data = 0.95 if has_obstacles else 0.0
+        confirmed_msg = Bool()
+        confirmed_msg.data = has_obstacles
+
+        try:
+            self.dynamic_obstacle_state_pub.publish(status_msg)
+            self.height_filter_debug_pub.publish(height_msg)
+            self.classification_state_pub.publish(class_msg)
+            self.target_class_pub.publish(target_msg)
+            self.target_confidence_pub.publish(confidence_msg)
+            self.bird_confirmed_pub.publish(confirmed_msg)
+        except Exception:
+            return
 
     def publish_nearest_bird(self):
         if not self.current_states:
@@ -681,12 +694,14 @@ def main(args=None):
     node = BirdManager()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
+        # 역할: launch 종료나 Gazebo trial cleanup 때 생기는 정상 shutdown을
+        # traceback/exit code 1로 남기지 않아 반복 실험 로그를 깨끗하게 유지한다.
         pass
     finally:
         try:
             node.destroy_node()
-        except Exception:
+        except BaseException:
             pass
 
         if rclpy_ok():

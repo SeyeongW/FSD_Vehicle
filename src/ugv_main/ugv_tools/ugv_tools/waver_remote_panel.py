@@ -73,6 +73,7 @@ class PanelState:
     map_apply_state: str = "unknown"
     current_map_source: str = "NONE"
     height_filter_debug: str = "unknown"
+    dynamic_obstacle_state: str = "waiting"
     auto_status: str = "stopped"
     odom_yaw: float = 0.0
     map_display_mode: str = "AUTO_MAP"
@@ -97,6 +98,9 @@ class PanelState:
     lidar_objects: list[tuple[float, float]] = field(default_factory=list)
     lidar_objects_frame: str = ""
     elevated_targets: list[tuple[float, float]] = field(default_factory=list)
+    elevated_target_altitudes: list[float] = field(default_factory=list)
+    elevated_target_speeds: list[float] = field(default_factory=list)
+    elevated_target_directions: list[float] = field(default_factory=list)
     elevated_targets_frame: str = ""
     current_waypoint: Optional[tuple[float, float]] = None
     current_waypoint_frame: str = ""
@@ -132,6 +136,7 @@ class WaverRemoteNode(Node):
         self.declare_parameter("object_mission_goal_topic", "/waver/object_mission_goal")
         self.declare_parameter("lidar_objects_map_topic", "/waver/lidar_objects_map")
         self.declare_parameter("elevated_dynamic_target_topic", "/waver/elevated_dynamic_targets")
+        self.declare_parameter("dynamic_obstacle_state_topic", "/waver/dynamic_obstacle_state")
         self.declare_parameter("current_waypoint_topic", "/waver/current_waypoint")
         self.declare_parameter("patrol_state_topic", "/waver/patrol_state")
         self.declare_parameter("patrol_status_topic", "/waver/patrol_status")
@@ -211,6 +216,7 @@ class WaverRemoteNode(Node):
         self.last_angular_limit_publish = -1.0
         self.last_speed_limit_publish_time = 0.0
         self.last_manual_command_time = 0.0
+        self.last_elevated_target_samples = {}
         self.profile = str(self.get_parameter("profile").value).strip().lower() or "real"
         self.publish_direct_cmd_vel = bool(self.get_parameter("publish_direct_cmd_vel").value)
         if self.profile == "real" and self.publish_direct_cmd_vel:
@@ -369,6 +375,12 @@ class WaverRemoteNode(Node):
             PoseArray,
             str(self.get_parameter("elevated_dynamic_target_topic").value),
             self.elevated_targets_callback,
+            10,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("dynamic_obstacle_state_topic").value),
+            lambda msg: self.set_text_state("dynamic_obstacle_state", msg.data),
             10,
         )
         self.create_subscription(
@@ -679,10 +691,38 @@ class WaverRemoteNode(Node):
 
     def elevated_targets_callback(self, msg: PoseArray) -> None:
         # 역할: height>=3m AND map/odom dynamic 필터를 통과한 최종 target을 지도에 별도 표시한다.
-        points = [(float(p.position.x), float(p.position.y)) for p in msg.poses[:20]]
+        poses = msg.poses[:20]
+        points = [(float(p.position.x), float(p.position.y)) for p in poses]
+        altitudes = [float(p.position.z) for p in poses]
+        now = time.monotonic()
         with self.lock:
             robot = (self.state.odom_x, self.state.odom_y, self.state.odom_yaw)
-            self.state.elevated_targets = points_to_fixed_frame(points, msg.header.frame_id, robot)
+            fixed_points = points_to_fixed_frame(points, msg.header.frame_id, robot)
+            speeds: list[float] = []
+            directions: list[float] = []
+            for index, ((x, y), z) in enumerate(zip(fixed_points, altitudes)):
+                previous = self.last_elevated_target_samples.get(index)
+                if previous is None:
+                    speed = 0.0
+                    direction = 0.0
+                else:
+                    prev_t, prev_x, prev_y, prev_z = previous
+                    dt = max(1e-6, now - prev_t)
+                    dx = x - prev_x
+                    dy = y - prev_y
+                    dz = z - prev_z
+                    speed = math.sqrt(dx * dx + dy * dy + dz * dz) / dt
+                    direction = math.degrees(math.atan2(dy, dx)) if math.hypot(dx, dy) > 1e-6 else 0.0
+                speeds.append(speed)
+                directions.append(direction)
+                self.last_elevated_target_samples[index] = (now, x, y, z)
+            for old_index in list(self.last_elevated_target_samples.keys()):
+                if old_index >= len(fixed_points):
+                    del self.last_elevated_target_samples[old_index]
+            self.state.elevated_targets = fixed_points
+            self.state.elevated_target_altitudes = altitudes[: len(fixed_points)]
+            self.state.elevated_target_speeds = speeds[: len(fixed_points)]
+            self.state.elevated_target_directions = directions[: len(fixed_points)]
             self.state.elevated_targets_frame = fixed_frame_label(msg.header.frame_id)
 
     def current_waypoint_callback(self, msg: PoseStamped) -> None:
@@ -822,6 +862,10 @@ class WaverRemoteNode(Node):
             self.state.current_waypoint = None
             self.state.lidar_objects.clear()
             self.state.elevated_targets.clear()
+            self.state.elevated_target_altitudes.clear()
+            self.state.elevated_target_speeds.clear()
+            self.state.elevated_target_directions.clear()
+            self.last_elevated_target_samples.clear()
             self.state.map_sequence += 1
             self.state.map_display_mode = "SLAM_LIVE"
             self.state.current_map_source = "SLAM_LIVE_MAP"
@@ -1340,6 +1384,7 @@ class WaverRemotePanel:
         self.sound_var = tk.StringVar(value="sound: unknown")
         self.trial_var = tk.StringVar(value="trial: unknown")
         self.map_apply_var = tk.StringVar(value="map apply: unknown")
+        self.dynamic_obstacle_var = tk.StringVar(value="dynamic: waiting")
         self.auto_var = tk.StringVar(value="auto: stopped")
         self.hazard_var = tk.StringVar(value="scan: unknown")
         self.auto_cmd_var = tk.StringVar(value="nav2 cmd: 0.00 m/s, 0.00 rad/s")
@@ -1584,7 +1629,7 @@ class WaverRemotePanel:
             ("waypoint", "#26c6da"),
             ("nav goal", "#ab47bc"),
             ("cluster", "#ffca28"),
-            ("elevated target", "#ff5252"),
+            ("dynamic target", "#ff5252"),
         ]:
             item = self.tk.Label(
                 legend,
@@ -1620,6 +1665,7 @@ class WaverRemotePanel:
             ("MAP APPLY", self.map_apply_var),
             ("PATROL", self.patrol_var),
             ("TARGET", self.target_var),
+            ("DYNAMIC OBS", self.dynamic_obstacle_var),
             ("AUTO BACKEND", self.auto_var),
             ("NAV2 CANDIDATE", self.auto_cmd_var),
             ("SCAN SAFETY", self.hazard_var),
@@ -1808,6 +1854,9 @@ class WaverRemotePanel:
             lidar_objects = list(self.state.lidar_objects)
             lidar_objects_frame = self.state.lidar_objects_frame
             elevated_targets = list(self.state.elevated_targets)
+            elevated_target_altitudes = list(self.state.elevated_target_altitudes)
+            elevated_target_speeds = list(self.state.elevated_target_speeds)
+            elevated_target_directions = list(self.state.elevated_target_directions)
             elevated_targets_frame = self.state.elevated_targets_frame
             pose_source = self.state.pose_source
             map_display_mode = self.state.map_display_mode
@@ -1913,11 +1962,40 @@ class WaverRemotePanel:
             cx, cy = w2c(ox, oy)
             canvas.create_oval(cx - 4, cy - 4, cx + 4, cy + 4, fill="#ffca28", outline="#fff59d")
 
-        for tx, ty in elevated_targets[:12]:
+        for index, (tx, ty) in enumerate(elevated_targets[:12], start=1):
             cx, cy = w2c(tx, ty)
             canvas.create_oval(cx - 8, cy - 8, cx + 8, cy + 8, outline="#ff5252", width=3)
             canvas.create_line(cx - 10, cy, cx + 10, cy, fill="#ff5252", width=2)
             canvas.create_line(cx, cy - 10, cx, cy + 10, fill="#ff5252", width=2)
+            altitude_text = ""
+            if index - 1 < len(elevated_target_altitudes):
+                altitude_text = f" z={elevated_target_altitudes[index - 1]:.1f}m"
+            speed_text = ""
+            direction = 0.0
+            if index - 1 < len(elevated_target_speeds):
+                speed_text = f" v={elevated_target_speeds[index - 1]:.1f}"
+            if index - 1 < len(elevated_target_directions):
+                direction = elevated_target_directions[index - 1]
+            if index - 1 < len(elevated_target_speeds) and elevated_target_speeds[index - 1] > 0.05:
+                arrow_len = max(14.0, min(36.0, elevated_target_speeds[index - 1] * 14.0))
+                rad = math.radians(direction)
+                canvas.create_line(
+                    cx,
+                    cy,
+                    cx + math.cos(rad) * arrow_len,
+                    cy - math.sin(rad) * arrow_len,
+                    fill="#ff8a80",
+                    width=3,
+                    arrow="last",
+                )
+            canvas.create_text(
+                cx + 12,
+                cy - 12,
+                text=f"DYN{index}{altitude_text}{speed_text} dir={direction:+.0f}",
+                fill="#ffcdd2",
+                anchor="w",
+                font=("Sans", 9, "bold"),
+            )
 
         if current_waypoint is not None:
             self.draw_cross(canvas, current_waypoint, w2c, "#26c6da", "wp")
@@ -1967,7 +2045,7 @@ class WaverRemotePanel:
                 f"path={len(global_path)}({global_path_frame or '-'}) "
                 f"local={len(local_path)}({local_path_frame or '-'}) "
                 f"cluster={len(lidar_objects)}({lidar_objects_frame or '-'}) "
-                f"target={len(elevated_targets)}({elevated_targets_frame or '-'})"
+                f"dynamic={len(elevated_targets)}({elevated_targets_frame or '-'})"
             ),
         )
         canvas.create_text(
@@ -1987,7 +2065,7 @@ class WaverRemotePanel:
             f"robot=({rx:+.2f},{ry:+.2f}) yaw={yaw:+.2f} | "
             f"free={len(free_cells)}, occupied={len(occupied)} | "
             f"global path={len(global_path)}, local path={len(local_path)} | "
-            f"clusters={len(lidar_objects)}, elevated targets={len(elevated_targets)}"
+            f"clusters={len(lidar_objects)}, dynamic targets={len(elevated_targets)}"
         )
 
     def draw_polyline(self, canvas, points, w2c, color: str, width: int) -> None:
@@ -2257,6 +2335,7 @@ class WaverRemotePanel:
             map_apply = self.state.map_apply_state
             current_map_source = self.state.current_map_source
             height_filter = self.state.height_filter_debug
+            dynamic_obstacle = self.state.dynamic_obstacle_state
             auto = self.state.auto_status
             auto_linear = self.state.latest_auto_linear
             auto_angular = self.state.latest_auto_angular
@@ -2299,6 +2378,7 @@ class WaverRemotePanel:
             f"class={target_class}, conf={target_confidence:.2f}, bird={bird_confirmed}\n"
             f"height/dynamic: {height_filter[:120]}"
         )
+        self.dynamic_obstacle_var.set(f"dynamic: {dynamic_obstacle[:360]}")
         self.camera_var.set(f"camera: {camera}")
         self.sound_var.set(f"sound: {sound}")
         self.trial_var.set(f"trial: {trial}")

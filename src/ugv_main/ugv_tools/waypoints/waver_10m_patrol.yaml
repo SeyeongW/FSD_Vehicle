@@ -1,0 +1,34 @@
+# Waver 10 m x 10 m odom-frame square patrol for the 15 m Gazebo runway map.
+#
+# The square stays inside the 2 m boundary walls by using corners at +/-5 m.
+
+frame_id: odom
+home:
+  name: home
+  x: 0.0
+  y: 0.0
+  yaw: 0.0
+
+waypoints:
+  - name: square_10m_sw
+    x: -5.00
+    y: -5.00
+    yaw: 0.0
+  - name: square_10m_se
+    x: 5.00
+    y: -5.00
+    yaw: 1.57
+  - name: square_10m_ne
+    x: 5.00
+    y: 5.00
+    yaw: 3.14
+  - name: square_10m_nw
+    x: -5.00
+    y: 5.00
+    yaw: -1.57
+
+failure_policy:
+  max_patrol_radius_m: 7.2
+  recovery_attempts: 3
+  blocked_wait_s: 2.0
+  human_estop_required: true

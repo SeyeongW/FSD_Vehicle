@@ -192,7 +192,6 @@ class WaverGazeboPatrol(Node):
 
         # 역할: /cmd_vel, /odom, /scan, /goal_pose를 연결하고 모니터링용 상태 토픽을 만든다.
         self.cmd_pub = self.create_publisher(Twist, self.cmd_vel_topic, 10)
-        from geometry_msgs.msg import PointStamped
         from std_msgs.msg import String
 
         self.state_pub = self.create_publisher(
@@ -201,7 +200,7 @@ class WaverGazeboPatrol(Node):
             10,
         )
         self.current_waypoint_pub = self.create_publisher(
-            PointStamped,
+            PoseStamped,
             str(self.get_parameter("current_waypoint_topic").value),
             10,
         )
@@ -554,6 +553,7 @@ class WaverGazeboPatrol(Node):
         if distance < self.xy_tolerance * 2.0:
             return False
         recovery_states = {
+            PatrolState.ALIGN_HEADING,
             PatrolState.OBSTACLE_WAIT,
             PatrolState.RECOVERY_TURN,
             PatrolState.RECOVERY_BACKUP,
@@ -629,14 +629,13 @@ class WaverGazeboPatrol(Node):
 
     def publish_current_waypoint(self, waypoint: Waypoint) -> None:
         # 역할: 현재 목표 waypoint를 /waver/current_waypoint로 발행해 RViz/터미널에서 점검한다.
-        from geometry_msgs.msg import PointStamped
-
-        msg = PointStamped()
+        msg = PoseStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = "odom"
-        msg.point.x = waypoint.x
-        msg.point.y = waypoint.y
-        msg.point.z = 0.0
+        msg.pose.position.x = waypoint.x
+        msg.pose.position.y = waypoint.y
+        msg.pose.position.z = 0.0
+        msg.pose.orientation.w = 1.0
         self.current_waypoint_pub.publish(msg)
 
     def destroy_node(self) -> bool:

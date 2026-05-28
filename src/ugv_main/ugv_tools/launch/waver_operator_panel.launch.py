@@ -44,6 +44,7 @@ def generate_launch_description():
     object_mission_goal_topic = LaunchConfiguration("object_mission_goal_topic")
     lidar_objects_map_topic = LaunchConfiguration("lidar_objects_map_topic")
     elevated_dynamic_target_topic = LaunchConfiguration("elevated_dynamic_target_topic")
+    dynamic_obstacle_state_topic = LaunchConfiguration("dynamic_obstacle_state_topic")
     current_waypoint_topic = LaunchConfiguration("current_waypoint_topic")
     patrol_status_topic = LaunchConfiguration("patrol_status_topic")
     mission_state_topic = LaunchConfiguration("mission_state_topic")
@@ -110,6 +111,7 @@ def generate_launch_description():
                 "object_mission_goal_topic": object_mission_goal_topic,
                 "lidar_objects_map_topic": lidar_objects_map_topic,
                 "elevated_dynamic_target_topic": elevated_dynamic_target_topic,
+                "dynamic_obstacle_state_topic": dynamic_obstacle_state_topic,
                 "current_waypoint_topic": current_waypoint_topic,
                 "patrol_status_topic": patrol_status_topic,
                 "mission_state_topic": mission_state_topic,
@@ -173,6 +175,7 @@ def generate_launch_description():
             DeclareLaunchArgument("object_mission_goal_topic", default_value="/waver/object_mission_goal"),
             DeclareLaunchArgument("lidar_objects_map_topic", default_value="/waver/lidar_objects_map"),
             DeclareLaunchArgument("elevated_dynamic_target_topic", default_value="/waver/elevated_dynamic_targets"),
+            DeclareLaunchArgument("dynamic_obstacle_state_topic", default_value="/waver/dynamic_obstacle_state"),
             DeclareLaunchArgument("current_waypoint_topic", default_value="/waver/current_waypoint"),
             DeclareLaunchArgument("patrol_status_topic", default_value="/waver/patrol_status"),
             DeclareLaunchArgument("mission_state_topic", default_value="/waver/mission_state"),
