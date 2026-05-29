@@ -1,0 +1,16 @@
+column,description
+timestamp,ROS time in seconds
+experiment_id,Unique experiment id
+target_id,LiDAR target id linked across tables
+inspection_goal_id,Generated inspection goal id
+approach_start_time,Approach start timestamp
+approach_arrival_time,Approach arrival timestamp
+approach_duration_sec,Approach duration
+start_distance_to_target_m,Distance to target at approach start
+final_distance_to_target_m,Distance to target at arrival
+arrival_success,Whether standoff arrival succeeded
+nav_fail_reason,Navigation failure reason
+recovery_count,Nav2 recovery count during approach
+path_length_m,Actual approach path length
+path_efficiency,Planned or shortest path divided by actual path
+min_obstacle_distance_m,Minimum obstacle distance during approach

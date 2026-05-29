@@ -1,35 +1,59 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OUT="${1:-$HOME/ros2_ws/experiments_result/bags/waver_experiment_$(date +%Y%m%d_%H%M%S)}"
+OUT="${1:-$HOME/ros2_ws2/FSD_Vehicle/experiments_result/bags/waver_experiment_$(date +%Y%m%d_%H%M%S)}"
 mkdir -p "$(dirname "$OUT")"
 
 ros2 bag record \
-  /odom \
-  /amcl_pose \
   /tf \
   /tf_static \
+  /odom \
+  /amcl_pose \
   /scan \
+  /mid360_PointCloud2 \
+  /map \
+  /plan \
+  /local_plan \
   /cmd_vel \
-  /waver/cmd_vel_nav2 \
+  /waver/manual_cmd_vel \
+  /waver/cmd_vel_nav2_raw \
+  /waver/cmd_vel_nav2_smooth \
+  /waver/mode \
   /waver/mission_state \
   /waver/mission_event \
-  /waver/radar_target_goal \
-  /waver/radar_target_active \
-  /waver/aerial_target \
-  /waver/aerial_target_active \
+  /waver/current_waypoint \
+  /waver/active_nav_goal \
   /waver/lidar_objects \
   /waver/lidar_objects_map \
-  /waver/lidar_object_point_map \
-  /waver/moving_object_map_transform_state \
-  /waver/lidar_object_goal_preview \
-  /waver/object_mission_goal \
-  /waver/object_mission_goal_active \
+  /waver/elevated_dynamic_targets \
+  /waver/moving_target_valid \
+  /waver/lidar_target_id \
+  /waver/lidar_target_pose_sensor \
+  /waver/lidar_target_pose_map \
+  /waver/lidar_target_height_m \
+  /waver/lidar_target_range_m \
+  /waver/lidar_target_velocity_mps \
+  /waver/lidar_target_dynamic_valid \
+  /waver/lidar_target_z_valid \
+  /waver/lidar_target_state \
+  /waver/height_filter_debug \
+  /waver/ego_motion_compensation_debug \
+  /waver/inspection_target_pose_map \
+  /waver/inspection_target_state \
+  /waver/camera_aim_target_pose \
+  /waver/camera_gimbal_cmd \
+  /waver/camera_alignment_state \
+  /waver/camera_target_centered \
+  /waver/bird_detections_2d \
+  /waver/bird_confirmed \
   /waver/target_class \
   /waver/target_confidence \
-  /waver/bird_confirmed \
+  /waver/target_classification_state \
+  /waver/sound_alert_request \
   /waver/sound_alert_state \
   /waver/sound_task_done \
+  /waver/battery_safety_state \
+  /waver/base_driver_state \
   /waver/safety_state \
   /battery_state \
   /voltage \

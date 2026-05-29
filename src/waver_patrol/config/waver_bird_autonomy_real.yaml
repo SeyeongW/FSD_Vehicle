@@ -6,6 +6,9 @@ real_vehicle:
     enable_deep_learning_stub: false
     enable_bird_detector: true
     enable_bird_3d_fusion: true
+    enable_camera_gimbal_controller: true
+    enable_sound_deterrent: true
+    enable_sound_output: false
     enable_livox_scan_adapter: true
     enable_pointcloud_lidar_objects: true
     enable_moving_object_map_transform: true
@@ -16,17 +19,24 @@ real_vehicle:
     start_patrol_requires_operator: true
     camera_only_goal_allowed: false
     mapping_mode_target_interrupt_enabled: false
-    safety_max_linear_speed: 0.10
-    safety_max_angular_speed: 0.35
+    safety_max_linear_speed: 0.05
+    safety_max_angular_speed: 0.20
 
 bird_autonomy_policy:
   ros__parameters:
-    require_bird_confirmed: true
+    mission_target_policy: "lidar_first_inspection"
+    require_bird_confirmed: false
+    require_bird_confirmed_for_inspection_goal: false
+    require_bird_confirmed_for_sound: true
+    allow_lidar_dynamic_without_bird_confirmed_for_inspection: true
     require_3d_fusion_valid: true
     require_dynamic_valid: true
     require_z_valid: true
     min_target_height_m: 3.0
     allow_laserscan_only_height: false
     allow_radar_without_bird_confirmed: false
-    allowed_trigger_modes: ["PATROL", "AUTO", "BIRD_CONFIRMED"]
+    require_camera_classification_before_sound: true
+    deterrence_classes: ["bird"]
+    non_deterrence_classes: ["drone", "unknown", "irrelevant", "none"]
+    allowed_trigger_modes: ["PATROL", "AUTO", "BIRD_CANDIDATE"]
     blocked_modes: ["STANDBY", "MAPPING_AUTO", "MAPPING_MANUAL", "EMERGENCY"]

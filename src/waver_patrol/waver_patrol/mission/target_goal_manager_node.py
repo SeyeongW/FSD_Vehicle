@@ -28,8 +28,22 @@ class Candidate:
     pose: PoseStamped
     source: str
     moving: bool = False
+    z_valid: bool = True
+    dynamic_valid: bool = False
     bird_confirmed: bool = False
     fusion_valid: bool = False
+    target_class: str = "none"
+    target_confidence: float = 0.0
+    mission_type: str = "INSPECTION_ONLY"
+
+
+@dataclass
+class InspectedTargetMemory:
+    x: float
+    y: float
+    z: float
+    stamp: float
+    count: int = 1
 
 
 class TargetGoalManagerNode(Node):
@@ -54,8 +68,24 @@ class TargetGoalManagerNode(Node):
         self.declare_parameter("require_bird_confirmed", False)
         self.declare_parameter("allow_radar_without_bird_confirmed", True)
         self.declare_parameter("require_3d_fusion_valid", False)
+        self.declare_parameter("mission_target_policy", "lidar_first_inspection")
+        self.declare_parameter("allow_lidar_dynamic_without_bird_confirmed_for_inspection", True)
+        self.declare_parameter("require_bird_confirmed_for_inspection_goal", False)
+        self.declare_parameter("require_bird_confirmed_for_sound", True)
+        self.declare_parameter("require_3d_lidar_z_valid_for_inspection", True)
+        self.declare_parameter("require_dynamic_valid_for_inspection", True)
+        self.declare_parameter("require_camera_classification_before_sound", True)
+        self.declare_parameter("deterrence_classes", ["bird"])
+        self.declare_parameter("non_deterrence_classes", ["drone", "unknown", "irrelevant", "none"])
+        self.declare_parameter("inspection_goal_offset_distance_m", 2.0)
+        self.declare_parameter("classification_standoff_distance_m", 2.0)
+        self.declare_parameter("target_arrival_tolerance_xy_m", 0.5)
+        self.declare_parameter("inspection_cooldown_sec", 8.0)
+        self.declare_parameter("max_inspection_retries_per_target", 1)
+        self.declare_parameter("inspected_target_lockout_sec", 120.0)
+        self.declare_parameter("inspected_target_radius_m", 1.5)
         self.declare_parameter("enforce_mode_gate", False)
-        self.declare_parameter("allowed_trigger_modes", ["PATROL", "AUTO", "BIRD_CONFIRMED"])
+        self.declare_parameter("allowed_trigger_modes", ["PATROL", "AUTO", "BIRD_CANDIDATE"])
         self.declare_parameter("mode_topic", "/waver/mode")
         self.declare_parameter("safety_state_topic", "/waver/safety_state")
         self.declare_parameter("battery_safety_state_topic", "/waver/battery_safety_state")
@@ -85,6 +115,10 @@ class TargetGoalManagerNode(Node):
         self.active_pub = self.create_publisher(Bool, "/waver/object_mission_goal_active", 10)
         self.state_pub = self.create_publisher(String, "/waver/object_mission_goal_state", 10)
         self.target_goal_state_pub = self.create_publisher(String, str(self.get_parameter("target_goal_state_topic").value), 10)
+        self.inspection_target_pub = self.create_publisher(PoseStamped, "/waver/inspection_target_pose_map", 10)
+        self.inspection_active_pub = self.create_publisher(Bool, "/waver/inspection_target_active", 10)
+        self.inspection_state_pub = self.create_publisher(String, "/waver/inspection_target_state", 10)
+        self.inspection_reason_pub = self.create_publisher(String, "/waver/inspection_goal_reason", 10)
 
         if bool(self.get_parameter("use_tf_transform").value) and Buffer is not None:
             self.tf_buffer = Buffer()
@@ -102,10 +136,13 @@ class TargetGoalManagerNode(Node):
         self.battery_safety_state = "UNKNOWN"
         self.estop = False
         self.external_stop = False
+        self.target_class = "none"
+        self.target_confidence = 0.0
         self.last_goal_time = -1e9
         self.last_candidate_time = 0.0
         self.robot_pose: PoseStamped | None = None
         self.robot_pose_time = 0.0
+        self.inspected_targets: list[InspectedTargetMemory] = []
 
         self.create_subscription(PoseStamped, "/waver/radar_target_goal", self.radar_goal_callback, 10)
         self.create_subscription(Bool, "/waver/radar_target_active", lambda m: setattr(self, "radar_active", bool(m.data)), 10)
@@ -157,6 +194,7 @@ class TargetGoalManagerNode(Node):
                 10,
             )
         self.create_subscription(Bool, "/waver/bird_confirmed", lambda m: setattr(self, "bird_confirmed", bool(m.data)), 10)
+        self.create_subscription(String, "/waver/target_class", lambda m: setattr(self, "target_class", m.data.strip().lower()), 10)
         self.create_subscription(Bool, str(self.get_parameter("bird_target_valid_topic").value), lambda m: setattr(self, "bird_target_valid", bool(m.data)), 10)
         self.create_subscription(String, str(self.get_parameter("mode_topic").value), lambda m: setattr(self, "mode", m.data.strip().upper()), 10)
         self.create_subscription(String, str(self.get_parameter("safety_state_topic").value), lambda m: setattr(self, "safety_state", m.data.strip().upper()), 10)
@@ -166,21 +204,30 @@ class TargetGoalManagerNode(Node):
         self.create_timer(0.5, self.timeout_tick)
 
     def radar_goal_callback(self, msg: PoseStamped) -> None:
-        self.accept_candidate(Candidate(msg, "radar", moving=True, bird_confirmed=self.bird_confirmed))
+        self.accept_candidate(Candidate(msg, "radar", moving=True, dynamic_valid=True, bird_confirmed=self.bird_confirmed))
 
     def aerial_point_callback(self, msg: PointStamped) -> None:
         pose = PoseStamped()
         pose.header = msg.header
         pose.pose.position = msg.point
         pose.pose.orientation.w = 1.0
-        self.accept_candidate(Candidate(pose, "aerial_target", moving=self.aerial_active, bird_confirmed=self.bird_confirmed))
+        self.accept_candidate(
+            Candidate(
+                pose,
+                "aerial_target",
+                moving=self.aerial_active,
+                dynamic_valid=self.aerial_active,
+                bird_confirmed=self.bird_confirmed,
+                target_class=self.target_class,
+            )
+        )
 
     def object_point_callback(self, msg: PointStamped) -> None:
         pose = PoseStamped()
         pose.header = msg.header
         pose.pose.position = msg.point
         pose.pose.orientation.w = 1.0
-        self.accept_candidate(Candidate(pose, "object_point", moving=True, bird_confirmed=self.bird_confirmed))
+        self.accept_candidate(Candidate(pose, "object_point", moving=True, dynamic_valid=True, bird_confirmed=self.bird_confirmed))
 
     def robot_pose_callback(self, msg: PoseWithCovarianceStamped) -> None:
         pose = PoseStamped()
@@ -204,8 +251,10 @@ class TargetGoalManagerNode(Node):
                 msg,
                 "bird_3d_fusion",
                 moving=self.bird_target_valid,
+                dynamic_valid=self.bird_target_valid,
                 bird_confirmed=self.bird_confirmed,
                 fusion_valid=self.bird_target_valid,
+                target_class=self.target_class,
             )
         )
 
@@ -227,8 +276,12 @@ class TargetGoalManagerNode(Node):
                     stamped,
                     "elevated_dynamic_target",
                     moving=True,
+                    z_valid=pose.position.z >= float(self.get_parameter("min_height_m").value),
+                    dynamic_valid=True,
                     bird_confirmed=self.bird_confirmed,
                     fusion_valid=self.bird_target_valid,
+                    target_class=self.target_class,
+                    mission_type="INSPECTION_ONLY",
                 )
         if best is not None:
             self.accept_candidate(best)
@@ -243,7 +296,16 @@ class TargetGoalManagerNode(Node):
             depth = math.hypot(pose.position.x, pose.position.y)
             if depth < best_depth:
                 best_depth = depth
-                best = Candidate(stamped, "lidar_pose_array", moving=self.aerial_active, bird_confirmed=self.bird_confirmed)
+                best = Candidate(
+                    stamped,
+                    "lidar_pose_array",
+                    moving=self.aerial_active,
+                    z_valid=pose.position.z >= float(self.get_parameter("min_height_m").value),
+                    dynamic_valid=self.aerial_active,
+                    bird_confirmed=self.bird_confirmed,
+                    target_class=self.target_class,
+                    mission_type="INSPECTION_ONLY",
+                )
         if best is None:
             self.state_pub.publish(String(data="NO_LIDAR_OBJECTS"))
             return
@@ -253,37 +315,65 @@ class TargetGoalManagerNode(Node):
         now = self._now()
         reason = self.rejection_reason(candidate)
         if reason:
-            self._publish_state(f"REJECTED source={candidate.source} reason={reason}")
+            candidate.mission_type = self.reject_mission_type(reason)
+            self._publish_state(f"REJECT source={candidate.source} mission_type={candidate.mission_type} {reason}")
             self.active_pub.publish(Bool(data=False))
+            self.inspection_active_pub.publish(Bool(data=False))
             return
-        if now - self.last_goal_time < float(self.get_parameter("goal_publish_cooldown_sec").value):
-            self._publish_state(f"COOLDOWN source={candidate.source}")
+        cooldown = float(self.get_parameter("inspection_cooldown_sec").value) if self.is_lidar_inspection_candidate(candidate) else float(self.get_parameter("goal_publish_cooldown_sec").value)
+        if now - self.last_goal_time < cooldown:
+            self._publish_state(f"REJECT cooldown source={candidate.source} remaining_sec={cooldown - (now - self.last_goal_time):.2f}")
             self.active_pub.publish(Bool(data=True))
+            self.inspection_active_pub.publish(Bool(data=True))
             return
         transformed = self.transform_to_global(candidate.pose)
         if transformed is None:
-            self._publish_state(f"TF_FAILED source={candidate.source} frame={candidate.pose.header.frame_id}")
+            candidate.mission_type = "REJECTED_NO_TF"
+            self._publish_state(f"REJECT no_tf source={candidate.source} frame={candidate.pose.header.frame_id}")
             self.active_pub.publish(Bool(data=False))
+            self.inspection_active_pub.publish(Bool(data=False))
+            return
+        inspected_reject = self.recently_inspected_rejection_reason(transformed)
+        if inspected_reject:
+            self._publish_state(f"REJECT source={candidate.source} mission_type=REJECTED_ALREADY_INSPECTED {inspected_reject}")
+            self.active_pub.publish(Bool(data=False))
+            self.inspection_active_pub.publish(Bool(data=False))
             return
         robot_pose = self.robot_pose
         if robot_pose is not None and robot_pose.header.frame_id != transformed.header.frame_id:
             robot_pose = self.transform_to_global(robot_pose)
         if robot_pose is None and bool(self.get_parameter("require_robot_pose_for_goal").value):
-            self._publish_state(f"REJECTED source={candidate.source} reason=robot_pose_unavailable")
+            self._publish_state(f"REJECT robot_pose_unavailable source={candidate.source}")
             self.active_pub.publish(Bool(data=False))
+            self.inspection_active_pub.publish(Bool(data=False))
             return
+        offset_distance = (
+            float(self.get_parameter("inspection_goal_offset_distance_m").value)
+            if self.is_lidar_inspection_candidate(candidate)
+            else float(self.get_parameter("goal_offset_distance_m").value)
+        )
         goal = offset_goal_from_target(
             transformed,
-            float(self.get_parameter("goal_offset_distance_m").value),
+            offset_distance,
             str(self.get_parameter("goal_yaw_policy").value),
             robot_pose=robot_pose,
         )
         goal.header.stamp = self.get_clock().now().to_msg()
         self.goal_pub.publish(goal)
         self.active_pub.publish(Bool(data=True))
+        self.inspection_target_pub.publish(transformed)
+        self.inspection_active_pub.publish(Bool(data=True))
+        self.remember_inspected_target(transformed)
+        height = transformed.pose.position.z
+        distance = math.hypot(transformed.pose.position.x, transformed.pose.position.y)
+        reason_text = (
+            f"ACCEPT_INSPECTION_GOAL source={candidate.source} height={height:.2f} range={distance:.2f} "
+            f"dynamic={candidate.dynamic_valid} z_valid={candidate.z_valid} bird_confirmed={candidate.bird_confirmed} "
+            f"target_class={candidate.target_class} offset_m={offset_distance:.2f}"
+        )
         self._publish_state(
             (
-                f"ACCEPTED source={candidate.source} frame={goal.header.frame_id} "
+                f"{reason_text} frame={goal.header.frame_id} "
                 f"goal_x={goal.pose.position.x:.3f} goal_y={goal.pose.position.y:.3f}"
             )
         )
@@ -292,54 +382,134 @@ class TargetGoalManagerNode(Node):
 
     def rejection_reason(self, candidate: Candidate) -> str:
         if self.estop:
-            return "emergency_stop_active"
+            return "safety_state_blocks=emergency_stop_active"
         if self.external_stop:
-            return "external_stop_active"
+            return "safety_state_blocks=external_stop_active"
         if bool(self.get_parameter("enforce_mode_gate").value):
             allowed = {str(v).upper() for v in self.get_parameter("allowed_trigger_modes").value}
             if self.mode not in allowed:
-                return f"mode_not_allowed:{self.mode}"
+                return f"mode_not_allowed mode={self.mode} allowed={sorted(allowed)}"
         if any(token in self.safety_state for token in ("EMERGENCY", "STOP", "FAULT")) and "MAPPING" not in self.safety_state:
-            return f"safety_state_blocks:{self.safety_state}"
+            return f"safety_state_blocks={self.safety_state}"
         if any(token in self.battery_safety_state for token in ("CRITICAL", "STALE_STOP", "BATTERY_STALE_STOP")):
-            return f"battery_blocks:{self.battery_safety_state}"
+            return f"battery_blocks={self.battery_safety_state}"
         pose = candidate.pose
         if not pose.header.frame_id:
-            return "missing_frame_id"
+            return "no_tf missing_frame_id"
         if not is_finite_pose(pose):
-            return "nan_inf_pose"
+            return "invalid_pose nan_inf_pose"
         if pose.header.stamp.sec or pose.header.stamp.nanosec:
             stamp = float(pose.header.stamp.sec) + float(pose.header.stamp.nanosec) * 1e-9
-            if self._now() - stamp > float(self.get_parameter("target_pose_stale_timeout_sec").value):
-                return "target_pose_stale"
+            age = self._now() - stamp
+            if age > float(self.get_parameter("target_pose_stale_timeout_sec").value):
+                return f"target_pose_stale age={age:.2f}"
         x = float(pose.pose.position.x)
         y = float(pose.pose.position.y)
         z = float(pose.pose.position.z)
         depth = math.hypot(x, y)
-        if z < float(self.get_parameter("min_height_m").value):
-            return "height_low"
+        min_height = float(self.get_parameter("min_height_m").value)
+        lidar_first = self.is_lidar_inspection_candidate(candidate)
+        if bool(self.get_parameter("require_3d_lidar_z_valid_for_inspection").value) and lidar_first and not candidate.z_valid:
+            return f"height_low z={z:.2f} threshold={min_height:.2f}"
+        if z < min_height:
+            return f"height_low z={z:.2f} threshold={min_height:.2f}"
         if depth < float(self.get_parameter("min_depth_m").value):
-            return "depth_low"
+            return f"depth_low depth={depth:.2f} threshold={float(self.get_parameter('min_depth_m').value):.2f}"
         if depth > float(self.get_parameter("max_depth_m").value):
-            return "depth_high"
+            return f"depth_high depth={depth:.2f} threshold={float(self.get_parameter('max_depth_m').value):.2f}"
         if depth < float(self.get_parameter("min_target_distance_m").value):
-            return "target_too_close"
+            return f"target_too_close range={depth:.2f} threshold={float(self.get_parameter('min_target_distance_m').value):.2f}"
         if depth > float(self.get_parameter("max_target_distance_m").value):
-            return "target_too_far"
+            return f"target_too_far range={depth:.2f} threshold={float(self.get_parameter('max_target_distance_m').value):.2f}"
+        if bool(self.get_parameter("require_dynamic_valid_for_inspection").value) and lidar_first and not candidate.dynamic_valid:
+            return "dynamic_not_confirmed"
         if bool(self.get_parameter("require_motion").value) and not candidate.moving:
             if candidate.source != "radar" or not bool(self.get_parameter("allow_radar_without_bird_confirmed").value):
-                return "motion_not_confirmed"
-        if bool(self.get_parameter("require_bird_confirmed").value) and not candidate.bird_confirmed:
+                return "dynamic_not_confirmed"
+        require_bird_for_inspection = bool(self.get_parameter("require_bird_confirmed_for_inspection_goal").value)
+        legacy_require_bird = bool(self.get_parameter("require_bird_confirmed").value)
+        lidar_bird_bypass = (
+            lidar_first
+            and str(self.get_parameter("mission_target_policy").value) == "lidar_first_inspection"
+            and bool(self.get_parameter("allow_lidar_dynamic_without_bird_confirmed_for_inspection").value)
+        )
+        if (require_bird_for_inspection or legacy_require_bird) and not candidate.bird_confirmed and not lidar_bird_bypass:
             if candidate.source != "radar" or not bool(self.get_parameter("allow_radar_without_bird_confirmed").value):
-                return "bird_not_confirmed"
-        if bool(self.get_parameter("require_3d_fusion_valid").value) and not candidate.fusion_valid:
-            return "bird_3d_fusion_not_valid"
+                return "bird_not_confirmed_for_inspection"
+        if bool(self.get_parameter("require_3d_fusion_valid").value) and not candidate.fusion_valid and not lidar_bird_bypass:
+            return "bird_3d_fusion_not_valid_for_inspection"
         if bool(self.get_parameter("require_robot_pose_for_goal").value):
             if self.robot_pose is None:
                 return "robot_pose_unavailable"
-            if self._now() - self.robot_pose_time > float(self.get_parameter("robot_pose_stale_timeout_sec").value):
-                return "robot_pose_stale"
+            age = self._now() - self.robot_pose_time
+            if age > float(self.get_parameter("robot_pose_stale_timeout_sec").value):
+                return f"robot_pose_stale age={age:.2f}"
         return ""
+
+    def recently_inspected_rejection_reason(self, target: PoseStamped) -> str:
+        self.prune_inspected_targets()
+        max_retries = max(1, int(self.get_parameter("max_inspection_retries_per_target").value))
+        radius = float(self.get_parameter("inspected_target_radius_m").value)
+        now = self._now()
+        tx = float(target.pose.position.x)
+        ty = float(target.pose.position.y)
+        tz = float(target.pose.position.z)
+        for memory in self.inspected_targets:
+            distance_xy = math.hypot(tx - memory.x, ty - memory.y)
+            distance_z = abs(tz - memory.z)
+            if distance_xy <= radius and distance_z <= max(radius, 1.0) and memory.count >= max_retries:
+                age = max(0.0, now - memory.stamp)
+                return (
+                    f"target_already_inspected age={age:.1f}s count={memory.count} "
+                    f"distance_xy={distance_xy:.2f} radius={radius:.2f}"
+                )
+        return ""
+
+    def remember_inspected_target(self, target: PoseStamped) -> None:
+        self.prune_inspected_targets()
+        radius = float(self.get_parameter("inspected_target_radius_m").value)
+        now = self._now()
+        tx = float(target.pose.position.x)
+        ty = float(target.pose.position.y)
+        tz = float(target.pose.position.z)
+        for memory in self.inspected_targets:
+            if math.hypot(tx - memory.x, ty - memory.y) <= radius and abs(tz - memory.z) <= max(radius, 1.0):
+                memory.x = tx
+                memory.y = ty
+                memory.z = tz
+                memory.stamp = now
+                memory.count += 1
+                return
+        self.inspected_targets.append(InspectedTargetMemory(tx, ty, tz, now))
+
+    def prune_inspected_targets(self) -> None:
+        lockout = max(0.0, float(self.get_parameter("inspected_target_lockout_sec").value))
+        if lockout <= 0.0:
+            self.inspected_targets.clear()
+            return
+        now = self._now()
+        self.inspected_targets = [
+            memory for memory in self.inspected_targets if now - memory.stamp <= lockout
+        ]
+
+    def is_lidar_inspection_candidate(self, candidate: Candidate) -> bool:
+        return candidate.source in {"elevated_dynamic_target", "aerial_target", "lidar_pose_array"}
+
+    @staticmethod
+    def reject_mission_type(reason: str) -> str:
+        if "height_low" in reason:
+            return "REJECTED_LOW_HEIGHT"
+        if "dynamic_not_confirmed" in reason or "motion_not_confirmed" in reason:
+            return "REJECTED_NO_DYNAMIC"
+        if "no_tf" in reason or "frame" in reason:
+            return "REJECTED_NO_TF"
+        if "target_too_close" in reason:
+            return "REJECTED_TOO_CLOSE"
+        if "target_too_far" in reason or "depth_high" in reason:
+            return "REJECTED_TOO_FAR"
+        if "static" in reason:
+            return "REJECTED_STATIC"
+        return "REJECTED_NO_TF" if "tf" in reason.lower() else "REJECTED_STATIC"
 
     def transform_to_global(self, msg: PoseStamped) -> PoseStamped | None:
         global_frame = str(self.get_parameter("global_frame").value)
@@ -370,6 +540,8 @@ class TargetGoalManagerNode(Node):
         msg = String(data=text)
         self.state_pub.publish(msg)
         self.target_goal_state_pub.publish(msg)
+        self.inspection_state_pub.publish(msg)
+        self.inspection_reason_pub.publish(msg)
 
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9

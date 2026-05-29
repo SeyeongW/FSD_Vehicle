@@ -126,23 +126,37 @@ def load_route_yaml(path: str, package_share: str | None = None) -> MissionRoute
     )
 
 
-def offset_goal_from_target(target: PoseStamped, offset_distance_m: float, yaw_policy: str = "FACE_TARGET") -> PoseStamped:
+def offset_goal_from_target(
+    target: PoseStamped,
+    offset_distance_m: float,
+    yaw_policy: str = "FACE_TARGET",
+    robot_pose: PoseStamped | None = None,
+) -> PoseStamped:
     """Create a 2D Nav2 goal near, not on top of, the object target.
 
-    The target's x/y is assumed to be in a global frame. The robot stops
-    `offset_distance_m` before the object along the ray from the map origin.
-    For real deployments this should be replaced with a robot-current-pose ray.
+    The target's x/y is assumed to be in a global frame. If robot_pose is
+    available, the robot stops `offset_distance_m` before the object along the
+    robot-to-target ray; otherwise it falls back to the map-origin ray for
+    legacy/test publishers.
     """
     x = float(target.pose.position.x)
     y = float(target.pose.position.y)
-    yaw = math.atan2(y, x) if abs(x) + abs(y) > 1e-6 else 0.0
-    distance = math.hypot(x, y)
+    if robot_pose is not None:
+        rx = float(robot_pose.pose.position.x)
+        ry = float(robot_pose.pose.position.y)
+    else:
+        rx = 0.0
+        ry = 0.0
+    dx = x - rx
+    dy = y - ry
+    yaw = math.atan2(dy, dx) if abs(dx) + abs(dy) > 1e-6 else 0.0
+    distance = math.hypot(dx, dy)
     stop_distance = max(0.0, distance - max(0.0, offset_distance_m))
     scale = stop_distance / distance if distance > 1e-6 else 0.0
     goal = PoseStamped()
     goal.header = target.header
-    goal.pose.position.x = x * scale
-    goal.pose.position.y = y * scale
+    goal.pose.position.x = rx + dx * scale
+    goal.pose.position.y = ry + dy * scale
     goal.pose.position.z = 0.0
     if yaw_policy == "KEEP_CURRENT_YAW":
         goal.pose.orientation = target.pose.orientation

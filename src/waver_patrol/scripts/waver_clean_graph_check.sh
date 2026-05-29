@@ -17,7 +17,7 @@ topic_pub_count() {
 }
 
 fail=0
-for topic in /cmd_vel /waver/mode /scan /map /odom; do
+for topic in /cmd_vel /waver/mode /scan /scan_slam /scan_safety /map /odom; do
   count="$(topic_pub_count "$topic")"
   echo "$topic publishers=$count"
   if [ "$count" -gt 1 ]; then

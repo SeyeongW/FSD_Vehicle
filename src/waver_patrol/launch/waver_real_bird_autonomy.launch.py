@@ -54,6 +54,8 @@ def _validate_real_profile(context, *args, **kwargs):
         )
     if value("start_base_feedback").lower() == "true" and not value("feedback_serial_port"):
         raise RuntimeError("waver_real_bird_autonomy: start_base_feedback=true requires feedback_serial_port")
+    if value("enable_sound_output").lower() == "true" and value("sound_safety_ack").lower() != "true":
+        raise RuntimeError("waver_real_bird_autonomy: enable_sound_output=true requires sound_safety_ack=true")
     return []
 
 
@@ -62,7 +64,7 @@ def generate_launch_description() -> LaunchDescription:
     default_nav2_params = os.path.join(share, "config", "nav2_params_waver_real.yaml")
     default_mission_params = os.path.join(share, "config", "waver_nav2_radar_bird_mission_real.yaml")
     default_ekf_params = os.path.join(share, "config", "ekf_waver_real.yaml")
-    default_map = os.path.expanduser("~/ros2_ws/FSD_Vehicle/maps/waver_latest_map.yaml")
+    default_map = os.path.expanduser("~/ros2_ws2/FSD_Vehicle/maps/waver_latest_map.yaml")
 
     common = [
         LaunchConfiguration("mission_params_file"),
@@ -83,6 +85,13 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_deep_learning_stub", default_value="false"),
             DeclareLaunchArgument("enable_bird_detector", default_value="true"),
             DeclareLaunchArgument("enable_bird_3d_fusion", default_value="true"),
+            DeclareLaunchArgument("enable_camera_gimbal_controller", default_value="true"),
+            DeclareLaunchArgument("enable_sound_deterrent", default_value="true"),
+            DeclareLaunchArgument("enable_experiment_logger", default_value="true"),
+            DeclareLaunchArgument("experiment_name", default_value="waver_lidar_first_bird_deterrence"),
+            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ros2_ws2/FSD_Vehicle/experiments_result"),
+            DeclareLaunchArgument("enable_sound_output", default_value="false"),
+            DeclareLaunchArgument("sound_safety_ack", default_value="false"),
             DeclareLaunchArgument("enable_robot_localization", default_value="true"),
             DeclareLaunchArgument("enable_waver_base_driver", default_value="false"),
             DeclareLaunchArgument("start_base_feedback", default_value="false"),
@@ -135,6 +144,13 @@ def generate_launch_description() -> LaunchDescription:
                     "use_localplan": "dwa",
                     "enable_deep_learning_stub": "false",
                     "enable_sound_stub": "false",
+                    "enable_sound_deterrent": LaunchConfiguration("enable_sound_deterrent"),
+                    "enable_camera_gimbal_controller": LaunchConfiguration("enable_camera_gimbal_controller"),
+                    "enable_experiment_logger": LaunchConfiguration("enable_experiment_logger"),
+                    "experiment_name": LaunchConfiguration("experiment_name"),
+                    "experiment_output_root": LaunchConfiguration("experiment_output_root"),
+                    "enable_sound_output": LaunchConfiguration("enable_sound_output"),
+                    "sound_safety_ack": LaunchConfiguration("sound_safety_ack"),
                     "enable_test_publishers": "false",
                     "enable_livox_scan_adapter": PythonExpression(
                         ["'true' if '", LaunchConfiguration("scan_source_safety"), "' == 'mid360' else 'false'"]

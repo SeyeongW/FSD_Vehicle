@@ -1,0 +1,10 @@
+column,description
+timestamp,ROS time in seconds
+experiment_id,Unique experiment id
+frame_id,Pose frame id
+x,Robot x
+y,Robot y
+yaw,Robot yaw
+linear_velocity,Linear velocity
+angular_velocity,Angular velocity
+distance_accumulated_m,Integrated traveled distance

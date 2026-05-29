@@ -45,13 +45,14 @@ class GazeboMovingObjectTrialPublisherNode(Node):
         self.declare_parameter("camera_state_topic", "/waver/camera_detection_state")
         self.declare_parameter("external_class_topic", "/waver/external_target_class")
         self.declare_parameter("external_confidence_topic", "/waver/external_target_confidence")
-        self.declare_parameter("duration_sec", 8.0)
+        self.declare_parameter("duration_sec", 20.0)
         self.declare_parameter("timer_hz", 10.0)
         self.declare_parameter("target_z", 3.2)
         self.declare_parameter("gazebo_entity_name", "bird_test_target")
         self.declare_parameter("move_gazebo_entity", True)
         self.declare_parameter("gazebo_entity_move_delay_sec", 5.0)
         self.declare_parameter("start_on_mission_command", False)
+        self.declare_parameter("restart_on_start_command", False)
         self.declare_parameter("mission_command_topic", "/waver/mission_command")
         self.declare_parameter("start_commands", ["START_PATROL", "AUTO_MODE", "GAZEBO_TRIAL_START"])
         self.declare_parameter("publish_fake_camera_after_sec", 12.0)
@@ -91,6 +92,15 @@ class GazeboMovingObjectTrialPublisherNode(Node):
         command = msg.data.strip().upper()
         if command not in self.start_commands:
             return
+        if (
+            self.trajectory_started
+            and self.start_time is not None
+            and not bool(self.get_parameter("restart_on_start_command").value)
+        ):
+            self.state_pub.publish(
+                String(data=f"TRIAL_TARGET_START_IGNORED command={command} already_started=true")
+            )
+            return
         self.trajectory_started = True
         self.start_time = self._now()
         self.path = self._trial_path(int(self.get_parameter("trial_id").value))
@@ -122,12 +132,13 @@ class GazeboMovingObjectTrialPublisherNode(Node):
         self.pub.publish(msg)
         displacement = math.hypot(x - self.path.start_x, y - self.path.start_y)
         total = math.hypot(self.path.end_x - self.path.start_x, self.path.end_y - self.path.start_y)
+        target_speed = total / duration if duration > 0.0 else 0.0
         self.state_pub.publish(
             String(
                 data=(
                     f"TRIAL_TARGET trial_id={self.get_parameter('trial_id').value} "
                     f"x={x:.3f} y={y:.3f} z={z:.3f} displacement={displacement:.3f} "
-                    f"target_total={total:.3f}"
+                    f"target_total={total:.3f} target_speed_mps={target_speed:.3f}"
                 )
             )
         )

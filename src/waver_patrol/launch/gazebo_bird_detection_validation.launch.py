@@ -19,7 +19,7 @@ def generate_launch_description() -> LaunchDescription:
     default_world = os.path.join(ugv_share, "worlds", "ugv_world.world")
     default_robot = os.path.join(ugv_share, "models", "ugv_rover", "model.sdf")
     default_output_dir = os.path.expanduser(
-        "~/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/bird_detection_validation"
+        "~/ros2_ws2/FSD_Vehicle/experiments_result/paper_ready/bird_detection_validation"
     )
 
     return LaunchDescription(

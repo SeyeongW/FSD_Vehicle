@@ -1,0 +1,15 @@
+column,description
+timestamp,ROS time in seconds
+experiment_id,Unique experiment id
+route_name,Route name
+waypoint_index,Waypoint index
+waypoint_name,Waypoint name
+waypoint_x,Waypoint x
+waypoint_y,Waypoint y
+arrival_success,Whether waypoint arrival succeeded
+arrival_time_sec,Arrival time
+dwell_time_sec,Dwell duration
+interrupted_by_target,Whether waypoint was interrupted
+resumed_after_target,Whether waypoint resumed after target mission
+return_to_waypoint_success,Whether return to interrupted waypoint succeeded
+distance_to_waypoint_m,Current distance to waypoint

@@ -30,7 +30,7 @@ def generate_launch_description() -> LaunchDescription:
     bird_sdf = os.path.join(ugv_share, "models", "bird", "model.sdf")
     bird_manager_py = os.path.normpath(os.path.join(ugv_share, "..", "..", "lib", "ugv_gazebo", "bird_manager.py"))
     if not os.path.isfile(bird_manager_py):
-        matches = glob.glob(os.path.expanduser("~/ros2_ws/src/**/bird_manager.py"), recursive=True)
+        matches = glob.glob(os.path.expanduser("~/ros2_ws2/FSD_Vehicle/src/**/bird_manager.py"), recursive=True)
         if matches:
             bird_manager_py = matches[0]
 
@@ -52,7 +52,7 @@ def generate_launch_description() -> LaunchDescription:
 
     rosbag_command_text = PythonExpression(
         [
-            "'mkdir -p ~/ros2_ws/FSD_Vehicle/experiments_result/gazebo_trial_",
+            "'mkdir -p ~/ros2_ws2/FSD_Vehicle/experiments_result/gazebo_trial_",
             trial_id,
             "/rosbag; ros2 bag record "
             "/tf /tf_static /clock /scan /odom /cmd_vel /waver/cmd_vel_nav2 "
@@ -63,7 +63,7 @@ def generate_launch_description() -> LaunchDescription:
             "/waver/camera_detection_state /waver/target_class /waver/target_confidence "
             "/waver/bird_confirmed /waver/sound_alert_state /waver/sound_task_done "
             "/gazebo/model_states "
-            "-o ~/ros2_ws/FSD_Vehicle/experiments_result/gazebo_trial_",
+            "-o ~/ros2_ws2/FSD_Vehicle/experiments_result/gazebo_trial_",
             trial_id,
             "/rosbag/trial_",
             trial_id,
@@ -148,14 +148,15 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_target_goal_manager", default_value="true"),
             DeclareLaunchArgument("enable_pointcloud_lidar_objects", default_value="true"),
             DeclareLaunchArgument("enable_simple_nav2_cmd_sim", default_value="false"),
-            DeclareLaunchArgument("enable_moving_object_motion_filter", default_value="false"),
+            DeclareLaunchArgument("enable_moving_object_motion_filter", default_value="true"),
+            DeclareLaunchArgument("enable_gazebo_trial_motion_filter_node", default_value="false"),
             DeclareLaunchArgument("use_nav2", default_value="false"),
             DeclareLaunchArgument("require_scan", default_value="false"),
             DeclareLaunchArgument("enable_cluster_node", default_value="false"),
             DeclareLaunchArgument("enable_experiment_logger", default_value="true"),
             DeclareLaunchArgument("enable_trial_logger", default_value="false"),
             DeclareLaunchArgument("record_bag", default_value="false"),
-            DeclareLaunchArgument("output_root", default_value="~/ros2_ws/FSD_Vehicle/experiments_result"),
+            DeclareLaunchArgument("output_root", default_value="~/ros2_ws2/FSD_Vehicle/experiments_result"),
             DeclareLaunchArgument(
                 "world_file",
                 default_value=default_world,
@@ -166,9 +167,10 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument("waypoint_file", default_value=trial_waypoints),
             DeclareLaunchArgument("trial_duration_sec", default_value="70"),
-            DeclareLaunchArgument("target_motion_duration_sec", default_value="8.0"),
+            DeclareLaunchArgument("target_motion_duration_sec", default_value="20.0"),
             DeclareLaunchArgument("target_z", default_value="3.2"),
             DeclareLaunchArgument("target_gazebo_move_delay_sec", default_value="8.0"),
+            DeclareLaunchArgument("target_restart_on_start_command", default_value="false"),
             DeclareLaunchArgument(
                 "target_start_on_mission_command",
                 default_value="false",
@@ -329,7 +331,7 @@ def generate_launch_description() -> LaunchDescription:
                             "-y",
                             "2.0",
                             "-z",
-                            "6.0",
+                            "3.2",
                         ],
                         output="screen",
                     )
@@ -342,31 +344,31 @@ def generate_launch_description() -> LaunchDescription:
                     Node(
                         package="gazebo_ros",
                         executable="spawn_entity.py",
-                        arguments=["-entity", "bird_swarm_1", "-file", bird_sdf, "-x", "-6.0", "-y", "0.0", "-z", "6.5"],
+                        arguments=["-entity", "bird_swarm_1", "-file", bird_sdf, "-x", "-6.0", "-y", "0.0", "-z", "3.2"],
                         output="screen",
                     ),
                     Node(
                         package="gazebo_ros",
                         executable="spawn_entity.py",
-                        arguments=["-entity", "bird_swarm_2", "-file", bird_sdf, "-x", "6.0", "-y", "0.0", "-z", "6.5"],
+                        arguments=["-entity", "bird_swarm_2", "-file", bird_sdf, "-x", "6.0", "-y", "0.0", "-z", "3.3"],
                         output="screen",
                     ),
                     Node(
                         package="gazebo_ros",
                         executable="spawn_entity.py",
-                        arguments=["-entity", "bird_swarm_3", "-file", bird_sdf, "-x", "-3.0", "-y", "-5.5", "-z", "7.0"],
+                        arguments=["-entity", "bird_swarm_3", "-file", bird_sdf, "-x", "-3.0", "-y", "-5.5", "-z", "3.4"],
                         output="screen",
                     ),
                     Node(
                         package="gazebo_ros",
                         executable="spawn_entity.py",
-                        arguments=["-entity", "bird_swarm_4", "-file", bird_sdf, "-x", "3.0", "-y", "-5.5", "-z", "5.8"],
+                        arguments=["-entity", "bird_swarm_4", "-file", bird_sdf, "-x", "3.0", "-y", "-5.5", "-z", "3.2"],
                         output="screen",
                     ),
                     Node(
                         package="gazebo_ros",
                         executable="spawn_entity.py",
-                        arguments=["-entity", "bird_swarm_5", "-file", bird_sdf, "-x", "0.0", "-y", "6.0", "-z", "6.8"],
+                        arguments=["-entity", "bird_swarm_5", "-file", bird_sdf, "-x", "0.0", "-y", "6.0", "-z", "3.3"],
                         output="screen",
                     ),
                 ],
@@ -378,7 +380,13 @@ def generate_launch_description() -> LaunchDescription:
                     ExecuteProcess(
                         cmd=["python3", bird_manager_py],
                         output="screen",
-                        additional_env={"PYTHONUNBUFFERED": "1"},
+                        additional_env={
+                            "PYTHONUNBUFFERED": "1",
+                            "BIRD_MANAGER_Z_MIN_M": "3.1",
+                            "BIRD_MANAGER_Z_MAX_M": "3.4",
+                            "BIRD_MANAGER_MIN_SPEED_MPS": "0.05",
+                            "BIRD_MANAGER_MAX_SPEED_MPS": "0.18",
+                        },
                     )
                 ],
                 condition=IfCondition(LaunchConfiguration("enable_ugv_bird_manager")),
@@ -507,7 +515,7 @@ def generate_launch_description() -> LaunchDescription:
                 executable="moving_object_motion_filter_node",
                 name="moving_object_motion_filter_node",
                 output="screen",
-                condition=IfCondition(LaunchConfiguration("enable_moving_object_motion_filter")),
+                condition=IfCondition(LaunchConfiguration("enable_gazebo_trial_motion_filter_node")),
                 parameters=[
                     {
                         "use_sim_time": True,
@@ -523,7 +531,11 @@ def generate_launch_description() -> LaunchDescription:
                         "require_dynamic_filter": True,
                         "min_dynamic_motion_m": ParameterValue(min_dynamic_motion, value_type=float),
                         "min_dynamic_velocity_mps": ParameterValue(min_dynamic_velocity, value_type=float),
-                        "min_sample_motion_epsilon_m": 0.005,
+                        "min_sample_motion_epsilon_m": 0.001,
+                        "lock_on_first_valid_target": True,
+                        "locked_target_gate_m": 1.0,
+                        "locked_target_lost_timeout_sec": 3.0,
+                        "clear_locked_target_when_static_sec": 8.0,
                         "min_tracking_duration_sec": 1.0,
                         "max_tracking_duration_sec": 20.0,
                         "require_consecutive_dynamic_frames": 5,
@@ -557,6 +569,10 @@ def generate_launch_description() -> LaunchDescription:
                         ),
                         "start_on_mission_command": ParameterValue(
                             LaunchConfiguration("target_start_on_mission_command"),
+                            value_type=bool,
+                        ),
+                        "restart_on_start_command": ParameterValue(
+                            LaunchConfiguration("target_restart_on_start_command"),
                             value_type=bool,
                         ),
                         "frame_id": "map",

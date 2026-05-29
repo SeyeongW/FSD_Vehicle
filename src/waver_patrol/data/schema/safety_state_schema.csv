@@ -1,0 +1,14 @@
+column,description
+timestamp,ROS time in seconds
+experiment_id,Unique experiment id
+safety_state,Safety state string
+mode,Waver mode
+cmd_vel_linear,Final command linear velocity
+cmd_vel_angular,Final command angular velocity
+scan_age_sec,Scan age
+odom_age_sec,Odom age
+battery_state,Battery safety state
+estop,E-stop active
+external_stop,External stop active
+hard_stop_reason,Hard stop reason
+min_scan_range_m,Minimum scan range

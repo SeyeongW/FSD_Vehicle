@@ -54,6 +54,9 @@ target_goal_manager_node:
     allow_radar_without_bird_confirmed: true
     goal_offset_distance_m: 1.5
     goal_publish_cooldown_sec: 3.0
+    max_inspection_retries_per_target: 1
+    inspected_target_lockout_sec: 120.0
+    inspected_target_radius_m: 1.5
     target_hold_sec: 1.0
     target_lost_timeout_sec: 2.0
     goal_yaw_policy: "FACE_TARGET"
@@ -80,6 +83,10 @@ moving_object_motion_filter_node:
     min_dynamic_motion_m: 0.2
     min_dynamic_velocity_mps: 0.05
     min_sample_motion_epsilon_m: 0.005
+    lock_on_first_valid_target: true
+    locked_target_gate_m: 1.0
+    locked_target_lost_timeout_sec: 3.0
+    clear_locked_target_when_static_sec: 8.0
     min_tracking_duration_sec: 1.0
     max_tracking_duration_sec: 20.0
     require_consecutive_dynamic_frames: 5
@@ -198,6 +205,26 @@ sound_alert_stub:
     alert_cooldown_sec: 10.0
     require_auto_mode: true
     sound_type: "SIMULATED_GUNSHOT"
+
+camera_gimbal_controller_node:
+  ros__parameters:
+    camera_mount_frame: "3d_camera_link"
+    camera_optical_frame: "pt_camera_link"
+    base_frame: "base_link"
+    max_pan_rad: 1.57
+    min_pan_rad: -1.57
+    # Gazebo bird targets are usually 3.0-3.5 m high at a 2 m standoff.
+    # Keep the real-profile limit in *_real.yaml; allow the sim gimbal to aim high enough for validation.
+    max_tilt_rad: 1.20
+    min_tilt_rad: -0.50
+    pan_tolerance_rad: 0.05
+    tilt_tolerance_rad: 0.05
+    command_rate_hz: 10.0
+    alignment_timeout_sec: 5.0
+    use_robot_body_fallback: true
+    fallback_cmd_topic: "/waver/cmd_vel_target_track"
+    hardware_backend: "topic_only"
+    real_gimbal_output_enabled: false
 
 experiment_data_logger_node:
   ros__parameters:

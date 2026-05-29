@@ -82,6 +82,10 @@ def generate_launch_description():
                 additional_env={
                     'PYTHONUNBUFFERED': '1',
                     'BIRD_MANAGER_ACTIVE_BIRDS': 'bird_single',
+                    'BIRD_MANAGER_Z_MIN_M': '3.1',
+                    'BIRD_MANAGER_Z_MAX_M': '3.4',
+                    'BIRD_MANAGER_MIN_SPEED_MPS': '0.05',
+                    'BIRD_MANAGER_MAX_SPEED_MPS': '0.18',
                 },
             )
         ]

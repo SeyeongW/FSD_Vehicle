@@ -8,10 +8,17 @@ mission_patrol_manager_node:
     default_mode: "STANDBY"
     target_mission_timeout_sec: 120.0
     target_goal_tolerance_xy: 0.50
+    target_arrival_tolerance_xy_m: 0.50
     target_re_detection_timeout_sec: 20.0
     target_classification_timeout_sec: 15.0
+    camera_alignment_timeout_sec: 5.0
+    min_classification_confidence: 0.50
     patrol_goal_timeout_sec: 180.0
+    enable_sound_task: true
+    enable_sound_output: false
+    deterrence_classes: ["bird"]
     sound_task_timeout_sec: 15.0
+    sound_cooldown_sec: 10.0
     bird_confidence_threshold: 0.70
     max_goal_retries: 2
     recovery_retry_count: 2
@@ -31,11 +38,27 @@ target_goal_manager_node:
     min_target_distance_m: 1.0
     max_target_distance_m: 20.0
     require_motion: true
-    require_bird_confirmed: true
+    require_bird_confirmed: false
     allow_radar_without_bird_confirmed: false
     require_3d_fusion_valid: true
+    mission_target_policy: "lidar_first_inspection"
+    allow_lidar_dynamic_without_bird_confirmed_for_inspection: true
+    require_bird_confirmed_for_inspection_goal: false
+    require_bird_confirmed_for_sound: true
+    require_3d_lidar_z_valid_for_inspection: true
+    require_dynamic_valid_for_inspection: true
+    require_camera_classification_before_sound: true
+    deterrence_classes: ["bird"]
+    non_deterrence_classes: ["drone", "unknown", "irrelevant", "none"]
+    inspection_goal_offset_distance_m: 2.0
+    classification_standoff_distance_m: 2.0
+    target_arrival_tolerance_xy_m: 0.5
+    inspection_cooldown_sec: 8.0
+    max_inspection_retries_per_target: 1
+    inspected_target_lockout_sec: 120.0
+    inspected_target_radius_m: 1.5
     enforce_mode_gate: true
-    allowed_trigger_modes: ["PATROL", "AUTO", "BIRD_CONFIRMED"]
+    allowed_trigger_modes: ["PATROL", "AUTO", "BIRD_CANDIDATE"]
     goal_offset_distance_m: 2.0
     goal_publish_cooldown_sec: 3.0
     target_hold_sec: 1.0
@@ -67,6 +90,10 @@ moving_object_motion_filter_node:
     min_dynamic_motion_m: 0.2
     min_dynamic_velocity_mps: 0.05
     min_sample_motion_epsilon_m: 0.005
+    lock_on_first_valid_target: true
+    locked_target_gate_m: 1.0
+    locked_target_lost_timeout_sec: 3.0
+    clear_locked_target_when_static_sec: 8.0
     min_tracking_duration_sec: 1.0
     max_tracking_duration_sec: 20.0
     require_consecutive_dynamic_frames: 5
@@ -134,10 +161,19 @@ bird_detector_node:
     state_topic: "/waver/bird_detector_state"
     target_class_topic: "/waver/target_class"
     target_confidence_topic: "/waver/target_confidence"
+    target_classification_state_topic: "/waver/target_classification_state"
+    target_classification_latency_topic: "/waver/target_classification_latency_ms"
     backend: "yolo"
     model_path: ""
     confidence_threshold: 0.65
     bird_class_names: ["bird"]
+    class_names_of_interest: ["bird", "drone"]
+    deterrence_class_names: ["bird"]
+    unknown_confidence_threshold: 0.50
+    class_aliases: ["airplane:irrelevant", "kite:unknown", "bird:bird", "drone:drone", "uav:drone"]
+    publish_unknown_when_no_detection: true
+    classification_requires_camera_alignment: true
+    camera_centered_topic: "/waver/camera_target_centered"
     nof_m_window: 5
     nof_m_required: 3
     camera_stale_sec: 1.0
@@ -174,6 +210,42 @@ bird_3d_fusion_node:
     max_sync_dt_sec: 0.25
     require_camera_optical_frame: true
 
+camera_gimbal_controller_node:
+  ros__parameters:
+    camera_mount_frame: "camera_link"
+    camera_optical_frame: "camera_color_optical_frame"
+    base_frame: "base_link"
+    pan_axis_sign: 1.0
+    tilt_axis_sign: 1.0
+    max_pan_rad: 1.57
+    min_pan_rad: -1.57
+    max_tilt_rad: 0.8
+    min_tilt_rad: -0.5
+    pan_tolerance_rad: 0.05
+    tilt_tolerance_rad: 0.05
+    command_rate_hz: 10.0
+    alignment_timeout_sec: 5.0
+    use_robot_body_fallback: true
+    fallback_cmd_topic: "/waver/cmd_vel_target_track"
+    hardware_backend: "topic_only"
+    real_gimbal_output_enabled: false
+
+sound_deterrent_node:
+  ros__parameters:
+    enable_sound_output: false
+    deterrence_classes: ["bird"]
+    min_confidence_for_sound: 0.65
+    sound_type: "SIMULATED_DETERRENT"
+    sound_task_duration_sec: 5.0
+    alert_cooldown_sec: 10.0
+    max_sound_retries_per_target: 1
+    hardware_backend: "disabled"
+    gpio_pin: -1
+    alsa_device: "default"
+    serial_port: ""
+    legal_safety_ack_required: true
+    safety_ack: false
+
 safety_cmd_mux_node:
   ros__parameters:
     nav2_cmd_topic: "/waver/cmd_vel_nav2_smooth"
@@ -193,8 +265,8 @@ safety_cmd_mux_node:
     min_valid_scan_points: 40
     command_timeout_sec: 0.3
     manual_override_timeout_sec: 0.3
-    max_linear_speed: 0.10
-    max_angular_speed: 0.35
+    max_linear_speed: 0.05
+    max_angular_speed: 0.20
     mapping_max_linear_speed: 0.10
     mapping_max_angular_speed: 0.30
     max_linear_delta_per_tick: 0.03

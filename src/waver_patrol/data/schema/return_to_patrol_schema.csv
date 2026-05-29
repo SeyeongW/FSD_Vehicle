@@ -1,0 +1,15 @@
+column,description
+timestamp,ROS time in seconds
+experiment_id,Unique experiment id
+target_id,Target id linked across tables
+interrupted_waypoint_index,Waypoint interrupted by target mission
+interrupted_waypoint_x,Interrupted waypoint x
+interrupted_waypoint_y,Interrupted waypoint y
+return_goal_x,Return goal x
+return_goal_y,Return goal y
+return_start_time,Return start timestamp
+return_arrival_time,Return arrival timestamp
+return_duration_sec,Return duration
+resumed_patrol,Whether patrol resumed
+resume_policy,Configured resume policy
+failure_reason,Return failure reason

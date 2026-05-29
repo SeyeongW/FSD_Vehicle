@@ -63,12 +63,32 @@ class PanelState:
     safety_state: str = "unknown"
     radar_state: str = "unknown"
     object_goal_state: str = "unknown"
+    inspection_target_state: str = "unknown"
     battery_state: str = "unknown"
     target_class: str = "unknown"
     target_confidence: float = 0.0
     bird_confirmed: bool = False
+    lidar_target_id: str = "unknown"
+    lidar_target_valid: bool = False
+    lidar_target_frame: str = ""
+    lidar_target_x: Optional[float] = None
+    lidar_target_y: Optional[float] = None
+    lidar_target_z: Optional[float] = None
+    lidar_target_bearing_deg: Optional[float] = None
+    lidar_target_relative_bearing_deg: Optional[float] = None
+    lidar_target_pose_range_m: Optional[float] = None
+    lidar_target_height_m: Optional[float] = None
+    lidar_target_range_m: Optional[float] = None
+    lidar_target_velocity_mps: Optional[float] = None
+    lidar_target_dynamic_valid: bool = False
+    lidar_target_z_valid: bool = False
+    lidar_target_state: str = "unknown"
+    lidar_target_update_time: float = 0.0
     camera_state: str = "unknown"
+    camera_alignment_state: str = "unknown"
+    camera_target_centered: bool = False
     sound_state: str = "unknown"
+    sound_task_done: bool = False
     gazebo_trial_state: str = "unknown"
     map_apply_state: str = "unknown"
     current_map_source: str = "NONE"
@@ -97,6 +117,7 @@ class PanelState:
     object_goal_frame: str = ""
     lidar_objects: list[tuple[float, float]] = field(default_factory=list)
     lidar_objects_frame: str = ""
+    show_raw_lidar_objects_on_map: bool = False
     elevated_targets: list[tuple[float, float]] = field(default_factory=list)
     elevated_target_altitudes: list[float] = field(default_factory=list)
     elevated_target_speeds: list[float] = field(default_factory=list)
@@ -135,6 +156,7 @@ class WaverRemoteNode(Node):
         self.declare_parameter("active_nav_goal_topic", "/waver/active_nav_goal")
         self.declare_parameter("object_mission_goal_topic", "/waver/object_mission_goal")
         self.declare_parameter("lidar_objects_map_topic", "/waver/lidar_objects_map")
+        self.declare_parameter("show_raw_lidar_objects_on_map", False)
         self.declare_parameter("elevated_dynamic_target_topic", "/waver/elevated_dynamic_targets")
         self.declare_parameter("dynamic_obstacle_state_topic", "/waver/dynamic_obstacle_state")
         self.declare_parameter("current_waypoint_topic", "/waver/current_waypoint")
@@ -144,15 +166,27 @@ class WaverRemoteNode(Node):
         self.declare_parameter("safety_state_topic", "/waver/safety_state")
         self.declare_parameter("radar_state_topic", "/waver/radar_target_state")
         self.declare_parameter("object_goal_state_topic", "/waver/object_mission_goal_state")
+        self.declare_parameter("inspection_target_state_topic", "/waver/inspection_target_state")
         self.declare_parameter("height_filter_debug_topic", "/waver/height_filter_debug")
-        self.declare_parameter("camera_detection_status_topic", "/waver/classification_state")
-        self.declare_parameter("sound_mission_status_topic", "/waver/sound_mission_status")
+        self.declare_parameter("camera_detection_status_topic", "/waver/target_classification_state")
+        self.declare_parameter("camera_alignment_state_topic", "/waver/camera_alignment_state")
+        self.declare_parameter("camera_target_centered_topic", "/waver/camera_target_centered")
+        self.declare_parameter("sound_mission_status_topic", "/waver/sound_alert_state")
+        self.declare_parameter("sound_task_done_topic", "/waver/sound_task_done")
         self.declare_parameter("gazebo_trial_state_topic", "/waver/gazebo_trial_state")
         self.declare_parameter("map_apply_state_topic", "/waver/map_apply_state")
         self.declare_parameter("battery_state_text_topic", "/waver/battery_state_text")
         self.declare_parameter("target_class_topic", "/waver/target_class")
         self.declare_parameter("target_confidence_topic", "/waver/target_confidence")
         self.declare_parameter("bird_confirmed_topic", "/waver/bird_confirmed")
+        self.declare_parameter("lidar_target_id_topic", "/waver/lidar_target_id")
+        self.declare_parameter("lidar_target_pose_map_topic", "/waver/lidar_target_pose_map")
+        self.declare_parameter("lidar_target_height_topic", "/waver/lidar_target_height_m")
+        self.declare_parameter("lidar_target_range_topic", "/waver/lidar_target_range_m")
+        self.declare_parameter("lidar_target_velocity_topic", "/waver/lidar_target_velocity_mps")
+        self.declare_parameter("lidar_target_dynamic_valid_topic", "/waver/lidar_target_dynamic_valid")
+        self.declare_parameter("lidar_target_z_valid_topic", "/waver/lidar_target_z_valid")
+        self.declare_parameter("lidar_target_state_topic", "/waver/lidar_target_state")
         self.declare_parameter("mode_topic", "/waver/mode")
         self.declare_parameter("mode_cmd_topic", "/waver/mode_cmd")
         self.declare_parameter("mission_command_topic", "/waver/mission_command")
@@ -202,6 +236,7 @@ class WaverRemoteNode(Node):
         self.declare_parameter("auto_max_patrol_radius_m", 3.0)
         self.declare_parameter("demo_script", "")
         self.declare_parameter("demo_close_on_finish", False)
+        self.declare_parameter("stop_backend_on_close", False)
 
         self.state = state
         self.lock = lock
@@ -256,9 +291,16 @@ class WaverRemoteNode(Node):
         with self.lock:
             self.state.speed_limit = float(self.get_parameter("default_speed").value)
             self.state.angular_limit = float(self.get_parameter("default_angular").value)
+            self.state.show_raw_lidar_objects_on_map = bool(
+                self.get_parameter("show_raw_lidar_objects_on_map").value
+            )
             self.state.map_display_mode = self.normalized_map_mode(
                 str(self.get_parameter("map_display_mode").value)
             )
+        self.get_logger().info(
+            "Remote map raw LiDAR cluster overlay is "
+            f"{'enabled' if self.state.show_raw_lidar_objects_on_map else 'hidden'}"
+        )
 
         # 역할: GUI가 내는 수동 후보 명령, 모드, E-Stop, 속도 제한을 ROS graph에 공개한다.
         self.cmd_pub = self.create_publisher(Twist, self.cmd_output_topic, 10)
@@ -379,6 +421,54 @@ class WaverRemoteNode(Node):
         )
         self.create_subscription(
             String,
+            str(self.get_parameter("lidar_target_id_topic").value),
+            lambda msg: self.set_text_state("lidar_target_id", msg.data),
+            10,
+        )
+        self.create_subscription(
+            PoseStamped,
+            str(self.get_parameter("lidar_target_pose_map_topic").value),
+            self.lidar_target_pose_callback,
+            10,
+        )
+        self.create_subscription(
+            Float32,
+            str(self.get_parameter("lidar_target_height_topic").value),
+            lambda msg: self.set_float_state("lidar_target_height_m", msg.data),
+            10,
+        )
+        self.create_subscription(
+            Float32,
+            str(self.get_parameter("lidar_target_range_topic").value),
+            lambda msg: self.set_float_state("lidar_target_range_m", msg.data),
+            10,
+        )
+        self.create_subscription(
+            Float32,
+            str(self.get_parameter("lidar_target_velocity_topic").value),
+            lambda msg: self.set_float_state("lidar_target_velocity_mps", msg.data),
+            10,
+        )
+        self.create_subscription(
+            Bool,
+            str(self.get_parameter("lidar_target_dynamic_valid_topic").value),
+            lambda msg: self.set_bool_state("lidar_target_dynamic_valid", bool(msg.data)),
+            10,
+        )
+        self.create_subscription(
+            Bool,
+            str(self.get_parameter("lidar_target_z_valid_topic").value),
+            lambda msg: self.set_bool_state("lidar_target_z_valid", bool(msg.data)),
+            10,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("lidar_target_state_topic").value),
+            lambda msg: self.set_text_state("lidar_target_state", msg.data),
+            10,
+        )
+        self.create_subscription(
+            String,
             str(self.get_parameter("dynamic_obstacle_state_topic").value),
             lambda msg: self.set_text_state("dynamic_obstacle_state", msg.data),
             10,
@@ -427,6 +517,12 @@ class WaverRemoteNode(Node):
         )
         self.create_subscription(
             String,
+            str(self.get_parameter("inspection_target_state_topic").value),
+            lambda msg: self.set_text_state("inspection_target_state", msg.data),
+            10,
+        )
+        self.create_subscription(
+            String,
             str(self.get_parameter("height_filter_debug_topic").value),
             lambda msg: self.set_text_state("height_filter_debug", msg.data),
             10,
@@ -439,8 +535,26 @@ class WaverRemoteNode(Node):
         )
         self.create_subscription(
             String,
+            str(self.get_parameter("camera_alignment_state_topic").value),
+            lambda msg: self.set_text_state("camera_alignment_state", msg.data),
+            10,
+        )
+        self.create_subscription(
+            Bool,
+            str(self.get_parameter("camera_target_centered_topic").value),
+            lambda msg: self.set_bool_state("camera_target_centered", bool(msg.data)),
+            10,
+        )
+        self.create_subscription(
+            String,
             str(self.get_parameter("sound_mission_status_topic").value),
             lambda msg: self.set_text_state("sound_state", msg.data),
+            10,
+        )
+        self.create_subscription(
+            Bool,
+            str(self.get_parameter("sound_task_done_topic").value),
+            lambda msg: self.set_bool_state("sound_task_done", bool(msg.data)),
             10,
         )
         self.create_subscription(
@@ -725,6 +839,41 @@ class WaverRemoteNode(Node):
             self.state.elevated_target_directions = directions[: len(fixed_points)]
             self.state.elevated_targets_frame = fixed_frame_label(msg.header.frame_id)
 
+    def lidar_target_pose_callback(self, msg: PoseStamped) -> None:
+        # 역할: LiDAR가 선택한 대표 target의 XYZ와 방향을 status 카드에 사람이 읽기 좋게 저장한다.
+        frame_id = msg.header.frame_id
+        x = float(msg.pose.position.x)
+        y = float(msg.pose.position.y)
+        z = float(msg.pose.position.z)
+        with self.lock:
+            robot = (self.state.odom_x, self.state.odom_y, self.state.odom_yaw)
+            fixed_x, fixed_y = point_to_fixed_frame(x, y, frame_id, robot)
+            if is_robot_relative_frame(frame_id):
+                dx = x
+                dy = y
+                bearing = wrap_angle_rad(robot[2] + math.atan2(dy, dx))
+                relative_bearing = math.atan2(dy, dx)
+                pose_range = math.hypot(dx, dy)
+            else:
+                dx = fixed_x - self.state.odom_x
+                dy = fixed_y - self.state.odom_y
+                bearing = math.atan2(dy, dx)
+                relative_bearing = wrap_angle_rad(bearing - self.state.odom_yaw)
+                pose_range = math.hypot(dx, dy)
+            self.state.lidar_target_valid = True
+            self.state.lidar_target_frame = fixed_frame_label(frame_id)
+            self.state.lidar_target_x = fixed_x
+            self.state.lidar_target_y = fixed_y
+            self.state.lidar_target_z = z
+            self.state.lidar_target_bearing_deg = math.degrees(bearing)
+            self.state.lidar_target_relative_bearing_deg = math.degrees(relative_bearing)
+            self.state.lidar_target_pose_range_m = pose_range
+            if self.state.lidar_target_height_m is None:
+                self.state.lidar_target_height_m = z
+            if self.state.lidar_target_range_m is None:
+                self.state.lidar_target_range_m = pose_range
+            self.state.lidar_target_update_time = time.monotonic()
+
     def current_waypoint_callback(self, msg: PoseStamped) -> None:
         # 역할: 현재 순찰 waypoint를 active goal과 구분해서 지도에 표시한다.
         frame_id = msg.header.frame_id
@@ -747,6 +896,16 @@ class WaverRemoteNode(Node):
         # 역할: 여러 상태 문자열 토픽을 같은 패턴으로 GUI 공유 상태에 반영한다.
         with self.lock:
             setattr(self.state, field_name, value)
+
+    def set_bool_state(self, field_name: str, value: bool) -> None:
+        # 역할: 여러 Bool 상태 토픽을 같은 패턴으로 GUI 공유 상태에 반영한다.
+        with self.lock:
+            setattr(self.state, field_name, bool(value))
+
+    def set_float_state(self, field_name: str, value: float) -> None:
+        # 역할: LiDAR target height/range/speed 같은 scalar 토픽을 GUI 공유 상태에 반영한다.
+        with self.lock:
+            setattr(self.state, field_name, float(value))
 
     def target_confidence_callback(self, msg: Float32) -> None:
         # 역할: 딥러닝/카메라 stub가 낸 목표 분류 confidence를 표시한다.
@@ -1319,8 +1478,15 @@ class WaverRemoteNode(Node):
             time.sleep(0.02)
 
     def destroy_node(self) -> bool:
-        # 역할: GUI 창이 닫혀도 자동순찰 중지와 stop burst를 보장한다.
-        self.stop_auto()
+        # 역할: UI 종료는 수동 후보 속도만 0으로 만든다. Mission/Nav2 백엔드는 STOP 버튼이 명시될 때만 멈춘다.
+        if bool(self.get_parameter("stop_backend_on_close").value):
+            self.stop_motion(stop_auto=True)
+        else:
+            self.stop_auto()
+            with self.lock:
+                self.state.desired_linear = 0.0
+                self.state.desired_angular = 0.0
+                self.state.active_control = "closed"
         self.stop_optional_process("mapping_process", "mapping")
         self.stop_optional_process("localization_process", "localization")
         self.publish_stop_burst()
@@ -1853,6 +2019,7 @@ class WaverRemotePanel:
             current_waypoint = self.state.current_waypoint
             lidar_objects = list(self.state.lidar_objects)
             lidar_objects_frame = self.state.lidar_objects_frame
+            show_raw_lidar_objects = self.state.show_raw_lidar_objects_on_map
             elevated_targets = list(self.state.elevated_targets)
             elevated_target_altitudes = list(self.state.elevated_target_altitudes)
             elevated_target_speeds = list(self.state.elevated_target_speeds)
@@ -1871,9 +2038,10 @@ class WaverRemotePanel:
             + robot_trace
             + global_path
             + local_path
-            + lidar_objects
             + elevated_targets
         )
+        if show_raw_lidar_objects:
+            points_for_bounds += lidar_objects
         if active_goal is not None:
             points_for_bounds.append(active_goal)
         if object_goal is not None:
@@ -1958,9 +2126,10 @@ class WaverRemotePanel:
         self.draw_polyline(canvas, global_path, w2c, "#42a5f5", 3)
         self.draw_polyline(canvas, local_path, w2c, "#66bb6a", 3)
 
-        for ox, oy in lidar_objects[:20]:
-            cx, cy = w2c(ox, oy)
-            canvas.create_oval(cx - 4, cy - 4, cx + 4, cy + 4, fill="#ffca28", outline="#fff59d")
+        if show_raw_lidar_objects:
+            for ox, oy in lidar_objects[:20]:
+                cx, cy = w2c(ox, oy)
+                canvas.create_oval(cx - 4, cy - 4, cx + 4, cy + 4, fill="#ffca28", outline="#fff59d")
 
         for index, (tx, ty) in enumerate(elevated_targets[:12], start=1):
             cx, cy = w2c(tx, ty)
@@ -2044,7 +2213,7 @@ class WaverRemotePanel:
                 f"pose={pose_source} "
                 f"path={len(global_path)}({global_path_frame or '-'}) "
                 f"local={len(local_path)}({local_path_frame or '-'}) "
-                f"cluster={len(lidar_objects)}({lidar_objects_frame or '-'}) "
+                f"raw clusters={'shown' if show_raw_lidar_objects else 'hidden'}:{len(lidar_objects)}({lidar_objects_frame or '-'}) "
                 f"dynamic={len(elevated_targets)}({elevated_targets_frame or '-'})"
             ),
         )
@@ -2325,12 +2494,32 @@ class WaverRemotePanel:
             safety = self.state.safety_state
             radar = self.state.radar_state
             object_goal = self.state.object_goal_state
+            inspection_target = self.state.inspection_target_state
             battery = self.state.battery_state
             target_class = self.state.target_class
             target_confidence = self.state.target_confidence
             bird_confirmed = self.state.bird_confirmed
+            lidar_target_id = self.state.lidar_target_id
+            lidar_target_valid = self.state.lidar_target_valid
+            lidar_target_frame = self.state.lidar_target_frame
+            lidar_target_x = self.state.lidar_target_x
+            lidar_target_y = self.state.lidar_target_y
+            lidar_target_z = self.state.lidar_target_z
+            lidar_target_bearing_deg = self.state.lidar_target_bearing_deg
+            lidar_target_relative_bearing_deg = self.state.lidar_target_relative_bearing_deg
+            lidar_target_pose_range_m = self.state.lidar_target_pose_range_m
+            lidar_target_height_m = self.state.lidar_target_height_m
+            lidar_target_range_m = self.state.lidar_target_range_m
+            lidar_target_velocity_mps = self.state.lidar_target_velocity_mps
+            lidar_target_dynamic_valid = self.state.lidar_target_dynamic_valid
+            lidar_target_z_valid = self.state.lidar_target_z_valid
+            lidar_target_state = self.state.lidar_target_state
+            lidar_target_update_time = self.state.lidar_target_update_time
             camera = self.state.camera_state
+            camera_alignment = self.state.camera_alignment_state
+            camera_centered = self.state.camera_target_centered
             sound = self.state.sound_state
+            sound_done = self.state.sound_task_done
             trial = self.state.gazebo_trial_state
             map_apply = self.state.map_apply_state
             current_map_source = self.state.current_map_source
@@ -2345,6 +2534,32 @@ class WaverRemotePanel:
             keyboard_state = self.state.keyboard_state
             pose_source = self.state.pose_source
             odom_yaw = self.state.odom_yaw
+        lidar_target_age = (
+            max(0.0, time.monotonic() - lidar_target_update_time)
+            if lidar_target_update_time > 0.0
+            else float("inf")
+        )
+        lidar_pose_text = "LiDAR: waiting for target"
+        if (
+            lidar_target_valid
+            and lidar_target_x is not None
+            and lidar_target_y is not None
+            and lidar_target_z is not None
+        ):
+            range_display = lidar_target_range_m
+            if range_display is None:
+                range_display = lidar_target_pose_range_m
+            lidar_pose_text = (
+                f"LiDAR id={lidar_target_id}, frame={lidar_target_frame}, "
+                f"xyz=({lidar_target_x:+.2f}, {lidar_target_y:+.2f}, {lidar_target_z:+.2f})m\n"
+                f"dir={format_optional(lidar_target_bearing_deg, '+.1f')}deg, "
+                f"rel={format_optional(lidar_target_relative_bearing_deg, '+.1f')}deg, "
+                f"speed={format_optional(lidar_target_velocity_mps, '.2f')}m/s, "
+                f"height={format_optional(lidar_target_height_m, '.2f')}m, "
+                f"range={format_optional(range_display, '.2f')}m, age={lidar_target_age:.1f}s\n"
+                f"dynamic={lidar_target_dynamic_valid}, z_valid={lidar_target_z_valid}, "
+                f"state={lidar_target_state[:120]}"
+            )
         self.mode_var.set(f"{mode} {'E-STOP' if estop else ''}".strip())
         hint = {
             "MANUAL": "MANUAL: 패널 수동 후보만 통과, mission/Nav2는 일시 중지 또는 취소",
@@ -2372,15 +2587,16 @@ class WaverRemotePanel:
         self.mission_var.set(f"mission: {mission}")
         self.safety_var.set(f"safety: {safety}")
         self.radar_var.set(f"radar: {radar}")
-        self.object_goal_var.set(f"object goal: {object_goal}")
+        self.object_goal_var.set(f"object goal: {object_goal}\ninspection: {inspection_target[:180]}")
         self.battery_var.set(f"battery: {battery}")
         self.target_var.set(
+            f"{lidar_pose_text}\n"
             f"class={target_class}, conf={target_confidence:.2f}, bird={bird_confirmed}\n"
             f"height/dynamic: {height_filter[:120]}"
         )
         self.dynamic_obstacle_var.set(f"dynamic: {dynamic_obstacle[:360]}")
-        self.camera_var.set(f"camera: {camera}")
-        self.sound_var.set(f"sound: {sound}")
+        self.camera_var.set(f"camera: {camera}\nalign: {camera_alignment[:160]}, centered={camera_centered}")
+        self.sound_var.set(f"sound: {sound}\ndone={sound_done}")
         self.trial_var.set(f"trial: {trial}")
         self.map_apply_var.set(f"map source: {current_map_source}\nmap apply: {map_apply}")
         self.auto_var.set(f"auto: {auto}")
@@ -2447,18 +2663,38 @@ class WaverRemotePanel:
         self.root.mainloop()
 
     def close(self) -> None:
-        # 역할: 창 닫기에서도 stop을 먼저 보내고 GUI를 종료한다.
+        # 역할: 창 닫기에서는 수동 후보 속도만 0으로 만들고, mission backend는 STOP 버튼에만 반응한다.
         if self.closed:
             return
         self.closed = True
         self.active_key = None
-        self.node.stop_motion(stop_auto=True)
+        if bool(self.node.get_parameter("stop_backend_on_close").value):
+            self.node.stop_motion(stop_auto=True)
+        else:
+            self.node.stop_auto()
+            with self.node.lock:
+                self.node.state.desired_linear = 0.0
+                self.node.state.desired_angular = 0.0
+                self.node.state.active_control = "closed"
+            self.node.publish_stop_burst()
         self.node.stop_optional_process("mapping_process", "mapping")
         self.node.stop_optional_process("localization_process", "localization")
         try:
             self.root.destroy()
         except self.tk.TclError:
             pass
+
+
+def wrap_angle_rad(angle: float) -> float:
+    # 역할: bearing 차이를 -pi..pi 범위로 정규화한다.
+    return math.atan2(math.sin(angle), math.cos(angle))
+
+
+def format_optional(value: Optional[float], spec: str) -> str:
+    # 역할: 아직 수신 전인 LiDAR scalar 값은 UI에서 0으로 오해되지 않게 표시한다.
+    if value is None or not math.isfinite(value):
+        return "--"
+    return format(value, spec)
 
 
 def yaw_from_quaternion(q) -> float:

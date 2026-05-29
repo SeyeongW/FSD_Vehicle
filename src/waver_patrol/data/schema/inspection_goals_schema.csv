@@ -1,0 +1,15 @@
+column,description
+timestamp,ROS time in seconds
+experiment_id,Unique experiment id
+target_id,LiDAR target id linked across tables
+inspection_goal_id,Generated inspection goal id
+target_x,Target x in map frame
+target_y,Target y in map frame
+target_z,Target z in map frame
+goal_x,Offset goal x
+goal_y,Offset goal y
+goal_yaw,Offset goal yaw facing target
+goal_offset_distance_m,Standoff distance used for goal generation
+candidate_to_goal_latency_ms,Latency from LiDAR candidate to goal publish
+goal_publish_success,Whether the goal was published
+goal_reject_reason,Reason when goal was rejected

@@ -1,0 +1,18 @@
+column,description
+timestamp,ROS time in seconds
+experiment_id,Unique experiment id
+target_id,Target id linked across tables
+target_class,Class at sound decision
+target_confidence,Classifier confidence at sound decision
+bird_confirmed,Bird N-of-M confirmation flag
+sound_alert_request,Whether mission requested sound
+sound_request_accepted,Whether deterrence node accepted the request
+sound_block_reason,Reason for blocked request
+sound_type,Configured sound task type
+enable_sound_output,Whether real output was enabled
+sound_task_started,Whether sound task started
+sound_start_time,Start timestamp
+sound_end_time,End timestamp
+sound_duration_sec,Task duration
+sound_task_done,Whether task completed
+cooldown_active,Whether cooldown blocked/limited task

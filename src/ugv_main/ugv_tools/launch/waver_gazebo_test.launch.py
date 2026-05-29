@@ -64,6 +64,8 @@ def generate_launch_description():
     bird_manager_active_birds = LaunchConfiguration("bird_manager_active_birds")
     bird_manager_z_min_m = LaunchConfiguration("bird_manager_z_min_m")
     bird_manager_z_max_m = LaunchConfiguration("bird_manager_z_max_m")
+    bird_manager_min_speed_mps = LaunchConfiguration("bird_manager_min_speed_mps")
+    bird_manager_max_speed_mps = LaunchConfiguration("bird_manager_max_speed_mps")
     bird_manager_min_xy_radius_m = LaunchConfiguration("bird_manager_min_xy_radius_m")
     pointcloud_topic = LaunchConfiguration("pointcloud_topic")
     pointcloud_target_frame = LaunchConfiguration("pointcloud_target_frame")
@@ -496,7 +498,7 @@ def generate_launch_description():
         condition=scripted_keyboard_condition,
     )
 
-    # 역할: 15 m Gazebo map의 bird_single을 5~8 m 고도에서 움직이고 target 토픽을 발행한다.
+    # 역할: 15 m Gazebo map의 bird를 3 m 임계값 바로 위에서 아주 느리게 움직이고 target 토픽을 발행한다.
     bird_manager_node = TimerAction(
         period=4.0,
         actions=[
@@ -515,6 +517,8 @@ def generate_launch_description():
                         ),
                         "z_min_m": ParameterValue(bird_manager_z_min_m, value_type=float),
                         "z_max_m": ParameterValue(bird_manager_z_max_m, value_type=float),
+                        "min_speed_mps": ParameterValue(bird_manager_min_speed_mps, value_type=float),
+                        "max_speed_mps": ParameterValue(bird_manager_max_speed_mps, value_type=float),
                         "min_xy_radius_m": ParameterValue(bird_manager_min_xy_radius_m, value_type=float),
                     }
                 ],
@@ -606,8 +610,10 @@ def generate_launch_description():
         DeclareLaunchArgument("start_lidar_perception", default_value="true"),
         DeclareLaunchArgument("publish_bird_manager_targets", default_value="false"),
         DeclareLaunchArgument("bird_manager_active_birds", default_value="bird_test_target"),
-        DeclareLaunchArgument("bird_manager_z_min_m", default_value="3.0"),
-        DeclareLaunchArgument("bird_manager_z_max_m", default_value="4.5"),
+        DeclareLaunchArgument("bird_manager_z_min_m", default_value="3.1"),
+        DeclareLaunchArgument("bird_manager_z_max_m", default_value="3.4"),
+        DeclareLaunchArgument("bird_manager_min_speed_mps", default_value="0.05"),
+        DeclareLaunchArgument("bird_manager_max_speed_mps", default_value="0.18"),
         DeclareLaunchArgument("bird_manager_min_xy_radius_m", default_value="3.5"),
         DeclareLaunchArgument("pointcloud_topic", default_value="/mid360_PointCloud2"),
         DeclareLaunchArgument("pointcloud_target_frame", default_value="base_link"),

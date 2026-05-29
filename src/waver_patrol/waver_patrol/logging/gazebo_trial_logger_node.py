@@ -122,7 +122,7 @@ class GazeboTrialLoggerNode(Node):
     def __init__(self) -> None:
         super().__init__("gazebo_trial_logger_node")
         self.declare_parameter("trial_id", 1)
-        self.declare_parameter("output_root", "~/ros2_ws/FSD_Vehicle/experiments_result")
+        self.declare_parameter("output_root", "~/ros2_ws2/FSD_Vehicle/experiments_result")
         self.declare_parameter("trial_name_prefix", "gazebo_trial")
         self.declare_parameter("target_min_height_m", 3.0)
         self.declare_parameter("min_dynamic_motion_m", 0.2)

@@ -43,6 +43,7 @@ def generate_launch_description():
     active_nav_goal_topic = LaunchConfiguration("active_nav_goal_topic")
     object_mission_goal_topic = LaunchConfiguration("object_mission_goal_topic")
     lidar_objects_map_topic = LaunchConfiguration("lidar_objects_map_topic")
+    show_raw_lidar_objects_on_map = LaunchConfiguration("show_raw_lidar_objects_on_map")
     elevated_dynamic_target_topic = LaunchConfiguration("elevated_dynamic_target_topic")
     dynamic_obstacle_state_topic = LaunchConfiguration("dynamic_obstacle_state_topic")
     current_waypoint_topic = LaunchConfiguration("current_waypoint_topic")
@@ -110,6 +111,9 @@ def generate_launch_description():
                 "active_nav_goal_topic": active_nav_goal_topic,
                 "object_mission_goal_topic": object_mission_goal_topic,
                 "lidar_objects_map_topic": lidar_objects_map_topic,
+                "show_raw_lidar_objects_on_map": ParameterValue(
+                    show_raw_lidar_objects_on_map, value_type=bool
+                ),
                 "elevated_dynamic_target_topic": elevated_dynamic_target_topic,
                 "dynamic_obstacle_state_topic": dynamic_obstacle_state_topic,
                 "current_waypoint_topic": current_waypoint_topic,
@@ -154,14 +158,7 @@ def generate_launch_description():
             DeclareLaunchArgument("auto_launch_command", default_value=""),
             DeclareLaunchArgument(
                 "mapping_launch_command",
-                default_value=(
-                    "ros2 launch waver_patrol waver_mapping_backend.launch.py "
-                    "backend:=gmapping use_sim_time:=true use_rviz:=false "
-                    "start_workflow_manager:=false "
-                    "start_lidar_bringup:=false "
-                    "start_robot_pose_publisher:=false "
-                    "scan_topic:=/scan"
-                ),
+                default_value="",
             ),
             DeclareLaunchArgument("map_save_command", default_value=""),
             DeclareLaunchArgument("localization_launch_command", default_value=""),
@@ -174,6 +171,7 @@ def generate_launch_description():
             DeclareLaunchArgument("active_nav_goal_topic", default_value="/waver/active_nav_goal"),
             DeclareLaunchArgument("object_mission_goal_topic", default_value="/waver/object_mission_goal"),
             DeclareLaunchArgument("lidar_objects_map_topic", default_value="/waver/lidar_objects_map"),
+            DeclareLaunchArgument("show_raw_lidar_objects_on_map", default_value="false"),
             DeclareLaunchArgument("elevated_dynamic_target_topic", default_value="/waver/elevated_dynamic_targets"),
             DeclareLaunchArgument("dynamic_obstacle_state_topic", default_value="/waver/dynamic_obstacle_state"),
             DeclareLaunchArgument("current_waypoint_topic", default_value="/waver/current_waypoint"),
@@ -181,8 +179,8 @@ def generate_launch_description():
             DeclareLaunchArgument("mission_state_topic", default_value="/waver/mission_state"),
             DeclareLaunchArgument("safety_state_topic", default_value="/waver/safety_state"),
             DeclareLaunchArgument("height_filter_debug_topic", default_value="/waver/height_filter_debug"),
-            DeclareLaunchArgument("camera_detection_status_topic", default_value="/waver/bird_detector_state"),
-            DeclareLaunchArgument("sound_mission_status_topic", default_value="/waver/sound_mission_status"),
+            DeclareLaunchArgument("camera_detection_status_topic", default_value="/waver/target_classification_state"),
+            DeclareLaunchArgument("sound_mission_status_topic", default_value="/waver/sound_alert_state"),
             DeclareLaunchArgument("gazebo_trial_state_topic", default_value="/waver/gazebo_trial_state"),
             DeclareLaunchArgument("map_apply_state_topic", default_value="/waver/map_apply_state"),
             DeclareLaunchArgument("mission_command_topic", default_value="/waver/mission_command"),

@@ -11,8 +11,8 @@ for arg in "$@"; do
   esac
 done
 
-WS="${WAVER_WS:-$HOME/ros2_ws}"
-REPO="${WAVER_REPO:-$WS/FSD_Vehicle}"
+REPO="${WAVER_REPO:-$HOME/ros2_ws2/FSD_Vehicle}"
+WS="${WAVER_WS:-$REPO}"
 cd "$REPO"
 
 if [ -f /opt/ros/humble/setup.bash ]; then
@@ -98,8 +98,9 @@ if [ "$MODE_PUBS" -ne 1 ]; then
 fi
 
 SCAN_PUBS="$(count_publishers /scan)"
-if [ "$SCAN_PUBS" -ne 1 ]; then
-  warn_or_fail "/scan publisher count must be 1, got $SCAN_PUBS"
+SCAN_SAFETY_PUBS="$(count_publishers /scan_safety)"
+if [ "$SCAN_PUBS" -ne 1 ] && [ "$SCAN_SAFETY_PUBS" -ne 1 ]; then
+  warn_or_fail "/scan or /scan_safety publisher count must be 1, got /scan=$SCAN_PUBS /scan_safety=$SCAN_SAFETY_PUBS"
 fi
 ODOM_PUBS="$(count_publishers /odom)"
 if [ "$ODOM_PUBS" -ne 1 ]; then
@@ -146,7 +147,11 @@ if hz < min_hz:
 PY
 }
 
-check_hz /scan 5.0
+if [ "$SCAN_SAFETY_PUBS" -eq 1 ]; then
+  check_hz /scan_safety 5.0
+else
+  check_hz /scan 5.0
+fi
 check_hz /odom 5.0
 check_hz /mid360_PointCloud2 3.0
 check_hz /camera/image_raw 3.0

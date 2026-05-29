@@ -1,0 +1,20 @@
+column,description
+timestamp,ROS time in seconds
+experiment_id,Unique experiment id
+target_id,LiDAR target id linked across tables
+frame_id,Target frame id
+target_x,Target x in aiming frame
+target_y,Target y in aiming frame
+target_z,Target z in aiming frame
+pan_cmd_rad,Commanded pan angle
+tilt_cmd_rad,Commanded tilt angle
+bearing_rad,Target bearing from base/camera
+elevation_rad,Target elevation from base/camera
+alignment_start_time,Alignment start timestamp
+alignment_done_time,Alignment done timestamp
+alignment_latency_ms,Alignment latency
+centered,Whether target is centered or simulated centered
+pointing_error_rad,Pointing error when available
+alignment_timeout,Whether alignment timed out
+fallback_robot_body_alignment_used,Whether body yaw fallback was used
+failure_reason,Failure detail if alignment failed

@@ -8,7 +8,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction, SetEnvironmentVariable, TimerAction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -17,7 +17,7 @@ def _find_ugv_script(filename: str, ugv_share: str) -> str:
     installed = os.path.normpath(os.path.join(ugv_share, "..", "..", "lib", "ugv_gazebo", filename))
     if os.path.isfile(installed):
         return installed
-    source_matches = glob.glob(os.path.expanduser(f"~/ros2_ws/src/**/{filename}"), recursive=True)
+    source_matches = glob.glob(os.path.expanduser(f"~/ros2_ws2/FSD_Vehicle/src/**/{filename}"), recursive=True)
     return source_matches[0] if source_matches else installed
 
 
@@ -105,7 +105,7 @@ def launch_setup(context, *args, **kwargs):
                 Node(
                     package="gazebo_ros",
                     executable="spawn_entity.py",
-                    arguments=["-entity", "bird_single", "-file", bird_model, "-x", "3.0", "-y", "2.0", "-z", "6.0"],
+                    arguments=["-entity", "bird_extra_single", "-file", bird_model, "-x", "3.0", "-y", "2.0", "-z", "3.2"],
                     output="screen",
                 )
             ],
@@ -117,31 +117,31 @@ def launch_setup(context, *args, **kwargs):
                 Node(
                     package="gazebo_ros",
                     executable="spawn_entity.py",
-                    arguments=["-entity", "bird_swarm_1", "-file", bird_model, "-x", "-6.0", "-y", "0.0", "-z", "6.5"],
+                    arguments=["-entity", "bird_swarm_1", "-file", bird_model, "-x", "-6.0", "-y", "0.0", "-z", "3.2"],
                     output="screen",
                 ),
                 Node(
                     package="gazebo_ros",
                     executable="spawn_entity.py",
-                    arguments=["-entity", "bird_swarm_2", "-file", bird_model, "-x", "6.0", "-y", "0.0", "-z", "6.5"],
+                    arguments=["-entity", "bird_swarm_2", "-file", bird_model, "-x", "6.0", "-y", "0.0", "-z", "3.3"],
                     output="screen",
                 ),
                 Node(
                     package="gazebo_ros",
                     executable="spawn_entity.py",
-                    arguments=["-entity", "bird_swarm_3", "-file", bird_model, "-x", "-3.0", "-y", "-5.5", "-z", "7.0"],
+                    arguments=["-entity", "bird_swarm_3", "-file", bird_model, "-x", "-3.0", "-y", "-5.5", "-z", "3.4"],
                     output="screen",
                 ),
                 Node(
                     package="gazebo_ros",
                     executable="spawn_entity.py",
-                    arguments=["-entity", "bird_swarm_4", "-file", bird_model, "-x", "3.0", "-y", "-5.5", "-z", "5.8"],
+                    arguments=["-entity", "bird_swarm_4", "-file", bird_model, "-x", "3.0", "-y", "-5.5", "-z", "3.2"],
                     output="screen",
                 ),
                 Node(
                     package="gazebo_ros",
                     executable="spawn_entity.py",
-                    arguments=["-entity", "bird_swarm_5", "-file", bird_model, "-x", "0.0", "-y", "6.0", "-z", "6.8"],
+                    arguments=["-entity", "bird_swarm_5", "-file", bird_model, "-x", "0.0", "-y", "6.0", "-z", "3.3"],
                     output="screen",
                 ),
             ],
@@ -153,7 +153,13 @@ def launch_setup(context, *args, **kwargs):
                 ExecuteProcess(
                     cmd=["python3", bird_manager],
                     output="screen",
-                    additional_env={"PYTHONUNBUFFERED": "1"},
+                    additional_env={
+                        "PYTHONUNBUFFERED": "1",
+                        "BIRD_MANAGER_Z_MIN_M": "3.1",
+                        "BIRD_MANAGER_Z_MAX_M": "3.4",
+                        "BIRD_MANAGER_MIN_SPEED_MPS": "0.05",
+                        "BIRD_MANAGER_MAX_SPEED_MPS": "0.18",
+                    },
                 )
             ],
             condition=IfCondition(LaunchConfiguration("spawn_birds")),
@@ -169,7 +175,7 @@ def launch_setup(context, *args, **kwargs):
                 {
                     "use_sim_time": True,
                     "pointcloud_topic": LaunchConfiguration("pointcloud_topic"),
-                    "scan_topic": "/scan",
+                    "scan_topic": "/scan_safety",
                     "forward_axis": LaunchConfiguration("scan_forward_axis"),
                     "lateral_axis": LaunchConfiguration("scan_lateral_axis"),
                     "height_axis": LaunchConfiguration("scan_height_axis"),
@@ -194,11 +200,56 @@ def launch_setup(context, *args, **kwargs):
                 "use_sim_odom": "false",
                 "start_serial_bridge": "false",
                 "enable_keyboard_teleop": "false",
-                "enable_test_publishers": "false",
-                "require_scan": LaunchConfiguration("require_scan"),
-                "use_rviz": LaunchConfiguration("use_rviz"),
-            }.items(),
-        ),
+                    "enable_test_publishers": "false",
+                    "enable_deep_learning_stub": LaunchConfiguration("enable_fake_camera_classification"),
+                    "enable_sound_stub": LaunchConfiguration("enable_fake_sound"),
+                    "require_scan": LaunchConfiguration("require_scan"),
+                    "use_rviz": LaunchConfiguration("use_rviz"),
+                    "scan_topic": "/scan_safety",
+                }.items(),
+            ),
+            Node(
+                package="waver_patrol",
+                executable="bird_detector_node",
+                name="bird_detector_node",
+                output="screen",
+                condition=IfCondition(
+                    PythonExpression(
+                        [
+                            "'",
+                            LaunchConfiguration("enable_bird_detector"),
+                            "' == 'true' and '",
+                            LaunchConfiguration("enable_fake_camera_classification"),
+                            "' != 'true'",
+                        ]
+                    )
+                ),
+                parameters=[
+                    LaunchConfiguration("config_file"),
+                    {
+                        "use_sim_time": True,
+                        "real_profile": False,
+                        "image_topic": LaunchConfiguration("camera_image_topic"),
+                        "camera_info_topic": LaunchConfiguration("camera_info_topic"),
+                        "backend": "disabled",
+                    },
+                ],
+            ),
+            Node(
+                package="waver_patrol",
+                executable="bird_3d_fusion_node",
+                name="bird_3d_fusion_node",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_bird_3d_fusion")),
+                parameters=[
+                    LaunchConfiguration("config_file"),
+                    {
+                        "use_sim_time": True,
+                        "pointcloud_topic": LaunchConfiguration("pointcloud_topic"),
+                        "camera_info_topic": LaunchConfiguration("camera_info_topic"),
+                    },
+                ],
+            ),
         Node(
             package="ugv_tools",
             executable="keyboard_ctrl",
@@ -231,15 +282,23 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("config_file", default_value=os.path.join(waver_share, "config", "waver_bird_autonomy.yaml")),
             DeclareLaunchArgument("waypoint_file", default_value=os.path.join(waver_share, "waypoints", "waver_bird_patrol_demo.yaml")),
             DeclareLaunchArgument("ugv_model", default_value="ugv_rover"),
-            DeclareLaunchArgument("world", default_value="waver_empty.world"),
-            DeclareLaunchArgument("use_gui", default_value="false"),
+            DeclareLaunchArgument("world", default_value="ugv_world.world"),
+            DeclareLaunchArgument("use_gui", default_value="true"),
             DeclareLaunchArgument("use_rviz", default_value="false"),
+            DeclareLaunchArgument("use_sim_time", default_value="true"),
             DeclareLaunchArgument("x_pose", default_value="0.0"),
             DeclareLaunchArgument("y_pose", default_value="0.0"),
             DeclareLaunchArgument("spawn_birds", default_value="true"),
             DeclareLaunchArgument("enable_livox_scan_adapter", default_value="true"),
             DeclareLaunchArgument("enable_gazebo_bird_bridge", default_value="true"),
-            DeclareLaunchArgument("pointcloud_topic", default_value="/camera/points"),
+            DeclareLaunchArgument("pointcloud_topic", default_value="/mid360_PointCloud2"),
+            DeclareLaunchArgument("camera_image_topic", default_value="/camera/image_raw"),
+            DeclareLaunchArgument("camera_info_topic", default_value="/camera/camera_info"),
+            DeclareLaunchArgument("enable_bird_detector", default_value="true"),
+            DeclareLaunchArgument("enable_bird_3d_fusion", default_value="true"),
+            DeclareLaunchArgument("enable_fake_sound", default_value="true"),
+            DeclareLaunchArgument("enable_fake_camera_classification", default_value="true"),
+            DeclareLaunchArgument("enable_trial_logger", default_value="true"),
             DeclareLaunchArgument("scan_forward_axis", default_value="z"),
             DeclareLaunchArgument("scan_lateral_axis", default_value="x"),
             DeclareLaunchArgument("scan_height_axis", default_value="-y"),

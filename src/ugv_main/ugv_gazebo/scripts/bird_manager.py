@@ -108,8 +108,10 @@ class BirdManager(Node):
             os.environ.get('BIRD_MANAGER_ACTIVE_BIRDS', 'bird_single'),
         )
         self.declare_parameter('publish_waver_detection_topics', True)
-        self.declare_parameter('z_min_m', 5.0)
-        self.declare_parameter('z_max_m', 8.0)
+        self.declare_parameter('z_min_m', float(os.environ.get('BIRD_MANAGER_Z_MIN_M', '3.1')))
+        self.declare_parameter('z_max_m', float(os.environ.get('BIRD_MANAGER_Z_MAX_M', '3.4')))
+        self.declare_parameter('min_speed_mps', float(os.environ.get('BIRD_MANAGER_MIN_SPEED_MPS', '0.05')))
+        self.declare_parameter('max_speed_mps', float(os.environ.get('BIRD_MANAGER_MAX_SPEED_MPS', '0.18')))
         self.declare_parameter('min_xy_radius_m', 0.0)
         self.publish_waver_detection_topics = bool(
             self.get_parameter('publish_waver_detection_topics').value
@@ -166,8 +168,10 @@ class BirdManager(Node):
         if not active_names:
             active_names = ['bird_single']
 
+        min_speed = max(0.0, float(self.get_parameter('min_speed_mps').value))
+        max_speed = max(min_speed, float(self.get_parameter('max_speed_mps').value))
         self.birds = [
-            BirdConfig(name, 2.2, 0.6, 1.0)
+            BirdConfig(name, max_speed, min_speed, 1.0)
             for name in active_names
         ]
 
@@ -205,7 +209,10 @@ class BirdManager(Node):
             self.pick_new_target(bird.name)
         self.service_timer = self.create_timer(1.0, self.connect_services_if_ready)
         self.timer = self.create_timer(self.dt, self.update_all)
-        self.get_logger().info('bird_manager started')
+        self.get_logger().info(
+            f'bird_manager started z_range={self.z_min:.2f}-{self.z_max:.2f}m '
+            f'speed_range={min_speed:.2f}-{max_speed:.2f}m/s'
+        )
 
     def find_service_name(self, preferred, service_type):
         services = self.get_service_names_and_types()

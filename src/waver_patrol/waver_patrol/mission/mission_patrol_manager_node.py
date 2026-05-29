@@ -19,21 +19,37 @@ from waver_patrol.mission.mission_utils import MissionRoute, Waypoint, load_rout
 
 class MissionState(str, Enum):
     IDLE = "IDLE"
+    STANDBY = "STANDBY"
     PATROL_NAVIGATING = "PATROL_NAVIGATING"
     PATROL_DWELL = "PATROL_DWELL"
+    LIDAR_AERIAL_CANDIDATE = "LIDAR_AERIAL_CANDIDATE"
+    INSPECTION_GOAL_GENERATED = "INSPECTION_GOAL_GENERATED"
+    APPROACH_TARGET_OFFSET = "APPROACH_TARGET_OFFSET"
     PATROL_INTERRUPTED_BY_RADAR_TARGET = "PATROL_INTERRUPTED_BY_RADAR_TARGET"
     TARGET_NAVIGATING = "TARGET_NAVIGATING"
     TARGET_REACHED = "TARGET_REACHED"
+    CAMERA_ALIGN_TO_TARGET = "CAMERA_ALIGN_TO_TARGET"
+    CAMERA_ALIGN_DONE = "CAMERA_ALIGN_DONE"
+    CAMERA_ALIGN_FAILED = "CAMERA_ALIGN_FAILED"
     TARGET_REDETECTION_WAIT = "TARGET_REDETECTION_WAIT"
     TARGET_CLASSIFICATION_WAIT = "TARGET_CLASSIFICATION_WAIT"
+    TARGET_CLASSIFIED_BIRD = "TARGET_CLASSIFIED_BIRD"
+    TARGET_CLASSIFIED_DRONE = "TARGET_CLASSIFIED_DRONE"
+    TARGET_CLASSIFIED_UNKNOWN = "TARGET_CLASSIFIED_UNKNOWN"
+    TARGET_CLASSIFIED_IRRELEVANT = "TARGET_CLASSIFIED_IRRELEVANT"
     TARGET_CONFIRMED_BIRD = "TARGET_CONFIRMED_BIRD"
     TARGET_NOT_BIRD = "TARGET_NOT_BIRD"
+    SOUND_TASK_REQUESTED = "SOUND_TASK_REQUESTED"
     SOUND_TASK_RUNNING = "SOUND_TASK_RUNNING"
     SOUND_TASK_DONE = "SOUND_TASK_DONE"
+    SOUND_TASK_BLOCKED_BY_CLASS = "SOUND_TASK_BLOCKED_BY_CLASS"
+    SOUND_TASK_TIMEOUT = "SOUND_TASK_TIMEOUT"
     RETURN_TO_INTERRUPTED_WAYPOINT = "RETURN_TO_INTERRUPTED_WAYPOINT"
     RESUME_PATROL = "RESUME_PATROL"
+    TARGET_LOST_RECOVERY = "TARGET_LOST_RECOVERY"
     BATTERY_RETURN_NAVIGATING = "BATTERY_RETURN_NAVIGATING"
     HOLD_AT_HOME = "HOLD_AT_HOME"
+    EMERGENCY_STOP = "EMERGENCY_STOP"
     EMERGENCY_STOPPED = "EMERGENCY_STOPPED"
     NAV2_RECOVERY = "NAV2_RECOVERY"
     NAV2_FAILED = "NAV2_FAILED"
@@ -44,21 +60,36 @@ class NavGoalType(str, Enum):
     NONE = "NONE"
     PATROL = "PATROL"
     RADAR_TARGET = "RADAR_TARGET"
+    TARGET_INSPECTION = "TARGET_INSPECTION"
     RETURN_TO_INTERRUPTED_WAYPOINT = "RETURN_TO_INTERRUPTED_WAYPOINT"
     BATTERY_RETURN = "BATTERY_RETURN"
 
 
 TARGET_MISSION_STATES = {
     MissionState.PATROL_INTERRUPTED_BY_RADAR_TARGET,
+    MissionState.LIDAR_AERIAL_CANDIDATE,
+    MissionState.INSPECTION_GOAL_GENERATED,
+    MissionState.APPROACH_TARGET_OFFSET,
     MissionState.TARGET_NAVIGATING,
     MissionState.TARGET_REACHED,
+    MissionState.CAMERA_ALIGN_TO_TARGET,
+    MissionState.CAMERA_ALIGN_DONE,
+    MissionState.CAMERA_ALIGN_FAILED,
     MissionState.TARGET_REDETECTION_WAIT,
     MissionState.TARGET_CLASSIFICATION_WAIT,
+    MissionState.TARGET_CLASSIFIED_BIRD,
+    MissionState.TARGET_CLASSIFIED_DRONE,
+    MissionState.TARGET_CLASSIFIED_UNKNOWN,
+    MissionState.TARGET_CLASSIFIED_IRRELEVANT,
     MissionState.TARGET_CONFIRMED_BIRD,
     MissionState.TARGET_NOT_BIRD,
+    MissionState.SOUND_TASK_REQUESTED,
     MissionState.SOUND_TASK_RUNNING,
     MissionState.SOUND_TASK_DONE,
+    MissionState.SOUND_TASK_BLOCKED_BY_CLASS,
+    MissionState.SOUND_TASK_TIMEOUT,
     MissionState.RETURN_TO_INTERRUPTED_WAYPOINT,
+    MissionState.TARGET_LOST_RECOVERY,
 }
 
 
@@ -86,10 +117,17 @@ class MissionPatrolManagerNode(Node):
         self.declare_parameter("resume_policy", "RETURN_TO_INTERRUPTED_WAYPOINT")
         self.declare_parameter("target_mission_timeout_sec", 120.0)
         self.declare_parameter("target_goal_tolerance_xy", 0.5)
+        self.declare_parameter("target_arrival_tolerance_xy_m", 0.5)
         self.declare_parameter("object_goal_stale_timeout_sec", 3.0)
         self.declare_parameter("target_re_detection_timeout_sec", 20.0)
         self.declare_parameter("target_classification_timeout_sec", 15.0)
+        self.declare_parameter("min_classification_confidence", 0.50)
         self.declare_parameter("bird_confidence_threshold", 0.70)
+        self.declare_parameter("camera_alignment_timeout_sec", 5.0)
+        self.declare_parameter("fallback_robot_body_alignment", True)
+        self.declare_parameter("enable_sound_task", True)
+        self.declare_parameter("enable_sound_output", False)
+        self.declare_parameter("deterrence_classes", ["bird"])
         self.declare_parameter("patrol_goal_timeout_sec", 180.0)
         self.declare_parameter("waypoint_dwell_sec_default", 2.0)
         self.declare_parameter("sound_task_timeout_sec", 15.0)
@@ -132,6 +170,13 @@ class MissionPatrolManagerNode(Node):
         self.bird_confirmed = False
         self.target_class = "unknown"
         self.target_confidence = 0.0
+        self.camera_target_centered = False
+        self.camera_alignment_state = "IDLE"
+        self.active_target_pose: Optional[PoseStamped] = None
+        self.latest_inspection_target_pose: Optional[PoseStamped] = None
+        self.latest_inspection_target_time = 0.0
+        self.target_arrival_time = 0.0
+        self.classification_wait_started = 0.0
         self.estop = False
         self.external_stop = False
         self.active_goal_type = NavGoalType.NONE
@@ -156,9 +201,13 @@ class MissionPatrolManagerNode(Node):
         self.active_goal_pub = self.create_publisher(PoseStamped, "/waver/active_nav_goal", 10)
         self.sound_request_pub = self.create_publisher(Bool, "/waver/sound_alert_request", 10)
         self.index_pub = self.create_publisher(Int32, "/waver/patrol_index", 10)
+        self.camera_aim_target_pub = self.create_publisher(PoseStamped, "/waver/camera_aim_target_pose", 10)
+        self.camera_aim_request_pub = self.create_publisher(Bool, "/waver/camera_aim_request", 10)
 
         self.create_subscription(PoseStamped, "/waver/object_mission_goal", self.object_goal_callback, 10)
+        self.create_subscription(PoseStamped, "/waver/inspection_target_pose_map", self.inspection_target_callback, 10)
         self.create_subscription(Bool, "/waver/object_mission_goal_active", lambda m: setattr(self, "object_goal_active", bool(m.data)), 10)
+        self.create_subscription(Bool, "/waver/inspection_target_active", lambda m: setattr(self, "object_goal_active", bool(m.data)), 10)
         self.create_subscription(Bool, "/waver/return_home_active", lambda m: setattr(self, "return_home_active", bool(m.data)), 10)
         self.create_subscription(PoseStamped, "/waver/return_goal", lambda m: setattr(self, "return_goal", m), 10)
         self.create_subscription(String, str(self.get_parameter("mode_cmd_topic").value), self.mode_callback, 10)
@@ -182,6 +231,8 @@ class MissionPatrolManagerNode(Node):
         self.create_subscription(Bool, "/waver/bird_confirmed", lambda m: setattr(self, "bird_confirmed", bool(m.data)), 10)
         self.create_subscription(String, "/waver/target_class", lambda m: setattr(self, "target_class", m.data), 10)
         self.create_subscription(Float32, "/waver/target_confidence", lambda m: setattr(self, "target_confidence", float(m.data)), 10)
+        self.create_subscription(Bool, "/waver/camera_target_centered", lambda m: setattr(self, "camera_target_centered", bool(m.data)), 10)
+        self.create_subscription(String, "/waver/camera_alignment_state", lambda m: setattr(self, "camera_alignment_state", m.data), 10)
 
         self.use_nav2 = bool(self.get_parameter("use_nav2").value)
         if (not self.use_nav2) or bool(self.get_parameter("enable_sim_nav_goal_arrival").value):
@@ -259,8 +310,11 @@ class MissionPatrolManagerNode(Node):
         self.object_goal = None
         self.target_interrupt_locked = False
         self.post_target_resume_cooldown_until = 0.0
+        self.camera_target_centered = False
+        self.camera_aim_request_pub.publish(Bool(data=False))
         if not self.estop and self.state in {
             MissionState.HOLD_AT_HOME,
+            MissionState.EMERGENCY_STOP,
             MissionState.EMERGENCY_STOPPED,
             MissionState.NAV2_FAILED,
             MissionState.SENSOR_STALE_STOP,
@@ -307,6 +361,7 @@ class MissionPatrolManagerNode(Node):
             self.post_target_resume_cooldown_until = 0.0
             if self.state in {
                 MissionState.HOLD_AT_HOME,
+                MissionState.EMERGENCY_STOP,
                 MissionState.EMERGENCY_STOPPED,
                 MissionState.NAV2_FAILED,
                 MissionState.SENSOR_STALE_STOP,
@@ -393,6 +448,13 @@ class MissionPatrolManagerNode(Node):
         self.object_goal = msg
         self.object_goal_active = True
 
+    def inspection_target_callback(self, msg: PoseStamped) -> None:
+        if self.object_goal_stale(msg):
+            self.publish_event("INSPECTION_TARGET_IGNORED_STALE", f"frame={msg.header.frame_id or '<empty>'}")
+            return
+        self.latest_inspection_target_pose = msg
+        self.latest_inspection_target_time = self._now()
+
     def sim_goal_arrived_callback(self, msg: Bool) -> None:
         # 역할: Gazebo/headless 반복검증에서 Nav2 action server 없이 goal 성공을 흉내 낸다.
         # 실차에서는 use_nav2=true라 이 경로가 비활성화되고, 실제 Nav2 result만 사용한다.
@@ -436,13 +498,28 @@ class MissionPatrolManagerNode(Node):
             else:
                 self.start_target_mission()
                 return
-        if self.state in {MissionState.TARGET_REACHED, MissionState.TARGET_REDETECTION_WAIT, MissionState.TARGET_CLASSIFICATION_WAIT}:
+        if self.state in {
+            MissionState.TARGET_REACHED,
+            MissionState.CAMERA_ALIGN_TO_TARGET,
+            MissionState.CAMERA_ALIGN_DONE,
+            MissionState.TARGET_REDETECTION_WAIT,
+            MissionState.TARGET_CLASSIFICATION_WAIT,
+        }:
             self.handle_target_confirmation()
             return
-        if self.state == MissionState.SOUND_TASK_RUNNING:
+        if self.state in {MissionState.SOUND_TASK_REQUESTED, MissionState.SOUND_TASK_RUNNING}:
             self.handle_sound_task()
             return
-        if self.state in {MissionState.SOUND_TASK_DONE, MissionState.TARGET_NOT_BIRD}:
+        if self.state in {
+            MissionState.SOUND_TASK_DONE,
+            MissionState.SOUND_TASK_BLOCKED_BY_CLASS,
+            MissionState.SOUND_TASK_TIMEOUT,
+            MissionState.TARGET_NOT_BIRD,
+            MissionState.TARGET_CLASSIFIED_DRONE,
+            MissionState.TARGET_CLASSIFIED_UNKNOWN,
+            MissionState.TARGET_CLASSIFIED_IRRELEVANT,
+            MissionState.CAMERA_ALIGN_FAILED,
+        }:
             self.return_to_interrupted_waypoint()
             return
         if self.state == MissionState.PATROL_DWELL:
@@ -478,46 +555,134 @@ class MissionPatrolManagerNode(Node):
             self.publish_event("TARGET_IGNORED_ACTIVE_MISSION", f"state={self.state.value}")
             return
         goal = self.object_goal
-        if self.active_goal_type != NavGoalType.RADAR_TARGET:
+        if self.active_goal_type not in {NavGoalType.RADAR_TARGET, NavGoalType.TARGET_INSPECTION}:
             self.interrupted_index = self.current_index
             self.interrupted_goal = self.current_waypoint().pose if self.route.waypoints else None
             self.target_mission_id += 1
-            self.publish_event("PATROL_INTERRUPTED_BY_RADAR_TARGET", f"target_mission_id={self.target_mission_id}")
+            self.publish_event(
+                "INTERRUPT_PATROL_FOR_LIDAR_TARGET",
+                f"target_id={self.target_mission_id} waypoint_index={self.interrupted_index}",
+            )
         self.target_interrupt_locked = True
         self.object_goal_active = False
         self.object_goal = None
+        if (
+            self.latest_inspection_target_pose is not None
+            and self._now() - self.latest_inspection_target_time <= float(self.get_parameter("object_goal_stale_timeout_sec").value)
+        ):
+            self.active_target_pose = self.latest_inspection_target_pose
+        else:
+            self.active_target_pose = goal
+        self.camera_target_centered = False
+        self.sound_task_done = False
         self.cancel_active_goal("target_mission_interrupt")
-        self.send_nav_goal(goal, NavGoalType.RADAR_TARGET, MissionState.TARGET_NAVIGATING)
+        self.set_state(MissionState.INSPECTION_GOAL_GENERATED, "lidar_first_inspection_goal")
+        self.send_nav_goal(goal, NavGoalType.TARGET_INSPECTION, MissionState.APPROACH_TARGET_OFFSET)
 
     def handle_target_confirmation(self) -> None:
         elapsed = self._now() - self.state_enter_time
         if self.state == MissionState.TARGET_REACHED:
-            self.set_state(MissionState.TARGET_CLASSIFICATION_WAIT, "target_goal_reached")
+            self.target_arrival_time = self._now()
+            self.publish_camera_aim_request("target_goal_reached")
+            self.set_state(MissionState.CAMERA_ALIGN_TO_TARGET, "target_goal_reached")
             return
-        threshold = float(self.get_parameter("bird_confidence_threshold").value)
-        if self.bird_confirmed and self.target_confidence >= threshold:
-            self.set_state(MissionState.TARGET_CONFIRMED_BIRD, f"class={self.target_class} conf={self.target_confidence:.2f}")
-            self.sound_request_pub.publish(Bool(data=True))
-            self.set_state(MissionState.SOUND_TASK_RUNNING, "sound_alert_requested")
+        if self.state == MissionState.CAMERA_ALIGN_TO_TARGET:
+            self.publish_camera_aim_request("aligning")
+            if self.camera_target_centered:
+                self.set_state(MissionState.CAMERA_ALIGN_DONE, self.camera_alignment_state or "centered")
+                return
+            if elapsed > float(self.get_parameter("camera_alignment_timeout_sec").value):
+                self.camera_aim_request_pub.publish(Bool(data=False))
+                self.set_state(MissionState.CAMERA_ALIGN_FAILED, f"timeout state={self.camera_alignment_state}")
+                return
+            return
+        if self.state == MissionState.CAMERA_ALIGN_DONE:
+            self.classification_wait_started = self._now()
+            self.set_state(MissionState.TARGET_CLASSIFICATION_WAIT, "camera_alignment_done")
+            return
+        if self.state != MissionState.TARGET_CLASSIFICATION_WAIT:
+            return
+        normalized_class = self.normalized_target_class()
+        min_conf = float(self.get_parameter("min_classification_confidence").value)
+        bird_threshold = float(self.get_parameter("bird_confidence_threshold").value)
+        if normalized_class == "bird" and self.bird_confirmed and self.target_confidence >= bird_threshold:
+            self.set_state(MissionState.TARGET_CLASSIFIED_BIRD, f"class=bird conf={self.target_confidence:.2f}")
+            if self.enable_sound_for_class(normalized_class):
+                self.sound_request_pub.publish(Bool(data=True))
+                self.set_state(MissionState.SOUND_TASK_REQUESTED, "sound_alert_requested class=bird")
+            else:
+                self.set_state(MissionState.SOUND_TASK_BLOCKED_BY_CLASS, "sound_disabled_or_class_blocked class=bird")
+            return
+        if normalized_class in {"drone", "irrelevant"} and self.target_confidence >= min_conf:
+            next_state = (
+                MissionState.TARGET_CLASSIFIED_DRONE
+                if normalized_class == "drone"
+                else MissionState.TARGET_CLASSIFIED_IRRELEVANT
+            )
+            self.set_state(next_state, f"class={normalized_class} conf={self.target_confidence:.2f}")
+            self.set_state(
+                MissionState.SOUND_TASK_BLOCKED_BY_CLASS,
+                f"class={normalized_class} not_in_deterrence_classes",
+            )
+            return
+        if normalized_class == "unknown" and self.target_confidence >= min_conf:
+            self.set_state(MissionState.TARGET_CLASSIFIED_UNKNOWN, f"class=unknown conf={self.target_confidence:.2f}")
+            self.set_state(MissionState.SOUND_TASK_BLOCKED_BY_CLASS, "class=unknown not_in_deterrence_classes")
             return
         if elapsed > float(self.get_parameter("target_classification_timeout_sec").value):
-            self.set_state(MissionState.TARGET_NOT_BIRD, f"classification_timeout class={self.target_class}")
+            fallback_class = normalized_class if normalized_class in {"bird", "drone", "irrelevant"} else "unknown"
+            self.set_state(
+                MissionState.TARGET_CLASSIFIED_UNKNOWN,
+                f"classification_timeout class={fallback_class} conf={self.target_confidence:.2f}",
+            )
+            self.set_state(MissionState.SOUND_TASK_BLOCKED_BY_CLASS, f"class={fallback_class} classification_timeout")
             return
+
+    def publish_camera_aim_request(self, reason: str) -> None:
+        target = self.active_target_pose if self.active_target_pose is not None else self.active_goal_pose
+        if target is None:
+            self.set_state(MissionState.CAMERA_ALIGN_FAILED, "no_active_target_pose")
+            return
+        target.header.stamp = self.get_clock().now().to_msg()
+        self.camera_aim_target_pub.publish(target)
+        self.camera_aim_request_pub.publish(Bool(data=True))
+        self.publish_event("CAMERA_AIM_REQUESTED", reason)
+
+    def normalized_target_class(self) -> str:
+        text = (self.target_class or "unknown").strip().lower()
+        if text in {"bird", "drone", "unknown", "irrelevant"}:
+            return text
+        if text in {"none", "no_detection", ""}:
+            return "unknown"
+        return "irrelevant"
+
+    def enable_sound_for_class(self, target_class: str) -> bool:
+        if not bool(self.get_parameter("enable_sound_task").value):
+            return False
+        classes = {str(v).strip().lower() for v in self.get_parameter("deterrence_classes").value}
+        return target_class.strip().lower() in classes
 
     def handle_sound_task(self) -> None:
         self.sound_request_pub.publish(Bool(data=True))
+        if self.state == MissionState.SOUND_TASK_REQUESTED:
+            self.set_state(MissionState.SOUND_TASK_RUNNING, "sound_task_running")
+            return
         if self.sound_task_done:
             self.sound_request_pub.publish(Bool(data=False))
+            self.camera_aim_request_pub.publish(Bool(data=False))
             self.set_state(MissionState.SOUND_TASK_DONE, "sound_task_done")
         elif self._now() - self.state_enter_time > float(self.get_parameter("sound_task_timeout_sec").value):
             self.sound_request_pub.publish(Bool(data=False))
-            self.set_state(MissionState.SOUND_TASK_DONE, "sound_task_timeout_safe_completion")
+            self.camera_aim_request_pub.publish(Bool(data=False))
+            self.set_state(MissionState.SOUND_TASK_TIMEOUT, "sound_task_timeout_safe_completion")
 
     def return_to_interrupted_waypoint(self) -> None:
         if self.interrupted_goal is None:
+            self.camera_aim_request_pub.publish(Bool(data=False))
             self.start_post_target_resume_cooldown("no_interrupted_goal")
             self.set_state(MissionState.RESUME_PATROL, "no_interrupted_goal")
             return
+        self.camera_aim_request_pub.publish(Bool(data=False))
         self.send_nav_goal(
             self.interrupted_goal,
             NavGoalType.RETURN_TO_INTERRUPTED_WAYPOINT,
@@ -535,7 +700,8 @@ class MissionPatrolManagerNode(Node):
     def handle_stop(self, reason: str) -> None:
         self.cancel_active_goal(reason)
         self.sound_request_pub.publish(Bool(data=False))
-        self.set_state(MissionState.EMERGENCY_STOPPED, reason)
+        self.camera_aim_request_pub.publish(Bool(data=False))
+        self.set_state(MissionState.EMERGENCY_STOP, reason)
 
     def send_nav_goal(
         self,
@@ -612,6 +778,9 @@ class MissionPatrolManagerNode(Node):
         elif goal_type == NavGoalType.RADAR_TARGET:
             self.consecutive_target_failures = 0
             self.set_state(MissionState.TARGET_REACHED, "target_goal_reached")
+        elif goal_type == NavGoalType.TARGET_INSPECTION:
+            self.consecutive_target_failures = 0
+            self.set_state(MissionState.TARGET_REACHED, "inspection_offset_goal_reached")
         elif goal_type == NavGoalType.RETURN_TO_INTERRUPTED_WAYPOINT:
             self.consecutive_target_failures = 0
             if self.interrupted_index is not None:
@@ -637,7 +806,7 @@ class MissionPatrolManagerNode(Node):
         self.goal_handle = None
         self.active_goal_type = NavGoalType.NONE
         self.active_goal_pose = None
-        if failed_goal_type == NavGoalType.RADAR_TARGET:
+        if failed_goal_type in {NavGoalType.RADAR_TARGET, NavGoalType.TARGET_INSPECTION}:
             self.consecutive_target_failures += 1
             self.sound_request_pub.publish(Bool(data=False))
             self.start_post_target_resume_cooldown(f"target_goal_failed {reason}")
@@ -673,7 +842,7 @@ class MissionPatrolManagerNode(Node):
         timeout = float(self.get_parameter("nav2_result_timeout_sec").value)
         if self.active_goal_type == NavGoalType.PATROL:
             timeout = float(self.get_parameter("patrol_goal_timeout_sec").value)
-        elif self.active_goal_type == NavGoalType.RADAR_TARGET:
+        elif self.active_goal_type in {NavGoalType.RADAR_TARGET, NavGoalType.TARGET_INSPECTION}:
             timeout = float(self.get_parameter("target_mission_timeout_sec").value)
         if self._now() - self.goal_start_time > timeout:
             self.cancel_active_goal("goal_timeout")
@@ -695,6 +864,7 @@ class MissionPatrolManagerNode(Node):
         self.object_goal_active = False
         self.object_goal = None
         self.sound_request_pub.publish(Bool(data=False))
+        self.camera_aim_request_pub.publish(Bool(data=False))
         self.target_interrupt_locked = True
         self.post_target_resume_cooldown_until = 0.0
         if self.active_goal_type != NavGoalType.NONE or self.goal_handle is not None:
@@ -711,7 +881,7 @@ class MissionPatrolManagerNode(Node):
     def target_mission_active(self) -> bool:
         # 역할: target 접근, 재분류, 음향 업무, interrupted waypoint 복귀를 하나의 원자적 임무로 본다.
         # 이 구간에서 반복 radar 좌표가 들어와도 현재 임무를 깨지 않아야 순찰 복귀가 보장된다.
-        return self.active_goal_type == NavGoalType.RADAR_TARGET or self.state in TARGET_MISSION_STATES
+        return self.active_goal_type in {NavGoalType.RADAR_TARGET, NavGoalType.TARGET_INSPECTION} or self.state in TARGET_MISSION_STATES
 
     def in_post_target_resume_cooldown(self) -> bool:
         # 역할: target mission 완료 직후 같은 객체가 계속 publish되어 즉시 재진입하는 것을 막는다.
@@ -727,7 +897,7 @@ class MissionPatrolManagerNode(Node):
             return True
         if self.in_post_target_resume_cooldown():
             return True
-        if self.active_goal_type == NavGoalType.RADAR_TARGET:
+        if self.active_goal_type in {NavGoalType.RADAR_TARGET, NavGoalType.TARGET_INSPECTION}:
             return True
         self.target_interrupt_locked = False
         return False

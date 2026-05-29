@@ -25,11 +25,11 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription(
         [
-            DeclareLaunchArgument("world", default_value=os.path.join(ugv_tools_share, "worlds", "waver_flat.world")),
+            DeclareLaunchArgument("world", default_value=os.path.join(ugv_share, "worlds", "ugv_world.world")),
             DeclareLaunchArgument("model", default_value="ugv_rover"),
             DeclareLaunchArgument("use_gui", default_value="false"),
             DeclareLaunchArgument("spawn_robot", default_value="true"),
-            DeclareLaunchArgument("use_minimal_model", default_value="true"),
+            DeclareLaunchArgument("use_minimal_model", default_value="false"),
             DeclareLaunchArgument("spawn_birds", default_value="true"),
             DeclareLaunchArgument("require_scan", default_value="false"),
             DeclareLaunchArgument("enable_test_publishers", default_value="true"),
@@ -94,7 +94,7 @@ def generate_launch_description() -> LaunchDescription:
                     Node(
                         package="gazebo_ros",
                         executable="spawn_entity.py",
-                        arguments=["-entity", "bird_test_target", "-file", bird_sdf, "-x", "2.0", "-y", "1.0", "-z", "4.0"],
+                        arguments=["-entity", "bird_test_target", "-file", bird_sdf, "-x", "2.0", "-y", "1.0", "-z", "3.2"],
                         output="screen",
                     )
                 ],
@@ -168,6 +168,7 @@ def generate_launch_description() -> LaunchDescription:
                         "manual_cmd_vel_topic": "/waver/manual_cmd_vel",
                         "auto_cmd_vel_topic": "/waver/cmd_vel_nav2",
                         "publish_direct_cmd_vel": False,
+                        "profile": "gazebo",
                         "manual_override_returns_to_auto": True,
                         "auto_mode_strategy": "mission_nav2",
                         "lidar_required": False,

@@ -33,7 +33,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("reveal_duration_sec", default_value="12.0"),
-            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws/FSD_Vehicle/maps"),
+            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws2/FSD_Vehicle/maps"),
             DeclareLaunchArgument("save_basename", default_value="waver_latest_map"),
             LogInfo(
                 msg=(

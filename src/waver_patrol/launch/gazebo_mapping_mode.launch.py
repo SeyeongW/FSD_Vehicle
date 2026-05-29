@@ -21,10 +21,10 @@ def generate_launch_description() -> LaunchDescription:
     default_map = os.path.join(ugv_share, "maps", "map.yaml")
     default_mapping_command = (
         "ros2 launch waver_patrol waver_mapping_backend.launch.py "
-        "backend:=gmapping use_sim_time:=true use_rviz:=false "
+        "backend:=gazebo_live use_sim_time:=true use_rviz:=false "
         "start_workflow_manager:=false "
         "start_lidar_bringup:=false start_robot_pose_publisher:=false "
-        "scan_topic:=/scan"
+        "scan_topic:=/scan_slam"
     )
 
     return LaunchDescription(
@@ -35,7 +35,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("robot_sdf_file", default_value=default_robot),
             DeclareLaunchArgument("source_map_yaml", default_value=default_map),
             DeclareLaunchArgument("reveal_duration_sec", default_value="12.0"),
-            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws/FSD_Vehicle/maps"),
+            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws2/FSD_Vehicle/maps"),
             DeclareLaunchArgument("save_basename", default_value="waver_latest_map"),
             DeclareLaunchArgument("demo_script", default_value=""),
             DeclareLaunchArgument("demo_close_on_finish", default_value="false"),
@@ -77,6 +77,32 @@ def generate_launch_description() -> LaunchDescription:
                     "publish_static_map_to_odom_tf": "false",
                     "default_mode": "STANDBY",
                 }.items(),
+            ),
+            Node(
+                package="waver_patrol",
+                executable="scan_republisher_node",
+                name="scan_slam_republisher_node",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "input_topic": "/scan",
+                        "output_topic": "/scan_slam",
+                    }
+                ],
+            ),
+            Node(
+                package="waver_patrol",
+                executable="scan_republisher_node",
+                name="scan_safety_republisher_node",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "input_topic": "/scan",
+                        "output_topic": "/scan_safety",
+                    }
+                ],
             ),
             Node(
                 package="waver_patrol",

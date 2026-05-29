@@ -1,0 +1,10 @@
+column,description
+timestamp,ROS time in seconds
+experiment_id,Unique experiment id
+source,Command source
+linear_x,Input or final linear x
+angular_z,Input or final angular z
+limited_linear_x,Limited linear x
+limited_angular_z,Limited angular z
+active_mode,Current Waver mode
+safety_state,Current safety state

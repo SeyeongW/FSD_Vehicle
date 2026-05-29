@@ -110,6 +110,10 @@ class MovingObjectMotionFilterNode(Node):
         self.declare_parameter("track_match_gate_m", 1.2)
         self.declare_parameter("max_sample_step_m", 2.0)
         self.declare_parameter("reset_on_track_jump", True)
+        self.declare_parameter("lock_on_first_valid_target", True)
+        self.declare_parameter("locked_target_gate_m", 1.0)
+        self.declare_parameter("locked_target_lost_timeout_sec", 3.0)
+        self.declare_parameter("clear_locked_target_when_static_sec", 8.0)
         self.declare_parameter("stale_timeout_sec", 1.0)
         self.declare_parameter("enable_range_filter", False)
         self.declare_parameter("max_target_distance_m", 50.0)
@@ -130,6 +134,7 @@ class MovingObjectMotionFilterNode(Node):
         self.declare_parameter("classification_state_topic", "/waver/classification_state")
 
         self.track = TrackState()
+        self.track_id = 0
         self.last_msg_time = 0.0
         self.last_frame_id = "map"
         self.last_raw_frame_id = "sensor"
@@ -140,6 +145,11 @@ class MovingObjectMotionFilterNode(Node):
         self.robot_yaw = 0.0
         self.mission_state = ""
         self.yaw_alignment_state = ""
+        self.locked_target_active = False
+        self.locked_target_id = 0
+        self.locked_target_pose: Pose | None = None
+        self.lock_lost_since = 0.0
+        self.lock_invalid_since = 0.0
 
         self.point_pub = self.create_publisher(PointStamped, str(self.get_parameter("target_point_topic").value), 10)
         self.active_pub = self.create_publisher(Bool, str(self.get_parameter("target_active_topic").value), 10)
@@ -152,6 +162,15 @@ class MovingObjectMotionFilterNode(Node):
         self.marker_pub = self.create_publisher(MarkerArray, str(self.get_parameter("marker_topic").value), 10)
         self.ego_debug_pub = self.create_publisher(String, str(self.get_parameter("ego_debug_topic").value), 10)
         self.height_debug_pub = self.create_publisher(String, str(self.get_parameter("height_debug_topic").value), 10)
+        self.lidar_target_id_pub = self.create_publisher(String, "/waver/lidar_target_id", 10)
+        self.lidar_target_pose_sensor_pub = self.create_publisher(PoseStamped, "/waver/lidar_target_pose_sensor", 10)
+        self.lidar_target_pose_map_pub = self.create_publisher(PoseStamped, "/waver/lidar_target_pose_map", 10)
+        self.lidar_target_height_pub = self.create_publisher(Float32, "/waver/lidar_target_height_m", 10)
+        self.lidar_target_range_pub = self.create_publisher(Float32, "/waver/lidar_target_range_m", 10)
+        self.lidar_target_velocity_pub = self.create_publisher(Float32, "/waver/lidar_target_velocity_mps", 10)
+        self.lidar_target_dynamic_valid_pub = self.create_publisher(Bool, "/waver/lidar_target_dynamic_valid", 10)
+        self.lidar_target_z_valid_pub = self.create_publisher(Bool, "/waver/lidar_target_z_valid", 10)
+        self.lidar_target_state_pub = self.create_publisher(String, "/waver/lidar_target_state", 10)
         self.publish_detection_classification = bool(
             self.get_parameter("publish_detection_classification").value
         )
@@ -213,15 +232,30 @@ class MovingObjectMotionFilterNode(Node):
         self.last_frame_id = msg.header.frame_id or self.last_frame_id
         pose, reset_reason = self._select_candidate(msg.poses, raw=False)
         if pose is None:
+            if self.locked_target_active and reset_reason.startswith("locked_target_lost"):
+                if self.lock_lost_since <= 0.0:
+                    self.lock_lost_since = now
+                if (
+                    now - self.lock_lost_since
+                    > float(self.get_parameter("locked_target_lost_timeout_sec").value)
+                    and not self._mission_holds_target_lock()
+                ):
+                    self._clear_target_lock("lost_timeout")
+                fallback_pose = self.track.samples[-1].pose if self.track.samples else self.locked_target_pose
+                self._publish(False, reset_reason, fallback_pose, {})
+                return
             self.track = TrackState()
+            self.track_id += 1
             self._publish(False, "NO_VALID_OBJECT", None, {})
             return
         if reset_reason:
             self.track = TrackState(raw_samples=self.track.raw_samples)
+            self.track_id += 1
         self._append_sample(now, pose)
         metrics = self._metrics()
         valid, classification, gates = self._classify(pose, metrics)
         self.track.valid = valid
+        self._update_target_lock(now, pose, valid, classification)
         state = self._state_text(valid, classification, gates, metrics, reset_reason)
         self._publish(valid, state, pose, {**metrics, **gates, "classification": classification})
 
@@ -241,17 +275,69 @@ class MovingObjectMotionFilterNode(Node):
                 continue
             candidates.append(pose)
         if not candidates:
+            if not raw and self.locked_target_active:
+                return None, "locked_target_lost no_candidates"
             return None, ""
         samples = self.track.raw_samples if raw else self.track.samples
         if not samples:
             return min(candidates, key=lambda p: math.hypot(float(p.position.x), float(p.position.y))), ""
         last = samples[-1].pose
+        if not raw and self.locked_target_active:
+            lock_reference = self.locked_target_pose if self.locked_target_pose is not None else last
+            best_locked = min(candidates, key=lambda p: _distance(lock_reference, p))
+            locked_step = _distance(lock_reference, best_locked)
+            if locked_step > float(self.get_parameter("locked_target_gate_m").value):
+                return None, f"locked_target_lost gate_step={locked_step:.3f}m"
+            return best_locked, "locked_target_tracking"
         best = min(candidates, key=lambda p: _distance(last, p))
         step = _distance(last, best)
         if not raw and (step > float(self.get_parameter("track_match_gate_m").value) or step > float(self.get_parameter("max_sample_step_m").value)):
             if bool(self.get_parameter("reset_on_track_jump").value):
                 return best, f"association_jump_{step:.3f}m"
         return best, ""
+
+    def _update_target_lock(self, now: float, pose: Pose, valid: bool, classification: str) -> None:
+        if not bool(self.get_parameter("lock_on_first_valid_target").value):
+            return
+        if valid:
+            if not self.locked_target_active:
+                self.locked_target_id = self.track_id
+            self.locked_target_active = True
+            self.locked_target_pose = _copy_pose(pose)
+            self.lock_lost_since = 0.0
+            self.lock_invalid_since = 0.0
+            return
+        if not self.locked_target_active:
+            return
+        if self._mission_holds_target_lock():
+            return
+        if self.lock_invalid_since <= 0.0:
+            self.lock_invalid_since = now
+        if now - self.lock_invalid_since > float(self.get_parameter("clear_locked_target_when_static_sec").value):
+            self._clear_target_lock(f"invalid_static classification={classification}")
+
+    def _clear_target_lock(self, reason: str) -> None:
+        self.locked_target_active = False
+        self.locked_target_pose = None
+        self.lock_lost_since = 0.0
+        self.lock_invalid_since = 0.0
+        self.track = TrackState(raw_samples=self.track.raw_samples)
+        self.track_id += 1
+        self.state_pub.publish(String(data=f"TARGET_LOCK_CLEARED reason={reason} next_track_id={self.track_id}"))
+
+    def _mission_holds_target_lock(self) -> bool:
+        state = self.mission_state.upper()
+        return any(
+            token in state
+            for token in (
+                "TARGET",
+                "INSPECTION",
+                "CAMERA",
+                "CLASSIFIED",
+                "SOUND",
+                "RETURN_TO_INTERRUPTED_WAYPOINT",
+            )
+        )
 
     def _append_sample(self, now: float, pose: Pose) -> None:
         copied = _copy_pose(pose)
@@ -389,6 +475,8 @@ class MovingObjectMotionFilterNode(Node):
             f"ego_motion_compensated={bool(gates['ego_motion_compensated'])} "
             f"classification={classification} "
             f"elevated_dynamic_target_valid={valid} valid={valid} "
+            f"target_lock={'LOCKED' if self.locked_target_active else 'UNLOCKED'} "
+            f"locked_target_id={self.locked_target_id if self.locked_target_active else self.track_id} "
             f"reset={reset_reason or 'none'}"
         )
 
@@ -403,6 +491,9 @@ class MovingObjectMotionFilterNode(Node):
             self.dynamic_motion_pub.publish(Float32(data=float(metrics["compensated_motion_m"])))
             self.ego_debug_pub.publish(String(data=state))
             self.height_debug_pub.publish(String(data=state))
+            target_id = self.locked_target_id if self.locked_target_active else self.track_id
+            self.lidar_target_id_pub.publish(String(data=f"lidar_track_{target_id}"))
+            self.lidar_target_state_pub.publish(String(data=state))
             self._publish_detection_classification(valid, state)
         except Exception as exc:
             if rclpy.ok():
@@ -434,6 +525,17 @@ class MovingObjectMotionFilterNode(Node):
             if valid:
                 self.point_pub.publish(point)
             self.track_pub.publish(stamped)
+            self.lidar_target_pose_map_pub.publish(stamped)
+            self.lidar_target_pose_sensor_pub.publish(stamped)
+            height = float(pose.position.z)
+            range_m = math.sqrt(
+                float(pose.position.x) ** 2 + float(pose.position.y) ** 2 + float(pose.position.z) ** 2
+            )
+            self.lidar_target_height_pub.publish(Float32(data=height))
+            self.lidar_target_range_pub.publish(Float32(data=range_m))
+            self.lidar_target_velocity_pub.publish(Float32(data=float(metrics["compensated_velocity_mps"])))
+            self.lidar_target_dynamic_valid_pub.publish(Bool(data=bool(info.get("dynamic_filter_pass", False))))
+            self.lidar_target_z_valid_pub.publish(Bool(data=bool(info.get("z_valid", False))))
             if bool(self.get_parameter("publish_markers").value):
                 self.marker_pub.publish(self._markers(valid, pose, str(info.get("classification", "unknown"))))
         except Exception as exc:
@@ -454,7 +556,7 @@ class MovingObjectMotionFilterNode(Node):
         confidence = float(self.get_parameter("detected_target_confidence").value) if valid else 0.0
         self.target_class_pub.publish(String(data=target_class))
         self.target_confidence_pub.publish(Float32(data=confidence))
-        self.bird_confirmed_pub.publish(Bool(data=bool(valid)))
+        self.bird_confirmed_pub.publish(Bool(data=bool(valid and target_class.strip().lower() == "bird")))
         self.classification_state_pub.publish(
             String(
                 data=(

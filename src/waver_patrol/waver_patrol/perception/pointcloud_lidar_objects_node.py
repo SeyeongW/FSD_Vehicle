@@ -69,6 +69,7 @@ class PointCloudLidarObjectsNode(Node):
         else:
             self.tf_buffer = None
             self.tf_listener = None
+        self._axis_type_warned: set[str] = set()
         self.create_subscription(PointCloud2, str(self.get_parameter("pointcloud_topic").value), self.cloud_callback, 5)
 
     def cloud_callback(self, msg: PointCloud2) -> None:
@@ -184,8 +185,13 @@ class PointCloudLidarObjectsNode(Node):
         ):
             value = self.get_parameter(name).value
             if not isinstance(value, str):
-                self._publish_state(f"PARAM_ERROR {name} must be string, got {type(value).__name__}: {value}")
-                return None
+                if name not in self._axis_type_warned:
+                    self.get_logger().warn(
+                        f"{name} must be string, got {type(value).__name__}: {value}; "
+                        f"falling back to {default!r}"
+                    )
+                    self._axis_type_warned.add(name)
+                value = default
             axis = value.strip().lower()
             if axis not in {"x", "y", "z", "-x", "-y", "-z"}:
                 self._publish_state(f"PARAM_ERROR {name} invalid axis={value!r}; expected one of x,y,z,-x,-y,-z")

@@ -13,20 +13,22 @@ This document maps Waver CSV logs to paper-ready tables and plots.
 - Average speed/angular speed: `cmd_vel.csv`
 - Safety hard stop count: `safety_state.csv`
 
-## Radar Target Response
+## LiDAR-First Target Response
 
-- Radar target to mission transition latency: `radar_targets.csv` + `mission_events.csv`
-- Radar target to Nav2 goal latency: `radar_targets.csv` + `nav2_feedback.csv`
-- Radar target to arrival latency: `target_mission_summary.csv`
-- Radar confidence vs success: `radar_targets.csv.confidence` + `target_mission_summary.csv.navigation_success`
-- Doppler/motion vs success: `radar_targets.csv.doppler_mps`
+- Height >= 3 m dynamic target acceptance: `lidar_targets.csv.accepted_as_aerial_target`
+- LiDAR target to inspection goal latency: `inspection_goals.csv.candidate_to_goal_latency_ms`
+- Offset goal success: `inspection_goals.csv.goal_publish_success`
+- Approach duration and final standoff: `target_approach.csv`
+- Reject counts: `lidar_targets.csv.reject_reason`, `inspection_goals.csv.goal_reject_reason`
+- Radar logs remain optional legacy context in `radar_targets.csv`.
 
 ## Perception
 
 - 3D LiDAR re-detection success: `lidar_targets.csv.accepted_as_aerial_target`
+- Camera/gimbal alignment success: `camera_alignment.csv.centered`
+- Camera alignment latency and pointing error: `camera_alignment.csv`
 - Classification latency: `camera_classification.csv.classification_latency_ms`
-- Bird confidence distribution: `camera_classification.csv.confidence`
-- Unknown/false target ratio: `camera_classification.csv.target_class`
+- Bird/drone/unknown/irrelevant distribution: `camera_classification.csv.target_class`
 
 ## Deterrence Task
 
@@ -38,7 +40,7 @@ This document maps Waver CSV logs to paper-ready tables and plots.
 ## Mission Recovery
 
 - Interrupted waypoint return success: `target_mission_summary.csv.resumed_patrol`
-- Return-to-patrol time: `target_mission_summary.csv.return_to_waypoint_*`
+- Return-to-patrol time: `return_to_patrol.csv`, `target_mission_summary.csv.return_to_waypoint_*`
 - Battery interrupt count: `experiment_summary.csv.battery_return_count`
 
 ## Safety
@@ -56,10 +58,17 @@ This document maps Waver CSV logs to paper-ready tables and plots.
 
 ## Recommended Figures
 
-1. Robot XY trajectory with waypoint and radar target markers.
+1. Robot XY trajectory with waypoint, LiDAR target, inspection goal, and classification point.
 2. Mission state timeline.
-3. Radar target response latency box plot.
+3. LiDAR detection-to-goal and approach latency box plot.
 4. Safety state duration stacked bar.
 5. Battery voltage/percentage over mission time.
 6. Classification confidence histogram.
 7. Sound task request/completion timeline.
+
+## Scripts
+
+- `scripts/compute_paper_metrics.py <experiment_result_dir>` writes `paper_metrics_summary.csv/json`.
+- `scripts/plot_paper_metrics.py <experiment_result_dir>` writes `plots/*.png`.
+- `scripts/export_paper_tables.py <experiment_result_dir>` writes grouped CSV tables.
+- Metrics that require manual labels or external ground truth are reported as `N/A - no ground truth`.
