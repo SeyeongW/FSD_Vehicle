@@ -264,8 +264,9 @@ speaker direction, legal/safety limits, and manual kill path have been separatel
 Battery voltage thresholds in `config/waver_bird_autonomy.yaml` are placeholders. Recalibrate
 `warning_voltage` and `critical_voltage` under actual battery load before relying on return-home.
 
-Waypoint coordinates in `waypoints/waver_bird_patrol_demo.yaml` are odom-frame examples. Real
-outdoor patrol needs coordinates verified against the actual map/localization origin.
+Waypoint coordinates in `waypoints/waver_bird_patrol_demo.yaml` are a conservative 1 m x 1 m
+odom-frame square around the start pose. Real outdoor patrol still needs coordinates verified
+against the actual map/localization origin before wheel-on testing.
 
 ## Final Real-Robot Safety Checklist
 
@@ -317,7 +318,8 @@ must not publish final `/cmd_vel` directly. Nav2 output is remapped to
 
 ### Mission Behavior
 
-`mission_patrol_manager_node` repeats `waypoints/waver_nav2_patrol_mission.yaml`.
+`mission_patrol_manager_node` repeats `waypoints/waver_nav2_patrol_mission.yaml`, which is
+configured as a conservative 1 m x 1 m square for initial real-robot tests.
 When radar/object mission goal appears, it stores the interrupted waypoint,
 sends the object goal through Nav2, waits for classification, requests the safe
 sound stub only if the target is a bird, returns to the interrupted waypoint,

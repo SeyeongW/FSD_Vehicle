@@ -1,6 +1,7 @@
-# Odom-frame example only. Edit these coordinates at the real field after
-# confirming /odom or localization origin, axes, and safe clearances.
-route_name: "waver_bird_patrol_demo"
+# Odom-frame 1 m square around the current start pose. Edit these coordinates
+# at the real field after confirming /odom or localization origin, axes, and
+# safe clearances.
+route_name: "waver_bird_patrol_1m_square"
 frame_id: "odom"
 loop_count: -1
 home:
@@ -14,20 +15,25 @@ charge:
   y: -0.4
   yaw_deg: 180.0
 waypoints:
-  - name: "watch_gate"
-    x: 1.0
+  - name: "square_origin"
+    x: 0.0
     y: 0.0
     yaw_deg: 0.0
     dwell_s: 1.0
-  - name: "watch_tree_line"
+  - name: "square_east_1m"
     x: 1.0
-    y: 1.0
+    y: 0.0
     yaw_deg: 90.0
     dwell_s: 1.0
-  - name: "watch_open_field"
-    x: 0.0
+  - name: "square_north_east_1m"
+    x: 1.0
     y: 1.0
     yaw_deg: 180.0
+    dwell_s: 1.0
+  - name: "square_north_1m"
+    x: 0.0
+    y: 1.0
+    yaw_deg: -90.0
     dwell_s: 1.0
 failure_policy:
   waypoint_retry: 2

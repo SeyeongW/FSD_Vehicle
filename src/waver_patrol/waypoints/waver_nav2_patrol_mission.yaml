@@ -1,10 +1,10 @@
 frame_id: "map"
-route_name: "waver_3m_square_patrol"
+route_name: "waver_1m_square_patrol"
 loop: true
-experiment_tags: ["bird_deterrence", "radar_guided", "nav2_patrol", "3m_square_patrol"]
+experiment_tags: ["bird_deterrence", "radar_guided", "nav2_patrol", "1m_square_patrol", "low_speed_real_ready"]
 
-# 3 m x 3 m map-frame square around the start pose. Measure and edit these
-# coordinates after real SLAM/localization are stable at the field.
+# 1 m x 1 m map-frame square starting from the current patrol origin.
+# Measure and edit the origin after real SLAM/localization are stable at the field.
 home:
   name: "home"
   x: 0.0
@@ -13,32 +13,32 @@ home:
 
 charge:
   name: "charge"
-  x: -1.5
-  y: -1.5
+  x: 0.0
+  y: 0.0
   yaw_deg: 180.0
 
 waypoints:
-  - name: "square_sw"
-    x: -1.5
-    y: -1.5
+  - name: "square_origin"
+    x: 0.0
+    y: 0.0
     yaw_deg: 0.0
     dwell_s: 2.0
     task: ["observe"]
-  - name: "square_se"
-    x: 1.5
-    y: -1.5
+  - name: "square_east_1m"
+    x: 1.0
+    y: 0.0
     yaw_deg: 90.0
     dwell_s: 2.0
     task: ["observe"]
-  - name: "square_ne"
-    x: 1.5
-    y: 1.5
+  - name: "square_north_east_1m"
+    x: 1.0
+    y: 1.0
     yaw_deg: 180.0
     dwell_s: 2.0
     task: ["observe"]
-  - name: "square_nw"
-    x: -1.5
-    y: 1.5
+  - name: "square_north_1m"
+    x: 0.0
+    y: 1.0
     yaw_deg: -90.0
     dwell_s: 2.0
     task: ["observe"]
