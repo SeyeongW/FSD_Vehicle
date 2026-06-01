@@ -105,21 +105,23 @@ class BirdRuntime:
     offset_z: float = 0.0
 
     initialized: bool = False
+    circle_angle: float = 0.0
 
 
 class BirdManager(Node):
     def __init__(self):
         super().__init__('bird_manager')
 
-        # 50x50 범위 (0,0 중심)
-        self.x_min = -15.0
-        self.x_max = 15.0
-        self.y_min = -15.0
-        self.y_max = 15.0
+        # 실제 맵 벽: ±7.625m → 벽 안쪽 0.75m 여유를 두고 ±6.8m로 설정
+        # (SetEntityState는 물리 충돌을 우회하므로 코드에서 직접 경계 강제 필요)
+        self.x_min = -6.8
+        self.x_max =  6.8
+        self.y_min = -6.8
+        self.y_max =  6.8
 
-        # 낮춘 고도 범위
-        self.z_min = 5.0
-        self.z_max = 8.0
+        # 고도 범위 (맵 벽 높이 2m 위)
+        self.z_min = 2.5
+        self.z_max = 5.0
 
         self.dt = 0.08
         self.busy = False
@@ -135,7 +137,11 @@ class BirdManager(Node):
         self.max_roll_rate = math.radians(45.0)
         self.bank_from_turn_gain = 0.45
 
-        self.slowdown_radius_single = 26.0
+        # 원형 비행: 벽(±7.625m)에서 2m 안쪽 → 반지름 5.5m
+        self.circle_radius = 5.5
+        self.circle_radial_gain = 2.5   # 원 궤도 이탈 복원력
+
+        self.slowdown_radius_single = 8.0
         self.slowdown_radius_swarm = 18.0
         self.goal_damping_gain = 0.18
         self.vertical_damping_gain = 0.20
@@ -161,7 +167,7 @@ class BirdManager(Node):
         self.state_fail_count = {}
 
         self.birds = [
-            BirdConfig('bird_single', False, 3.0, 0.75, 7.0, 0.0, 0.0),
+            BirdConfig('bird_single', False, 1.0, 0.3, 3.0, 0.0, 0.0),
             # BirdConfig('bird_swarm_1', True, 2.5, 0.75, 4.5, 22.0, 7.0),
             # BirdConfig('bird_swarm_2', True, 2.5, 0.75, 4.5, 22.0, 7.0),
             # BirdConfig('bird_swarm_3', True, 2.5, 0.75, 4.5, 22.0, 7.0),
@@ -208,8 +214,12 @@ class BirdManager(Node):
         self.bird_pose_pub = self.create_publisher(PoseStamped, '/bird/nearest_pose', 10)
         self.bird_visible_pub = self.create_publisher(Bool, '/bird/visible', 10)
 
-        self.pick_new_target('bird_single')
         self.pick_new_swarm_target()
+
+        # 단독 새의 초기 웨이포인트 설정 (기본값 0,0,0 = 지면이므로 반드시 초기화)
+        for bird in self.birds:
+            if not bird.is_swarm:
+                self.pick_new_target(bird.name)
 
         self.timer = self.create_timer(self.dt, self.update_all)
         self.get_logger().info('bird_manager started')
@@ -366,6 +376,42 @@ class BirdManager(Node):
                 'vel': (rt.vx, rt.vy, rt.vz),
             }
         return info
+
+    def compute_circle_velocity(self, bird, pos, vel):
+        x, y, z = pos
+        rt = self.runtime[bird.name]
+
+        # 현재 XY 반지름과 각도
+        current_r = math.sqrt(x * x + y * y)
+        if current_r < 0.1:
+            # 원점 근처: 바깥으로 밀어내기
+            rt.circle_angle = 0.0
+            return (bird.max_speed, 0.0, 0.0)
+
+        current_angle = math.atan2(y, x)
+        rt.circle_angle = current_angle
+
+        sin_a = math.sin(current_angle)
+        cos_a = math.cos(current_angle)
+
+        # 접선 방향 (반시계방향)
+        tan_vx = -sin_a * bird.max_speed
+        tan_vy = cos_a * bird.max_speed
+
+        # 반지름 오차 보정 (원 궤도 유지)
+        radial_error = self.circle_radius - current_r
+        rad_vx = cos_a * radial_error * self.circle_radial_gain
+        rad_vy = sin_a * radial_error * self.circle_radial_gain
+
+        # 고도: circle_angle 기반 완만한 사인파 진동
+        z_center = (self.z_min + self.z_max) / 2.0
+        z_amp = (self.z_max - self.z_min) / 2.0
+        z_target = z_center + z_amp * math.sin(current_angle * 1.5)
+        z_target = clamp(z_target, self.z_min, self.z_max)
+        vz = (z_target - z) * 1.5 - vel[2] * self.vertical_damping_gain
+
+        desired = (tan_vx + rad_vx, tan_vy + rad_vy, vz)
+        return vec_limit(desired, bird.max_speed * 1.1)
 
     def compute_single_seek_velocity(self, bird, pos, vel):
         rt = self.runtime[bird.name]
@@ -596,9 +642,10 @@ class BirdManager(Node):
         x, y, z = pos
         vx, vy, vz = vel
 
-        # 50x50 범위에 맞춰 margin 축소
-        margin = 5.0
-        push_gain = 1.2
+        # margin=2.0: 경계에서 2m 안쪽부터 점진적으로 밀어냄
+        # push_gain=3.0: 경계 도달 시 최대 6 m/s로 밀어냄 (max_speed 2.0을 충분히 압도)
+        margin = 2.0
+        push_gain = 3.0
 
         if x < self.x_min + margin:
             vx += (self.x_min + margin - x) * push_gain
@@ -610,10 +657,10 @@ class BirdManager(Node):
         elif y > self.y_max - margin:
             vy -= (y - (self.y_max - margin)) * push_gain
 
-        if z < self.z_min + 1.0:
-            vz += (self.z_min + 1.0 - z) * 1.5
-        elif z > self.z_max - 1.0:
-            vz -= (z - (self.z_max - 1.0)) * 1.5
+        if z < self.z_min + 0.5:
+            vz += (self.z_min + 0.5 - z) * 2.0
+        elif z > self.z_max - 0.5:
+            vz -= (z - (self.z_max - 0.5)) * 2.0
 
         return (vx, vy, vz)
 

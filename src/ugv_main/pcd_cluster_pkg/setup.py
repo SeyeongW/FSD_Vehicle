@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'cluster_node = pcd_cluster_pkg.cluster_node:main',
             'cluster_node_backup = pcd_cluster_pkg.cluster_node_backup:main',
+            'bird_yolo_node = pcd_cluster_pkg.bird_yolo_node:main',
         ],
     },
 )

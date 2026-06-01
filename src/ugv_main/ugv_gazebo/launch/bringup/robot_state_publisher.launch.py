@@ -39,16 +39,20 @@ def generate_launch_description():
         }],
         )
                 
-    # Create a Node object for the joint_state_publisher node
+    # joint_state_publisher: URDF의 모든 관절 상태를 /joint_states 로 퍼블리시.
+    # source_list에 /gazebo/joint_states 를 넣으면 Gazebo가 실제로 움직이는 관절
+    # (바퀴 4개 + 틸트)은 Gazebo 실측값을 쓰고, 나머지(pan 등 고정 관절)만 기본값을 채움.
+    # 이렇게 하면 joint_state_publisher 가 틸트 관절을 0으로 덮어쓰는 문제를 방지.
     joint_state_publisher_node = Node(
         package='joint_state_publisher',
         executable='joint_state_publisher',
         name='joint_state_publisher',
         arguments=[urdf_model_path],
         parameters=[{
-             'use_sim_time': use_sim_time
-        }],        
-        )       
+             'use_sim_time': use_sim_time,
+             'source_list': ['/gazebo/joint_states'],
+        }],
+        )
                 
     # Add the use_sim_time_arg to the LaunchDescription
     ld.add_action(use_sim_time_arg)     

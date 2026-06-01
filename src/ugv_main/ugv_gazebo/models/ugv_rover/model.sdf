@@ -432,8 +432,9 @@
     </collision>
   </link>
   
-  <link name='pt_link2'>      
+  <link name='pt_link2'>
         <pose relative_to='pt_link1_to_pt_link2'>0 0 0 0 -0 0</pose>
+        <gravity>false</gravity>
         <inertial>
           <pose>0.023763 0.01126 0.02 0 -0 0</pose>
           <mass>0.103286</mass>
@@ -468,6 +469,7 @@
   
   <link name='pt_camera_link'>
   <pose relative_to='pt_link2_to_pt_camera_link'>0 0 0 0 -0 0</pose>
+    <gravity>false</gravity>
     <inertial>
       <pose>0 0 0 0 -0 0</pose>
       <mass>0.00623651844028495</mass>
@@ -618,12 +620,26 @@
       </axis>
   </joint>     
   
-  <joint name='pt_link1_to_pt_link2' type='fixed'>
+  <!-- 틸트 관절: fixed → revolute 로 변경해 카메라 상하 각도 제어 활성화.
+       axis [0,-1,0]: 양의 각도 = 카메라가 아래를 봄, 음의 각도 = 위를 봄.
+       cluster_node 가 /set_joint_trajectory 로 이 관절을 제어함. -->
+  <joint name='pt_link1_to_pt_link2' type='revolute'>
     <pose relative_to='pt_link1'>0 0.02 0.043003 1.5708 -0 0</pose>
       <parent>pt_link1</parent>
     <child>pt_link2</child>
        <axis>
         <xyz>0 -1 0</xyz>
+        <limit>
+          <lower>-0.5233</lower>   <!-- ≈ -30° 아래 한계 -->
+          <upper>1.5708</upper>    <!-- ≈ +90° 위 한계 -->
+          <effort>5</effort>
+          <velocity>1.0</velocity>
+        </limit>
+        <dynamics>
+          <damping>0.005</damping>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>3.0</spring_stiffness>
+        </dynamics>
       </axis>
   </joint>
   
@@ -673,21 +689,33 @@
     <robot_base_frame>base_footprint</robot_base_frame>
     </plugin>
     
-    <plugin name="gazebo_ros_joint_state_publisher"
+    <!-- Gazebo 실제 관절 상태를 /gazebo/joint_states 로 퍼블리시.
+       joint_state_publisher ROS 노드는 이 토픽을 source_list 로 참조해
+       실제 값을 덮어쓰지 않고 합쳐서 /joint_states 로 전달함. -->
+  <plugin name="gazebo_ros_joint_state_publisher"
     filename="libgazebo_ros_joint_state_publisher.so">
-
   <ros>
-    <!-- Add a namespace -->
-    <!-- Remap the default topic -->
-    <remapping>joint_states:=joint_states</remapping>
+    <remapping>joint_states:=/gazebo/joint_states</remapping>
   </ros>
-  <!-- Update rate in Hertz -->
-  <update_rate>2</update_rate>
-  <!-- Name of joints in the model whose states will be published. -->
+  <update_rate>20</update_rate>
   <joint_name>left_up_wheel_link_joint</joint_name>
   <joint_name>right_up_wheel_link_joint</joint_name>
   <joint_name>left_down_wheel_link_joint</joint_name>
-  <joint_name>right_down_wheel_link_joint</joint_name>  
+  <joint_name>right_down_wheel_link_joint</joint_name>
+  <joint_name>pt_link1_to_pt_link2</joint_name>
   </plugin>
+
+  <!-- 카메라 틸트 관절 위치 제어 플러그인.
+       /set_joint_trajectory (trajectory_msgs/JointTrajectory) 토픽을 구독해
+       pt_link1_to_pt_link2 관절 각도를 직접 설정함.
+       cluster_node 가 이 토픽으로 틸트 명령을 보냄. -->
+  <plugin name="gazebo_ros_joint_pose_trajectory"
+          filename="libgazebo_ros_joint_pose_trajectory.so">
+    <ros>
+      <remapping>set_joint_trajectory:=/set_joint_trajectory</remapping>
+    </ros>
+    <update_rate>20</update_rate>
+  </plugin>
+
   </model>
 </sdf>

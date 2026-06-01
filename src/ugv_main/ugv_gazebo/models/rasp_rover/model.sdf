@@ -361,8 +361,11 @@
     </collision>
   </link>
   
-  <link name='pt_link2'>      
+  <link name='pt_link2'>
         <pose relative_to='pt_link1_to_pt_link2'>0 0 0 0 -0 0</pose>
+        <!-- 중력 비활성화: 팬틸트 모터가 위치를 유지한다고 가정.
+             gravity=true 이면 관절이 자유 회전해 물리 시뮬레이션이 불안정해짐. -->
+        <gravity>false</gravity>
         <inertial>
           <pose>0.023763 0.01126 0.02 0 -0 0</pose>
           <mass>0.103286</mass>
@@ -384,19 +387,20 @@
           </mesh>
       </geometry>
     </visual>
+    <!-- STL 메시 collision → 단순 박스로 교체.
+         revolute 관절 + 복잡한 메시 collision 조합이 Gazebo Ogre AABB 크래시를 유발.
+         카메라 마운트 부품이므로 충돌 정밀도 불필요. -->
     <collision name='pt_link2_collision'>
-      <pose>0 0 0 0 -0 0</pose>
+      <pose>0.026 0.014 0.020 0 0 0</pose>
       <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/rasp_rover/pt_link2.stl</uri>
-          </mesh>
+        <box><size>0.080 0.055 0.036</size></box>
       </geometry>
     </collision>
   </link>
   
   <link name='pt_camera_link'>
   <pose relative_to='pt_link2_to_pt_camera_link'>0 0 0 0 -0 0</pose>
+    <gravity>false</gravity>
     <inertial>
       <pose>0 0 0 0 -0 0</pose>
       <mass>0.00623651844028495</mass>
@@ -418,15 +422,7 @@
           </mesh>
       </geometry>
     </visual>
-    <collision name='pt_camera_link_collision'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/rasp_rover/pt_camera_link.stl</uri>
-          </mesh>
-      </geometry>
-    </collision>
+    <!-- pt_camera_link collision 제거: 카메라 본체 충돌 불필요 -->
       <sensor name="pt_camera" type="camera">
         <pose>0 0 0 0 -0 0</pose>
         <always_on>true</always_on>
@@ -537,12 +533,31 @@
       </axis>
   </joint>     
   
-  <joint name='pt_link1_to_pt_link2' type='fixed'>
+  <!-- 틸트 관절: fixed → revolute 로 변경해 카메라 상하 각도 제어 활성화.
+       axis [0,-1,0]: 양의 각도 = 카메라가 아래를 봄, 음의 각도 = 위를 봄.
+       cluster_node 가 /set_joint_trajectory 로 이 관절을 제어함. -->
+  <!-- 틸트 관절: gravity=false + dynamics 제거로 물리 안정성 확보.
+       damping=0.3 은 관성(3e-5 kg·m²) 대비 너무 커서 ODE stiffness 폭발을 유발.
+       gravity=false 이므로 외력이 없어 damping 없어도 위치가 유지됨. -->
+  <!-- 틸트 관절.
+       URDF axis=[0,0,1] 은 joint frame 기준. SDF 도 joint frame 기준이므로 동일하게 [0,0,1].
+       이전 [0,-1,0] 은 실제로 pan(좌우) 방향이라 카메라가 좌우로 흘렀음.
+       damping=0.005: 수치 오차로 생기는 초기 속도를 감쇠. ODE 안정 한계(0.06) 훨씬 이하. -->
+  <joint name='pt_link1_to_pt_link2' type='revolute'>
     <pose relative_to='pt_link1'>0 0.02 0.043003 1.5708 -0 0</pose>
       <parent>pt_link1</parent>
     <child>pt_link2</child>
        <axis>
-        <xyz>0 -1 0</xyz>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-0.5233</lower>
+          <upper>1.5708</upper>
+          <effort>10</effort>
+          <velocity>2.0</velocity>
+        </limit>
+        <dynamics>
+          <damping>0.005</damping>
+        </dynamics>
       </axis>
   </joint>
   
@@ -592,21 +607,29 @@
     <robot_base_frame>base_footprint</robot_base_frame>
     </plugin>
     
-    <plugin name="gazebo_ros_joint_state_publisher"
+  <plugin name="gazebo_ros_joint_state_publisher"
     filename="libgazebo_ros_joint_state_publisher.so">
-
   <ros>
-    <!-- Add a namespace -->
-    <!-- Remap the default topic -->
-    <remapping>joint_states:=joint_states</remapping>
+    <remapping>joint_states:=/gazebo/joint_states</remapping>
   </ros>
-  <!-- Update rate in Hertz -->
-  <update_rate>2</update_rate>
-  <!-- Name of joints in the model whose states will be published. -->
+  <update_rate>20</update_rate>
   <joint_name>left_up_wheel_link_joint</joint_name>
   <joint_name>right_up_wheel_link_joint</joint_name>
   <joint_name>left_down_wheel_link_joint</joint_name>
-  <joint_name>right_down_wheel_link_joint</joint_name>  
+  <joint_name>right_down_wheel_link_joint</joint_name>
+  <joint_name>pt_link1_to_pt_link2</joint_name>
   </plugin>
+
+  <!-- 카메라 틸트 관절 위치 제어 플러그인.
+       /set_joint_trajectory (trajectory_msgs/JointTrajectory) 토픽을 구독해
+       pt_link1_to_pt_link2 관절 각도를 직접 설정함. -->
+  <plugin name="gazebo_ros_joint_pose_trajectory"
+          filename="libgazebo_ros_joint_pose_trajectory.so">
+    <ros>
+      <remapping>set_joint_trajectory:=/set_joint_trajectory</remapping>
+    </ros>
+    <update_rate>20</update_rate>
+  </plugin>
+
   </model>
 </sdf>
