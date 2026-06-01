@@ -10,7 +10,7 @@ from rclpy.utilities import ok as rclpy_ok
 from gazebo_msgs.srv import SetEntityState, GetEntityState
 from gazebo_msgs.msg import EntityState
 from geometry_msgs.msg import PoseStamped
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 
 
 def clamp(v, vmin, vmax):
@@ -166,6 +166,9 @@ class BirdManager(Node):
 
         self.state_fail_count = {}
 
+        # 새 활성화 플래그: bird_in/bird_out으로 제어. 기본 비활성.
+        self.bird_active = False
+
         self.birds = [
             BirdConfig('bird_single', False, 1.0, 0.3, 3.0, 0.0, 0.0),
             # BirdConfig('bird_swarm_1', True, 2.5, 0.75, 4.5, 22.0, 7.0),
@@ -214,15 +217,64 @@ class BirdManager(Node):
         self.bird_pose_pub = self.create_publisher(PoseStamped, '/bird/nearest_pose', 10)
         self.bird_visible_pub = self.create_publisher(Bool, '/bird/visible', 10)
 
+        self.create_subscription(String, '/bird_command', self._bird_command_cb, 10)
+
         self.pick_new_swarm_target()
 
-        # 단독 새의 초기 웨이포인트 설정 (기본값 0,0,0 = 지면이므로 반드시 초기화)
         for bird in self.birds:
             if not bird.is_swarm:
                 self.pick_new_target(bird.name)
 
         self.timer = self.create_timer(self.dt, self.update_all)
-        self.get_logger().info('bird_manager started')
+        self.get_logger().info(
+            'bird_manager started (inactive). '
+            'Type "bird_in" in bird_input_node to activate.'
+        )
+
+    def _bird_command_cb(self, msg: String):
+        cmd = msg.data.strip().lower()
+        if cmd == 'bird_in' and not self.bird_active:
+            self.bird_active = True
+            self.get_logger().info('[CMD] bird_in — 새 활성화')
+            self._reset_bird_runtime()
+        elif cmd == 'bird_out' and self.bird_active:
+            self.bird_active = False
+            self.get_logger().info('[CMD] bird_out — 새 숨김')
+            self._hide_all_birds()
+
+    def _reset_bird_runtime(self):
+        """새를 초기 비행 위치로 리셋하고 상태 재초기화."""
+        for bird in self.birds:
+            rt = self.runtime[bird.name]
+            rt.initialized = False
+            rt.vx = rt.vy = rt.vz = 0.0
+            if not bird.is_swarm:
+                self.pick_new_target(bird.name)
+                req = SetEntityState.Request()
+                state = EntityState()
+                state.name = bird.name
+                state.reference_frame = 'world'
+                state.pose.position.x = 0.0
+                state.pose.position.y = 0.0
+                state.pose.position.z = 3.5
+                state.pose.orientation.w = 1.0
+                req.state = state
+                self.set_cli.call_async(req)
+
+    def _hide_all_birds(self):
+        """새를 LiDAR 감지 범위 밖(z=50)으로 이동."""
+        for bird in self.birds:
+            req = SetEntityState.Request()
+            state = EntityState()
+            state.name = bird.name
+            state.reference_frame = 'world'
+            state.pose.position.x = 0.0
+            state.pose.position.y = 0.0
+            state.pose.position.z = 50.0
+            state.pose.orientation.w = 1.0
+            req.state = state
+            self.set_cli.call_async(req)
+            self.runtime[bird.name].initialized = False
 
     def find_service_name(self, preferred, service_type):
         for _ in range(50):
@@ -288,7 +340,7 @@ class BirdManager(Node):
         self.swarm_center_z = clamp(self.swarm_center_z + dz / dist * step, self.z_min, self.z_max)
 
     def update_all(self):
-        if self.busy:
+        if not self.bird_active or self.busy:
             return
 
         self.update_swarm_center()

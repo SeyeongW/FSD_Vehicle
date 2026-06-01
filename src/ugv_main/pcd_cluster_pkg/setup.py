@@ -27,6 +27,8 @@ setup(
             'cluster_node = pcd_cluster_pkg.cluster_node:main',
             'cluster_node_backup = pcd_cluster_pkg.cluster_node_backup:main',
             'bird_yolo_node = pcd_cluster_pkg.bird_yolo_node:main',
+            'patrol_node = pcd_cluster_pkg.patrol_node:main',
+            'bird_input_node = pcd_cluster_pkg.bird_input_node:main',
         ],
     },
 )

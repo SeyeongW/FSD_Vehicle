@@ -36,6 +36,7 @@ from sensor_msgs_py import point_cloud2
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point, Twist, PointStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Bool
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from builtin_interfaces.msg import Duration as DurationMsg
 
@@ -131,8 +132,12 @@ class ClusterNode(Node):
         self.pcd_pub = self.create_publisher(PointCloud2, '/filtered_points', 10)
         self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.tilt_pub = self.create_publisher(JointTrajectory, '/set_joint_trajectory', 10)
-        # YOLO 노드에 LiDAR 3D 위치 전달
         self.target_pub = self.create_publisher(PointStamped, '/bird_target', 10)
+        self.bird_detected_pub = self.create_publisher(Bool, '/bird_detected', 10)
+
+        # patrol_node가 퍼블리시. True일 때만 cmd_vel 출력 허용
+        self.tracking_active = False
+        self.create_subscription(Bool, '/tracking_active', self._tracking_active_cb, 10)
 
         # -------------------------
         # TF
@@ -241,6 +246,9 @@ class ClusterNode(Node):
     # =========================================================
     # 콜백
     # =========================================================
+    def _tracking_active_cb(self, msg: Bool):
+        self.tracking_active = msg.data
+
     def odom_callback(self, msg: Odometry):
         self.current_angular_z = msg.twist.twist.angular.z
         self.robot_x = msg.pose.pose.position.x
@@ -473,6 +481,7 @@ class ClusterNode(Node):
             local_pred = self.get_kf_predicted_local(locked)
             cx, cy, cz = local_pred if local_pred is not None else locked['local_centroid']
 
+            self._publish_bird_detected(True)
             self.track_target(cx, cy, cz)
             self.publish_bird_target(locked)
             return
@@ -481,6 +490,7 @@ class ClusterNode(Node):
         visual_fresh = (now_sec - self.visual_bearing_time) < self.visual_bearing_timeout
         if visual_fresh and self.locked_target_missed > 0:
             self.tracking_mode = VISUAL_MODE
+            self._publish_bird_detected(True)
             self.track_target_visual(self.visual_bearing_yaw, self.visual_bearing_tilt)
             return
 
@@ -498,6 +508,7 @@ class ClusterNode(Node):
 
         if not candidates:
             self.tracking_mode = LIDAR_MODE
+            self._publish_bird_detected(False)
             self.stop_robot()
             self._tilt_reset()
             return
@@ -533,6 +544,7 @@ class ClusterNode(Node):
 
         local_pred = self.get_kf_predicted_local(best)
         cx, cy, cz = local_pred if local_pred is not None else best['local_centroid']
+        self._publish_bird_detected(True)
         self.track_target(cx, cy, cz)
         self.publish_bird_target(best)
 
@@ -568,12 +580,20 @@ class ClusterNode(Node):
     # =========================================================
     # 제어 명령
     # =========================================================
+    def _publish_bird_detected(self, detected: bool):
+        msg = Bool()
+        msg.data = detected
+        self.bird_detected_pub.publish(msg)
+
     def track_target(self, cx: float, cy: float, cz: float):
         """
         LiDAR bbox x,y 기반 추적 제어.
         cx, cy: 로봇 로컬 프레임 (KF 예측 또는 sensor 프레임 위치)
         로봇을 새 방향으로 회전 후, 정렬 시 전방 추적(chase) 기동.
+        tracking_active가 False면 cmd_vel을 출력하지 않음 (Nav2가 제어 중).
         """
+        if not self.tracking_active:
+            return
         target_angle_rad = math.atan2(cy, cx)
         dist_2d = math.sqrt(cx * cx + cy * cy)
 
@@ -605,7 +625,10 @@ class ClusterNode(Node):
         """
         VISUAL_MODE: YOLO 방위각 오차로 방향 유지 + 카메라 틸트 보정.
         LiDAR가 재검출하면 즉시 LIDAR_MODE로 복귀.
+        tracking_active가 False면 cmd_vel 출력 안 함.
         """
+        if not self.tracking_active:
+            return
         twist = Twist()
         if abs(yaw_err) > self.angle_deadband:
             cmd = self.angular_gain * yaw_err
@@ -690,6 +713,8 @@ class ClusterNode(Node):
         self.tilt_pub.publish(traj)
 
     def stop_robot(self):
+        if not self.tracking_active:
+            return
         self.last_cmd_angular_z = 0.0
         self.cmd_pub.publish(Twist())
 
