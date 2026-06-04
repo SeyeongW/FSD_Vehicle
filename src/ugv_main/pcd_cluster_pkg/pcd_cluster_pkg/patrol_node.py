@@ -22,7 +22,7 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose
 from geometry_msgs.msg import PoseWithCovarianceStamped, Quaternion
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 from action_msgs.msg import GoalStatus
 
 
@@ -31,6 +31,7 @@ def yaw_to_quat(yaw: float) -> Quaternion:
     q.z = math.sin(yaw / 2.0)
     q.w = math.cos(yaw / 2.0)
     return q
+
 
 
 def _lawnmower_waypoints():
@@ -74,14 +75,20 @@ class PatrolNode(Node):
             PoseWithCovarianceStamped, '/initialpose', 5
         )
         self.tracking_active_pub = self.create_publisher(Bool, '/tracking_active', 10)
+        self.status_pub = self.create_publisher(String, '/robot_status', 10)
 
         self.bird_sub = self.create_subscription(
             Bool, '/bird_detected', self._bird_cb, 10
         )
+        # TRACKING→PATROL 전환 hysteresis: 연속 N프레임 미감지 후 복귀
+        self._bird_lost_count = 0
+        self._BIRD_LOST_THRESHOLD = 20  # ~2s (10Hz 기준)
+        self._tracking_start_sec = 0.0  # 추적 시작 시각
 
         # 1초마다 startup 체크 (Nav2 준비 대기)
         self.create_timer(1.0, self._startup_tick)
-        self.get_logger().info('patrol_node started — waiting for Nav2...')
+        # 3초마다 현재 동작 상태 출력
+        self.create_timer(3.0, self._status_log)
 
     # ─────────────────────────────────────────────────────────────
     # 시작 시퀀스
@@ -93,44 +100,58 @@ class PatrolNode(Node):
 
         if self._startup_count == 5:
             self._publish_initial_pose()
-            self.get_logger().info('Initial pose published to AMCL (0, 0, yaw=0).')
+            self.get_logger().info('[LOCALIZER] Initial pose published: (0, 0, yaw=0).')
 
         if self._startup_count >= 8:
             if self._nav_client.wait_for_server(timeout_sec=1.0):
                 self._started = True
                 self._set_tracking_active(False)
                 self._send_next_waypoint()
-                self.get_logger().info('Patrol started.')
+                self._status('[ 시스템 ] Nav2 준비 완료 — 순찰을 시작합니다.')
             else:
                 self.get_logger().warn('Nav2 server not ready yet...')
 
     def _publish_initial_pose(self):
         msg = PoseWithCovarianceStamped()
-        msg.header.stamp    = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'map'
-        msg.pose.pose.position.x    = 0.0
-        msg.pose.pose.position.y    = 0.0
-        msg.pose.pose.orientation   = yaw_to_quat(0.0)
-        msg.pose.covariance[0]  = 0.25   # x 분산
-        msg.pose.covariance[7]  = 0.25   # y 분산
-        msg.pose.covariance[35] = 0.07   # yaw 분산
+        msg.header.stamp         = self.get_clock().now().to_msg()
+        msg.header.frame_id      = 'map'
+        msg.pose.pose.position.x = 0.0
+        msg.pose.pose.position.y = 0.0
+        msg.pose.pose.orientation = yaw_to_quat(0.0)
+        msg.pose.covariance[0]   = 0.25
+        msg.pose.covariance[7]   = 0.25
+        msg.pose.covariance[35]  = 0.07
         self.initial_pose_pub.publish(msg)
 
     # ─────────────────────────────────────────────────────────────
     # 새 감지 콜백 → 상태 전환
     # ─────────────────────────────────────────────────────────────
     def _bird_cb(self, msg: Bool):
-        if msg.data and self.state == PATROL:
-            self.get_logger().info('[STATE] PATROL → TRACKING (bird detected)')
-            self.state = TRACKING
-            self._cancel_current_goal()
-            self._set_tracking_active(True)
-
-        elif not msg.data and self.state == TRACKING:
-            self.get_logger().info('[STATE] TRACKING → PATROL (bird lost)')
-            self.state = PATROL
-            self._set_tracking_active(False)
-            self._send_next_waypoint()
+        if msg.data:
+            self._bird_lost_count = 0
+            if self.state == PATROL:
+                self._tracking_start_sec = self.get_clock().now().nanoseconds * 1e-9
+                self.state = TRACKING
+                self._cancel_current_goal()
+                self._set_tracking_active(True)
+                self._status('━' * 50)
+                self._status('[ 조류 탐지 ] 추적 모드로 전환합니다.')
+                self._status('━' * 50)
+        else:
+            if self.state == TRACKING:
+                self._bird_lost_count += 1
+                if self._bird_lost_count >= self._BIRD_LOST_THRESHOLD:
+                    elapsed = (
+                        self.get_clock().now().nanoseconds * 1e-9
+                        - self._tracking_start_sec
+                    )
+                    self._bird_lost_count = 0
+                    self.state = PATROL
+                    self._set_tracking_active(False)
+                    self._send_next_waypoint()
+                    self._status('━' * 50)
+                    self._status(f'[ 조류 사라짐 ] 추적 {elapsed:.1f}초 후 순찰로 복귀합니다.')
+                    self._status('━' * 50)
 
     def _set_tracking_active(self, active: bool):
         msg = Bool()
@@ -153,9 +174,9 @@ class PatrolNode(Node):
         goal.pose.pose.position.z   = 0.0
         goal.pose.pose.orientation  = yaw_to_quat(float(wp[2]))
 
-        self.get_logger().info(
-            f'[PATROL] WP {self.wp_idx}/{len(self.waypoints)}: '
-            f'({wp[0]:.1f}, {wp[1]:.1f})'
+        self._status(
+            f'[ 순찰 기동 중 ] 웨이포인트 {self.wp_idx + 1}/{len(self.waypoints)} '
+            f'→ ({wp[0]:.1f}, {wp[1]:.1f})'
         )
         future = self._nav_client.send_goal_async(goal)
         future.add_done_callback(self._on_goal_accepted)
@@ -176,10 +197,11 @@ class PatrolNode(Node):
             return
         result = future.result()
         if result.status == GoalStatus.STATUS_SUCCEEDED:
-            self.get_logger().info(f'WP {self.wp_idx} reached.')
+            self._status(f'[ 순찰 기동 중 ] 웨이포인트 {self.wp_idx + 1} 도착')
         else:
-            self.get_logger().warn(
-                f'WP {self.wp_idx} ended with status {result.status}.'
+            self._status(
+                f'[ 순찰 기동 중 ] 웨이포인트 {self.wp_idx + 1} 미도달 '
+                f'(status={result.status}) — 다음 목표로 이동'
             )
         self.wp_idx = (self.wp_idx + 1) % len(self.waypoints)
         self._goal_handle = None
@@ -195,6 +217,25 @@ class PatrolNode(Node):
             self._retry_timer.cancel()
             self._retry_timer = None
         self._send_next_waypoint()
+
+    def _status(self, text: str):
+        self.status_pub.publish(String(data=text))
+
+    def _status_log(self):
+        if not self._started:
+            return
+        if self.state == PATROL:
+            wp = self.waypoints[self.wp_idx]
+            self._status(
+                f'[ 순찰 기동 중 ] 웨이포인트 {self.wp_idx + 1}/{len(self.waypoints)} '
+                f'({wp[0]:.1f}, {wp[1]:.1f}) 으로 이동 중'
+            )
+        elif self.state == TRACKING:
+            elapsed = (
+                self.get_clock().now().nanoseconds * 1e-9
+                - self._tracking_start_sec
+            )
+            self._status(f'[ 조류 추적 중 ] 추적 경과 {elapsed:.1f}초')
 
     def _cancel_current_goal(self):
         if self._goal_handle is not None:

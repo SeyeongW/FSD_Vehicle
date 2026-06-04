@@ -29,6 +29,9 @@ setup(
             'bird_yolo_node = pcd_cluster_pkg.bird_yolo_node:main',
             'patrol_node = pcd_cluster_pkg.patrol_node:main',
             'bird_input_node = pcd_cluster_pkg.bird_input_node:main',
+            'robot_status_monitor = pcd_cluster_pkg.robot_status_monitor:main',
+            'quit_handler_node = pcd_cluster_pkg.quit_handler_node:main',
+            'data_logger_node = pcd_cluster_pkg.data_logger_node:main',
         ],
     },
 )

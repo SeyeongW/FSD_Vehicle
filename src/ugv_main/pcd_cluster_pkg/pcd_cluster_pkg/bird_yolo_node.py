@@ -56,10 +56,12 @@ class BirdYoloNode(Node):
     def __init__(self):
         super().__init__('bird_yolo_node')
 
-        self.get_logger().info('Loading YOLOv8s model...')
-        self.model = YOLO('yolov8s.pt')
+        self.declare_parameter('model_path', 'yolov8s.pt')
+        model_path = self.get_parameter('model_path').get_parameter_value().string_value
+        self.get_logger().info(f'Loading YOLO model: {model_path}')
+        self.model = YOLO(model_path)
         self.model.predict(np.zeros((CAM_H, CAM_W, 3), dtype=np.uint8), verbose=False)
-        self.get_logger().info('YOLOv8s ready.')
+        self.get_logger().info('YOLO model ready.')
 
         # ── 파라미터 ──
         self.conf_threshold = 0.20

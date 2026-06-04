@@ -426,7 +426,7 @@
       <sensor name="pt_camera" type="camera">
         <pose>0 0 0 0 -0 0</pose>
         <always_on>true</always_on>
-        <visualize>true</visualize>
+        <visualize>false</visualize>
         <update_rate>30</update_rate>
         <camera name="intel_realsense_r200">
           <horizontal_fov>1.02974</horizontal_fov>

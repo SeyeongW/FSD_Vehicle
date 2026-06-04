@@ -31,7 +31,7 @@ from rclpy.node import Node
 from rclpy.duration import Duration
 from rclpy.time import Time
 
-from sensor_msgs.msg import PointCloud2, PointField
+from sensor_msgs.msg import PointCloud2, PointField, LaserScan
 from sensor_msgs_py import point_cloud2
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point, Twist, PointStamped, Vector3Stamped
@@ -123,6 +123,9 @@ class ClusterNode(Node):
         self.odom_sub = self.create_subscription(
             Odometry, '/odom', self.odom_callback, 10
         )
+        self.scan_sub = self.create_subscription(
+            LaserScan, '/scan', self.scan_callback, 10
+        )
         # YOLO 노드가 퍼블리시하는 카메라 방위각 (LiDAR 유실 시 폴백)
         self.visual_bearing_sub = self.create_subscription(
             Vector3Stamped, '/bird_visual_bearing', self.visual_bearing_callback, 10
@@ -150,9 +153,10 @@ class ClusterNode(Node):
         # -------------------------
         self.target_frame = 'odom'
 
-        self.ground_z_limit = 1.5
+        self.ground_z_limit = 2.1   # 벽 높이 2.0m 완전 제거 (0.1m 여유)
         self.roi_min_range = 0.3
         self.roi_max_range = 15.0
+        self.exclusion_zones = []
 
         self.self_x = (-0.6, 0.6)
         self.self_y = (-0.6, 0.6)
@@ -168,9 +172,9 @@ class ClusterNode(Node):
         self.trackable_min_centroid_z = 2.0
 
         self.track_match_dist = 3.0
-        self.move_threshold = 0.05
+        self.move_threshold = 0.10
         self.max_motion_dist = 3.0
-        self.min_motion_frames = 1
+        self.min_motion_frames = 5
         self.max_missed_frames = 40
 
         self.lock_lost_frames = 50  # LiDAR 블라인드 구간에서 잠금 유지
@@ -191,9 +195,20 @@ class ClusterNode(Node):
         self.max_linear_speed = 0.5       # 최대 전진 속도 (m/s)
         self.chase_align_threshold = 1.0  # 전진 허용 각도 범위 (rad, 약 57°) — 넓게 허용
 
+        # ── 전방 장애물 회피 (LaserScan 기반) ──
+        self.obstacle_stop_dist = 0.5     # 이 거리 이내: 전진 완전 정지 (m)
+        self.obstacle_slow_dist = 1.2     # 이 거리 이내: 전진 선형 감속 (m)
+        self.obstacle_half_angle = 0.40   # 전방 체크 반각 (rad, ≈23°)
+
+        # ── cmd_vel 스무딩 ──
+        self.smooth_alpha = 0.4           # EMA 계수. 작을수록 부드럽고 반응이 느려짐
+
         # ── 칼만 필터 ──
-        # lookahead: 이 시간(초)만큼 앞 위치를 겨냥해 추적 지연 보상
-        self.kf_lookahead_sec = 0.15
+        self.declare_parameter('use_kf', True)
+        self.use_kf = self.get_parameter('use_kf').value
+        # lookahead: 이 시간(초)만큼 앞 위치를 겨냥해 추적 지연 보상 (use_kf=True일 때만 적용)
+        self.declare_parameter('kf_lookahead_sec', 0.15)
+        self.kf_lookahead_sec = self.get_parameter('kf_lookahead_sec').value
 
         # ── 카메라 틸트 ──
         self.camera_mount_height = 0.168  # 카메라 마운트 높이 (m, base_footprint 기준)
@@ -226,6 +241,9 @@ class ClusterNode(Node):
 
         self.current_angular_z = 0.0
         self.last_cmd_angular_z = 0.0
+        self.last_cmd_linear_x = 0.0
+
+        self.latest_scan = None
 
         self.robot_x = 0.0
         self.robot_y = 0.0
@@ -248,6 +266,9 @@ class ClusterNode(Node):
     # =========================================================
     def _tracking_active_cb(self, msg: Bool):
         self.tracking_active = msg.data
+
+    def scan_callback(self, msg: LaserScan):
+        self.latest_scan = msg
 
     def odom_callback(self, msg: Odometry):
         self.current_angular_z = msg.twist.twist.angular.z
@@ -355,6 +376,9 @@ class ClusterNode(Node):
             if odom_centroid is None:
                 continue
 
+            if self._in_exclusion_zone(odom_centroid):
+                continue
+
             detections.append({
                 'local_centroid': local_centroid,
                 'odom_centroid': odom_centroid,
@@ -375,7 +399,7 @@ class ClusterNode(Node):
     def update_tracks(self, detections, dt: float):
         for tr in self.tracks:
             tr['missed'] += 1
-            if dt > 0.0 and 'kf' in tr:
+            if self.use_kf and dt > 0.0 and 'kf' in tr:
                 tr['kf'] = kf_predict(tr['kf'], dt)
 
         candidate_pairs = []
@@ -409,11 +433,13 @@ class ClusterNode(Node):
             track['seen_count'] += 1
             track['last_motion_dist'] = motion_dist
 
-            if self.move_threshold < motion_dist < self.max_motion_dist:
-                track['moving_count'] += 1
-            track['is_moving_confirmed'] = track['moving_count'] >= self.min_motion_frames
+            # 회전 중 odom 노이즈로 정적 물체가 "움직임"으로 오판되는 것을 방지
+            if abs(self.current_angular_z) <= self.rotation_freeze_threshold:
+                if self.move_threshold < motion_dist < self.max_motion_dist:
+                    track['moving_count'] += 1
+                track['is_moving_confirmed'] = track['moving_count'] >= self.min_motion_frames
 
-            if 'kf' in track:
+            if self.use_kf and 'kf' in track:
                 track['kf'] = kf_update(track['kf'], new_odom)
 
             unmatched_det_indices.discard(di)
@@ -422,7 +448,7 @@ class ClusterNode(Node):
 
         for di in unmatched_det_indices:
             det = detections[di]
-            self.tracks.append({
+            new_track = {
                 'id': self.next_track_id,
                 'odom_centroid': det['odom_centroid'],
                 'local_centroid': det['local_centroid'],
@@ -430,8 +456,10 @@ class ClusterNode(Node):
                 'age': 1, 'missed': 0, 'seen_count': 1, 'moving_count': 1,
                 'last_motion_dist': self.move_threshold + 0.01,
                 'is_moving_confirmed': self.min_motion_frames <= 1,
-                'kf': kf_init(det['odom_centroid']),
-            })
+            }
+            if self.use_kf:
+                new_track['kf'] = kf_init(det['odom_centroid'])
+            self.tracks.append(new_track)
             self.next_track_id += 1
 
         self.tracks = [tr for tr in self.tracks if tr['missed'] <= self.max_missed_frames]
@@ -452,7 +480,7 @@ class ClusterNode(Node):
     def update_tracks_no_detection(self, dt: float):
         for tr in self.tracks:
             tr['missed'] += 1
-            if dt > 0.0 and 'kf' in tr:
+            if self.use_kf and dt > 0.0 and 'kf' in tr:
                 tr['kf'] = kf_predict(tr['kf'], dt)
         self.tracks = [tr for tr in self.tracks if tr['missed'] <= self.max_missed_frames]
         if self.locked_target_id is not None:
@@ -508,7 +536,11 @@ class ClusterNode(Node):
 
         if not candidates:
             self.tracking_mode = LIDAR_MODE
-            self._publish_bird_detected(False)
+            # lock이 아직 살아있으면 True 유지 (lock_lost_frames 동안 버팀)
+            if self.locked_target_id is not None:
+                self._publish_bird_detected(True)
+            else:
+                self._publish_bird_detected(False)
             self.stop_robot()
             self._tilt_reset()
             return
@@ -585,36 +617,66 @@ class ClusterNode(Node):
         msg.data = detected
         self.bird_detected_pub.publish(msg)
 
+    def _forward_obstacle_dist(self) -> float:
+        """전방 ±obstacle_half_angle 범위 내 가장 가까운 LaserScan 거리 반환."""
+        if self.latest_scan is None:
+            return float('inf')
+        scan = self.latest_scan
+        min_dist = float('inf')
+        angle = scan.angle_min
+        for r in scan.ranges:
+            if abs(angle) < self.obstacle_half_angle:
+                if scan.range_min < r < scan.range_max:
+                    min_dist = min(min_dist, r)
+            angle += scan.angle_increment
+        return min_dist
+
     def track_target(self, cx: float, cy: float, cz: float):
         """
         LiDAR bbox x,y 기반 추적 제어.
         cx, cy: 로봇 로컬 프레임 (KF 예측 또는 sensor 프레임 위치)
         로봇을 새 방향으로 회전 후, 정렬 시 전방 추적(chase) 기동.
         tracking_active가 False면 cmd_vel을 출력하지 않음 (Nav2가 제어 중).
+        전방 LaserScan으로 미지 장애물 감지 → 감속/정지.
+        EMA 스무딩으로 급격한 cmd_vel 변화 억제.
         """
         if not self.tracking_active:
             return
         target_angle_rad = math.atan2(cy, cx)
         dist_2d = math.sqrt(cx * cx + cy * cy)
 
-        twist = Twist()
-
-        # yaw 제어: 새를 향해 회전
+        # ── 목표 angular ──
         if abs(target_angle_rad) > self.angle_deadband:
             cmd = self.angular_gain * target_angle_rad
-            cmd = max(min(cmd, self.max_angular_speed), -self.max_angular_speed)
-            twist.angular.z = cmd
+            desired_angular = max(min(cmd, self.max_angular_speed), -self.max_angular_speed)
         else:
-            twist.angular.z = 0.0
+            desired_angular = 0.0
 
-        # 전방 추적 기동: 정렬 각도 이내이고 목표 거리보다 멀면 전진
+        # ── 목표 linear ──
         if abs(target_angle_rad) < self.chase_align_threshold and dist_2d > self.chase_target_dist:
-            fwd = self.linear_gain * (dist_2d - self.chase_target_dist)
-            twist.linear.x = min(fwd, self.max_linear_speed)
+            desired_linear = min(
+                self.linear_gain * (dist_2d - self.chase_target_dist),
+                self.max_linear_speed,
+            )
         else:
-            twist.linear.x = 0.0
+            desired_linear = 0.0
+
+        # ── 전방 장애물 체크 → 전진 제한 ──
+        obs_dist = self._forward_obstacle_dist()
+        if obs_dist < self.obstacle_stop_dist:
+            desired_linear = 0.0
+        elif obs_dist < self.obstacle_slow_dist:
+            scale = (obs_dist - self.obstacle_stop_dist) / (self.obstacle_slow_dist - self.obstacle_stop_dist)
+            desired_linear *= scale
+
+        # ── EMA 스무딩 ──
+        a = self.smooth_alpha
+        twist = Twist()
+        twist.angular.z = a * desired_angular + (1.0 - a) * self.last_cmd_angular_z
+        twist.linear.x  = a * desired_linear  + (1.0 - a) * self.last_cmd_linear_x
 
         self.last_cmd_angular_z = twist.angular.z
+        self.last_cmd_linear_x  = twist.linear.x
         self.cmd_pub.publish(twist)
 
         # 카메라 틸트: 새의 고도각에 맞춰 상하 추적
@@ -629,14 +691,18 @@ class ClusterNode(Node):
         """
         if not self.tracking_active:
             return
-        twist = Twist()
         if abs(yaw_err) > self.angle_deadband:
             cmd = self.angular_gain * yaw_err
-            cmd = max(min(cmd, self.max_angular_speed), -self.max_angular_speed)
-            twist.angular.z = cmd
+            desired_angular = max(min(cmd, self.max_angular_speed), -self.max_angular_speed)
         else:
-            twist.angular.z = 0.0
+            desired_angular = 0.0
+
+        twist = Twist()
+        twist.angular.z = self.smooth_alpha * desired_angular + (1.0 - self.smooth_alpha) * self.last_cmd_angular_z
         twist.linear.x = 0.0  # 거리 미확인 상태이므로 전진 금지
+
+        self.last_cmd_angular_z = twist.angular.z
+        self.last_cmd_linear_x  = 0.0
         self.cmd_pub.publish(twist)
 
         # 카메라 틸트: YOLO 수직 오차로 점진 보정
@@ -716,6 +782,7 @@ class ClusterNode(Node):
         if not self.tracking_active:
             return
         self.last_cmd_angular_z = 0.0
+        self.last_cmd_linear_x  = 0.0
         self.cmd_pub.publish(Twist())
 
     def _tilt_reset(self):
@@ -774,6 +841,13 @@ class ClusterNode(Node):
     # =========================================================
     # TF / 포인트 유틸리티
     # =========================================================
+    def _in_exclusion_zone(self, odom_pos) -> bool:
+        for (ex, ey, er) in self.exclusion_zones:
+            d = math.sqrt((odom_pos[0] - ex) ** 2 + (odom_pos[1] - ey) ** 2)
+            if d < er:
+                return True
+        return False
+
     def remove_self_points(self, points: np.ndarray) -> np.ndarray:
         mask = ~(
             (self.self_x[0] < points[:, 0]) & (points[:, 0] < self.self_x[1]) &

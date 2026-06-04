@@ -15,17 +15,19 @@ import threading
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import String, Empty
 
 
 class BirdInputNode(Node):
     def __init__(self):
         super().__init__('bird_input_node')
-        self.pub = self.create_publisher(String, '/bird_command', 10)
+        self.pub  = self.create_publisher(String, '/bird_command', 10)
+        self.quit = self.create_publisher(Empty,  '/quit_signal',  10)
         self.get_logger().info(
             'BirdInputNode ready.\n'
             '  bird_in  → 새 출현\n'
             '  bird_out → 새 소멸\n'
+            '  q        → 로봇 복귀 후 종료\n'
             '입력 대기 중...'
         )
         self._thread = threading.Thread(target=self._input_loop, daemon=True)
@@ -43,9 +45,12 @@ class BirdInputNode(Node):
                     msg.data = cmd
                     self.pub.publish(msg)
                     self.get_logger().info(f'Sent: {cmd}')
+                elif cmd == 'q':
+                    self.get_logger().info('종료 신호 전송 — 로봇 복귀 후 launch가 종료됩니다.')
+                    self.quit.publish(Empty())
                 elif cmd:
                     self.get_logger().warn(
-                        f'Unknown command: "{cmd}". Use bird_in or bird_out.'
+                        f'Unknown command: "{cmd}". Use bird_in / bird_out / q.'
                     )
             except Exception as e:
                 self.get_logger().error(f'Input error: {e}')

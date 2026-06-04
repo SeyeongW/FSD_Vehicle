@@ -4,6 +4,7 @@ import glob as _glob
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
+    DeclareLaunchArgument,
     IncludeLaunchDescription,
     ExecuteProcess,
     SetEnvironmentVariable,
@@ -46,6 +47,13 @@ def generate_launch_description():
     print(f'[bringup] ugv_manager.py  -> {ugv_manager_py}')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+
+    # bird_speed: 새 비행 속도 (rad/s). 느림=0.18 / 보통=0.36 / 빠름=0.54
+    declare_bird_speed = DeclareLaunchArgument(
+        'bird_speed', default_value='0.18',
+        description='새 원형 비행 각속도 (rad/s). 0.18=느림 / 0.36=보통 / 0.54=빠름'
+    )
+    bird_speed = LaunchConfiguration('bird_speed')
 
     gazebo_model_database_uri = SetEnvironmentVariable(
         name='GAZEBO_MODEL_DATABASE_URI',
@@ -174,7 +182,8 @@ def generate_launch_description():
         period=8.5,
         actions=[
             ExecuteProcess(
-                cmd=['python3', bird_manager_py],
+                cmd=['python3', bird_manager_py,
+                     '--ros-args', '-p', ['circle_speed:=', bird_speed]],
                 output='screen',
                 additional_env={'PYTHONUNBUFFERED': '1'},
             )
@@ -193,14 +202,13 @@ def generate_launch_description():
     )
 
     ld = LaunchDescription()
+    ld.add_action(declare_bird_speed)
     ld.add_action(gazebo_model_database_uri)
     ld.add_action(gazebo_model_path)
     ld.add_action(gzserver_cmd)
     ld.add_action(gzclient_cmd)
     ld.add_action(robot_state_publisher_cmd)
     ld.add_action(spawn_ugv_cmd)
-    # ld.add_action(spawn_bird_single_cmd)
-    # ld.add_action(spawn_swarm_cmd)
     ld.add_action(run_bird_manager_cmd)
     ld.add_action(run_ugv_manager_cmd)
 
