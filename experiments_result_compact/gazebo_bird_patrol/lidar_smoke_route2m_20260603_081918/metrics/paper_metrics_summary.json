@@ -1,0 +1,12 @@
+{
+  "frames": 136,
+  "valid_projected_frames": 88,
+  "gt_rows": 418,
+  "lidar_associated_rows": 95,
+  "mission_events": 299,
+  "bird_confirmed_rows": 808,
+  "sound_done_rows": 5,
+  "has_patrol": true,
+  "has_offset_approach": true,
+  "has_sound_task": true
+}

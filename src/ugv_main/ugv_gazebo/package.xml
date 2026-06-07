@@ -20,6 +20,7 @@
   <depend>nav2_msgs</depend>
   <depend>action_msgs</depend>
   <depend>robot_state_publisher</depend>
+  <exec_depend>slam_toolbox</exec_depend>
   <depend>rviz2</depend>
   <depend>joint_state_publisher_gui</depend>
 

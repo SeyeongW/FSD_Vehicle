@@ -1,0 +1,11 @@
+profile: real_prep
+use_sim_time: false
+default_mode: STANDBY
+allow_fake_bird_classification: false
+require_bird_detector_model: true
+require_lidar_dynamic_target: true
+require_3d_fusion_for_sound: true
+final_cmd_vel_publisher: safety_cmd_mux_node
+mode_authority: mission_patrol_manager_node
+max_linear_speed: 0.05
+max_angular_speed: 0.20

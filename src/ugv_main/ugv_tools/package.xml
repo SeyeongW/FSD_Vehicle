@@ -17,6 +17,7 @@
   <depend>nav_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
+  <exec_depend>rcl_interfaces</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>gazebo_ros</exec_depend>

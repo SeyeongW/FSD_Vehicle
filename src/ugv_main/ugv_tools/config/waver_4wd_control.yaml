@@ -14,12 +14,12 @@ waver_remote_panel:
     manual_override_returns_to_auto: true
     auto_mode_strategy: "mission_nav2"
     auto_launch_command: ""
-    default_speed: 0.18
-    default_angular: 0.45
-    max_linear_speed: 0.30
-    max_angular_speed: 0.70
-    max_linear_accel: 0.35
-    max_angular_accel: 1.20
+    default_speed: 0.10
+    default_angular: 0.10
+    max_linear_speed: 0.15
+    max_angular_speed: 0.16
+    max_linear_accel: 0.80
+    max_angular_accel: 0.80
     reverse_speed: 0.08
     hard_stop_distance_m: 0.45
     slow_down_distance_m: 1.20
@@ -29,9 +29,9 @@ waver_remote_panel:
 waver_gazebo_patrol:
   ros__parameters:
     max_linear_speed: 0.30
-    max_angular_speed: 0.60
-    max_linear_accel: 0.35
-    max_angular_accel: 1.20
+    max_angular_speed: 0.12
+    max_linear_accel: 0.25
+    max_angular_accel: 0.12
     reverse_speed: 0.08
     xy_tolerance: 0.18
     yaw_tolerance: 0.35
@@ -51,9 +51,9 @@ waver_cmd_vel_serial_bridge:
   ros__parameters:
     max_demo_ratio: 0.30
     max_linear_speed: 0.30
-    max_angular_speed: 0.70
-    max_linear_accel: 0.35
-    max_angular_accel: 1.20
+    max_angular_speed: 0.16
+    max_linear_accel: 0.80
+    max_angular_accel: 0.80
     reverse_speed: 0.08
     cmd_timeout_s: 0.30
     hard_stop_distance_m: 0.45
@@ -64,7 +64,7 @@ waver_cmd_vel_serial_bridge:
 waver_scripted_keyboard:
   ros__parameters:
     max_linear_speed: 0.30
-    max_angular_speed: 0.60
+    max_angular_speed: 0.16
     key_timeout_s: 0.30
     hard_stop_distance_m: 0.45
     slow_down_distance_m: 1.20

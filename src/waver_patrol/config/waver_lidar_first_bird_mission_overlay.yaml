@@ -1,0 +1,72 @@
+external_lidar_dynamic_bridge_node:
+  ros__parameters:
+    input_lidar_target_topic: /external/lidar/target
+    input_lidar_target_pose_topic: /external/lidar/target_pose
+    input_lidar_objects_topic: /external/lidar/objects
+    input_target_frame: map
+    output_frame: map
+    use_tf_transform: false
+    min_target_height_m: 3.0
+    min_target_range_m: 0.5
+    max_target_range_m: 30.0
+    target_stale_timeout_sec: 1.0
+
+external_yolo_bridge_node:
+  ros__parameters:
+    input_detection_topic: /external/yolo/detections
+    input_json_topic: /external/yolo/result_json
+    camera_frame: camera_color_optical_frame
+    bird_class_names: ["bird"]
+    non_bird_class_names: ["person", "vehicle", "drone", "robot"]
+    confidence_threshold: 0.65
+    require_camera_centered_for_mission: true
+
+target_goal_manager_node:
+  ros__parameters:
+    mission_target_policy: lidar_first_inspection
+    min_height_m: 3.0
+    min_depth_m: 0.5
+    max_depth_m: 30.0
+    inspection_goal_offset_distance_m: 2.0
+    require_dynamic_valid_for_inspection: true
+    allow_lidar_dynamic_without_bird_confirmed_for_inspection: true
+    require_bird_confirmed_for_inspection_goal: false
+    require_bird_confirmed_for_sound: true
+    require_camera_classification_before_sound: true
+    subscribe_lidar_objects_map: true
+
+live_target_aim_bridge_node:
+  ros__parameters:
+    target_stale_timeout_sec: 0.8
+
+target_observation_body_tracker_node:
+  ros__parameters:
+    max_angular_speed: 0.18
+    angular_kp: 0.8
+    center_tolerance_rad: 0.08
+
+waver_gimbal_feedback_bridge_node:
+  ros__parameters:
+    real_gimbal_output_enabled: false
+    allow_simulated_centered: false
+    command_timeout_sec: 0.8
+
+target_departure_monitor_node:
+  ros__parameters:
+    departure_distance_m: 8.0
+    min_wait_after_mission_sec: 1.0
+    target_lost_timeout_sec: 3.0
+    max_wait_departure_sec: 20.0
+    require_mission_action_done: true
+
+mission_data_reporter_node:
+  ros__parameters:
+    trial_id: lidar_first_bird_mission
+    output_root: ~/ros2_ws2/FSD_Vehicle/experiment_results
+    external_send_enabled: false
+    write_jsonl: true
+
+experiment_data_logger_node:
+  ros__parameters:
+    experiment_name: waver_lidar_first_bird_mission
+    output_root: ~/ros2_ws2/FSD_Vehicle/experiment_results

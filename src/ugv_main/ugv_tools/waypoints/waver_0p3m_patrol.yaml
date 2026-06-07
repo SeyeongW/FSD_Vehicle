@@ -1,0 +1,35 @@
+# Waver 0.3 m x 0.3 m supervised micro patrol.
+#
+# Use for indoor wheel-on smoke tests only. With odom feedback this is a true
+# odom-relative square; without odom feedback the patrol node falls back to a
+# speed*time estimate when allow_open_loop_without_odom is true.
+
+frame_id: odom
+home:
+  name: home
+  x: 0.0
+  y: 0.0
+  yaw: 0.0
+
+waypoints:
+  - name: start
+    x: 0.0
+    y: 0.0
+    yaw: 0.0
+  - name: east_0p3
+    x: 0.3
+    y: 0.0
+    yaw: 1.57
+  - name: north_east_0p3
+    x: 0.3
+    y: 0.3
+    yaw: 3.14
+  - name: north_0p3
+    x: 0.0
+    y: 0.3
+    yaw: -1.57
+
+failure_policy:
+  max_patrol_radius_m: 0.5
+  recovery_attempts: 0
+  human_estop_required: true

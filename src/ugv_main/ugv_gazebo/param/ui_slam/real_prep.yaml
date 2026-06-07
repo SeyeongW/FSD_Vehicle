@@ -1,0 +1,43 @@
+profile: real_prep_only
+workspace: ~/ros2_ws3/FSD_Vehicle
+notes:
+  - This file documents the real-hardware topic contract for the UI-SLAM work.
+  - Do not launch Gazebo-only publishers in real_profile.
+  - Keep the ros2_ws2 field-success backend untouched unless explicitly porting.
+
+topic_authority:
+  mode_state:
+    topic: /waver/mode
+    publisher: mission_patrol_manager_node
+    required_publishers: 1
+  final_cmd_vel:
+    topic: /cmd_vel
+    publisher: safety_cmd_mux_node
+    required_publishers: 1
+  manual_cmd:
+    topic: /waver/manual_cmd_vel
+    publisher: waver_remote_panel_or_keyboard_only
+  scan_for_slam:
+    topic: /scan_slam
+    source: dense_lidar_or_scan_adapter
+  scan_for_safety:
+    topic: /scan_safety
+    source: safety_lidar_or_scan_adapter
+  odom:
+    topic: /odom
+    source: robot_localization_or_base_driver
+  live_map:
+    topic: /map
+    source: slam_toolbox_or_localization_map_server_by_mode
+  fixed_map:
+    topic: /map_fixed
+    source: mapping_workflow_manager_node_after_apply
+
+real_hardware_gates:
+  serial_owner_count_max: 1
+  default_mode: STANDBY
+  first_wheel_on_linear_limit_mps: 0.05
+  first_wheel_on_angular_limit_radps: 0.20
+  camera_only_goal_allowed: false
+  fake_detector_allowed: false
+  gazebo_publishers_allowed: false

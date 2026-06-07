@@ -1,0 +1,1 @@
+time_sec,trial_id,object_id,class_name,confidence,bbox_x,bbox_y,bbox_w,bbox_h,center_u,center_v,tracking_state,detection_success

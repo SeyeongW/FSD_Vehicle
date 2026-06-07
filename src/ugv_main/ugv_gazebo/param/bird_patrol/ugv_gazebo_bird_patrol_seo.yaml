@@ -1,0 +1,134 @@
+mission_patrol_manager_node:
+  ros__parameters:
+    use_sim_time: true
+    waypoint_file: /home/chotaehyun/ros2_ws3/FSD_Vehicle/src/ugv_main/ugv_gazebo/param/bird_patrol/patrol_waypoints_square_4m_7m.yaml
+    use_nav2: false
+    enable_sim_nav_goal_arrival: true
+    default_mode: STANDBY
+    patrol_loop: true
+    frame_id: odom
+    global_frame: odom
+    base_frame: base_footprint
+    target_mission_timeout_sec: 90.0
+    target_arrival_tolerance_xy_m: 0.35
+    object_goal_stale_timeout_sec: 4.0
+    target_classification_timeout_sec: 8.0
+    camera_alignment_timeout_sec: 12.0
+    fallback_robot_body_alignment: true
+    enable_sound_task: true
+    enable_sound_output: false
+    bird_confidence_threshold: 0.70
+    min_classification_confidence: 0.50
+    waypoint_dwell_sec_default: 0.5
+    sound_task_timeout_sec: 8.0
+    max_goal_retries: 1
+    recovery_retry_count: 1
+    post_target_resume_cooldown_sec: 8.0
+
+target_goal_manager_node:
+  ros__parameters:
+    use_sim_time: true
+    global_frame: odom
+    base_frame: base_footprint
+    use_tf_transform: false
+    min_height_m: 3.0
+    min_depth_m: 0.3
+    max_depth_m: 18.0
+    min_target_distance_m: 0.5
+    max_target_distance_m: 18.0
+    require_motion: true
+    require_dynamic_valid_for_inspection: true
+    require_bird_confirmed: false
+    require_bird_confirmed_for_inspection_goal: false
+    allow_lidar_dynamic_without_bird_confirmed_for_inspection: true
+    require_bird_confirmed_for_sound: true
+    require_3d_fusion_valid: false
+    mission_target_policy: lidar_first_inspection
+    require_robot_pose_for_goal: true
+    robot_odom_topic: /odom
+    robot_pose_topic: /amcl_pose
+    elevated_dynamic_targets_topic: /waver/elevated_dynamic_targets
+    inspection_goal_offset_distance_m: 2.0
+    target_arrival_tolerance_xy_m: 0.35
+    inspection_cooldown_sec: 8.0
+    max_inspection_retries_per_target: 1
+    inspected_target_lockout_sec: 25.0
+    inspected_target_radius_m: 1.5
+    enforce_mode_gate: false
+
+simple_nav2_cmd_sim_node:
+  ros__parameters:
+    use_sim_time: true
+    active_goal_topic: /waver/active_nav_goal
+    odom_topic: /odom
+    cmd_vel_topic: /waver/cmd_vel_nav2
+    arrived_topic: /waver/sim_nav_goal_arrived
+    mode_topic: /waver/mode
+    goal_tolerance_m: 0.25
+    yaw_tolerance_rad: 0.45
+    max_linear_speed: 0.35
+    max_angular_speed: 0.55
+    linear_kp: 0.55
+    angular_kp: 1.2
+    heading_slowdown_rad: 0.7
+    odom_timeout_sec: 1.0
+    goal_timeout_sec: 90.0
+
+safety_cmd_mux_node:
+  ros__parameters:
+    use_sim_time: true
+    nav2_cmd_topic: /waver/cmd_vel_auto_selected
+    cmd_vel_auto_topic: /waver/cmd_vel_auto_selected
+    manual_cmd_vel_topic: /waver/manual_cmd_vel
+    cmd_vel_out_topic: /cmd_vel
+    scan_topic: /scan
+    mode_topic: /waver/mode
+    mode_default: STANDBY
+    require_scan: false
+    ignore_scan_when_require_scan_false: true
+    stop_on_adapter_degraded: false
+    stop_on_battery_fault: false
+    max_linear_speed: 0.35
+    max_angular_speed: 0.55
+    max_linear_delta_per_tick: 0.08
+    max_angular_delta_per_tick: 0.12
+    command_timeout_sec: 0.5
+    manual_override_timeout_sec: 0.5
+    allow_manual_override_in_auto: true
+    timer_hz: 20.0
+
+sound_alert_stub:
+  ros__parameters:
+    use_sim_time: true
+    enable_sound_output: false
+    sound_task_duration_sec: 1.2
+    done_latch_sec: 1.0
+    alert_cooldown_sec: 4.0
+    require_auto_mode: true
+    sound_type: GAZEBO_SIMULATED_SOUND_EVENT
+
+waver_remote_panel:
+  ros__parameters:
+    use_sim_time: true
+    profile: gazebo
+    publish_direct_cmd_vel: false
+    allow_subprocess_launches: false
+    allow_start_without_map: true
+    allow_start_without_localization: true
+    enable_scan_assist: false
+    lidar_required: false
+    cmd_vel_topic: /cmd_vel
+    manual_cmd_vel_topic: /waver/manual_cmd_vel
+    auto_cmd_vel_topic: /waver/cmd_vel_auto_selected
+    map_topic: /map
+    odom_topic: /odom
+    scan_topic: /scan
+    mode_topic: /waver/mode
+    mode_cmd_topic: /waver/mode_cmd
+    mission_command_topic: /waver/mission_command
+    default_speed: 0.12
+    default_angular: 0.35
+    max_linear_speed: 0.25
+    max_angular_speed: 0.55
+    command_rate_hz: 20.0
+    auto_mode_strategy: mission_nav2

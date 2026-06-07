@@ -1,0 +1,11 @@
+metric,value
+frames,138
+valid_projected_frames,50
+gt_rows,443
+lidar_associated_rows,215
+mission_events,282
+bird_confirmed_rows,717
+sound_done_rows,5
+has_patrol,True
+has_offset_approach,True
+has_sound_task,True

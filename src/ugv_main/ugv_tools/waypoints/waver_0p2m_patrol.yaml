@@ -1,0 +1,34 @@
+# Waver 0.2 m x 0.2 m odom-relative supervised micro patrol.
+#
+# This is a true waypoint file. It requires /odom feedback and must not be
+# treated as a waypoint PASS if open-loop fallback is enabled.
+
+frame_id: odom
+home:
+  name: home
+  x: 0.0
+  y: 0.0
+  yaw: 0.0
+
+waypoints:
+  - name: start
+    x: 0.0
+    y: 0.0
+    yaw: 0.0
+  - name: east_0p2
+    x: 0.1
+    y: 0.0
+    yaw: 1.57
+  - name: north_east_0p2
+    x: 0.1
+    y: 0.1
+    yaw: 3.14
+  - name: north_0p2
+    x: 0.0
+    y: 0.1
+    yaw: -1.57
+
+failure_policy:
+  max_patrol_radius_m: 0.35
+  recovery_attempts: 0
+  human_estop_required: true

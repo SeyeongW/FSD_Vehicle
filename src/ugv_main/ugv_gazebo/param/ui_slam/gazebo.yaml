@@ -1,0 +1,128 @@
+mapping_workflow_manager_node:
+  ros__parameters:
+    use_sim_time: true
+    map_topic: /map
+    fixed_map_topic: /map_fixed
+    save_dir: ~/ros2_ws3/FSD_Vehicle/maps
+    save_basename: waver_latest_map
+    use_internal_map_writer: true
+    crop_unknown_border_on_save: true
+    crop_margin_cells: 20
+    save_fixed_extent_m: 30.0
+    save_fixed_center_x: 0.0
+    save_fixed_center_y: 0.0
+    known_ratio_min_for_save: 0.005
+
+mapping_backend_manager_node:
+  ros__parameters:
+    use_sim_time: true
+    scan_topic: /scan_slam
+    odom_topic: /odom
+    map_topic: /map
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_footprint
+    scan_min_hz: 3.0
+    odom_min_hz: 5.0
+    map_min_hz_when_active: 0.10
+    min_scan_finite_ratio: 0.02
+
+safety_cmd_mux_node:
+  ros__parameters:
+    use_sim_time: true
+    nav2_cmd_topic: /waver/cmd_vel_nav2
+    manual_cmd_vel_topic: /waver/manual_cmd_vel
+    scan_topic: /scan_safety
+    cmd_vel_out_topic: /cmd_vel
+    mode_default: STANDBY
+    require_scan: true
+    stop_on_adapter_degraded: false
+    max_linear_speed: 0.22
+    max_angular_speed: 0.50
+    mapping_max_linear_speed: 0.16
+    mapping_max_angular_speed: 0.42
+    command_timeout_sec: 0.6
+    manual_override_timeout_sec: 0.6
+    allow_manual_override_in_auto: true
+
+mission_patrol_manager_node:
+  ros__parameters:
+    use_sim_time: true
+    use_nav2: false
+    default_mode: STANDBY
+    waypoint_file: waypoints/waver_4m_then_7m_square_patrol.yaml
+    enable_sim_nav_goal_arrival: true
+    enable_sound_task: false
+
+waver_gazebo_patrol:
+  ros__parameters:
+    use_sim_time: true
+    cmd_vel_topic: /waver/cmd_vel_nav2
+    odom_topic: /odom
+    scan_topic: /scan_safety
+    waypoint_file: ~/ros2_ws3/FSD_Vehicle/src/waver_patrol/waypoints/waver_4m_then_7m_square_patrol.yaml
+    auto_start: false
+    start_on_mission_command: true
+    relative_waypoints_to_start: true
+    reset_relative_origin_on_start: true
+    allow_open_loop_without_odom: false
+    loop_count: 1
+    max_patrol_radius_m: 14.0
+    clamp_waypoints_to_radius: true
+    max_linear_speed: 0.28
+    max_angular_speed: 0.45
+    max_linear_accel: 0.25
+    max_angular_accel: 0.45
+    xy_tolerance: 0.25
+    yaw_tolerance: 0.30
+    heading_align_threshold_rad: 0.50
+    approach_distance_m: 0.80
+    stuck_timeout_s: 18.0
+    lidar_required: false
+
+waver_remote_panel:
+  ros__parameters:
+    use_sim_time: true
+    profile: gazebo
+    publish_direct_cmd_vel: false
+    default_speed: 0.12
+    default_turn_speed: 0.20
+    mapping_command_topic: /waver/mapping_command
+    mission_command_topic: /waver/mission_command
+    manual_cmd_vel_topic: /waver/manual_cmd_vel
+    cmd_vel_topic: /cmd_vel
+    nav2_cmd_topic: /waver/cmd_vel_nav2
+    map_topic: /map
+    fixed_map_topic: /map_fixed
+    map_view_extent_m: 30.0
+    map_view_center_x: 0.0
+    map_view_center_y: 0.0
+    allow_subprocess_launches: false
+    allow_mapping_launches: false
+    allow_map_save_commands: false
+    allow_localization_launches: false
+    mapping_launch_command: ""
+    map_save_command: ""
+    localization_launch_command: ""
+
+slam_toolbox:
+  ros__parameters:
+    use_sim_time: true
+    mode: mapping
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint
+    scan_topic: /scan_slam
+    resolution: 0.05
+    max_laser_range: 12.0
+    minimum_time_interval: 0.2
+    transform_timeout: 0.2
+    tf_buffer_duration: 20.0
+    map_update_interval: 1.0
+    enable_interactive_mode: false
+    use_scan_matching: true
+    use_scan_barycenter: true
+    minimum_travel_distance: 0.15
+    minimum_travel_heading: 0.12
+    scan_buffer_size: 10
+    scan_buffer_maximum_scan_distance: 12.0

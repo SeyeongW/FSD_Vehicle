@@ -1,0 +1,12 @@
+external_lidar_dynamic_bridge_node:
+  ros__parameters:
+    input_lidar_target_topic: /external/lidar/target
+    input_lidar_target_pose_topic: /external/lidar/target_pose
+    input_lidar_objects_topic: /external/lidar/objects
+    input_target_frame: map
+    output_frame: map
+    use_tf_transform: false
+    min_target_height_m: 3.0
+    min_target_range_m: 0.5
+    max_target_range_m: 30.0
+    target_stale_timeout_sec: 1.0

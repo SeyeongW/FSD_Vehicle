@@ -1,0 +1,1 @@
+time_sec,trial_id,track_id,z_raw,z_map,object_height_m,target_min_height_m,target_max_height_m,z_valid,height_filter_pass,failure_reason

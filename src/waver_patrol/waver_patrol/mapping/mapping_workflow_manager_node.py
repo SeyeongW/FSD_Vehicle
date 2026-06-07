@@ -36,6 +36,9 @@ class MappingWorkflowManagerNode(Node):
         self.declare_parameter("use_internal_map_writer", True)
         self.declare_parameter("crop_unknown_border_on_save", True)
         self.declare_parameter("crop_margin_cells", 20)
+        self.declare_parameter("save_fixed_extent_m", 0.0)
+        self.declare_parameter("save_fixed_center_x", 0.0)
+        self.declare_parameter("save_fixed_center_y", 0.0)
         self.declare_parameter("known_ratio_min_for_save", 0.01)
         self.declare_parameter("fixed_map_topic", "/map_fixed")
         self.declare_parameter("fixed_map_publish_period_sec", 1.0)
@@ -318,6 +321,66 @@ class MappingWorkflowManagerNode(Node):
         height = int(msg.info.height)
         if width <= 0 or height <= 0 or len(msg.data) != width * height:
             raise RuntimeError("invalid occupancy grid dimensions")
+        resolution = float(msg.info.resolution)
+        yaw = self.quaternion_yaw(msg.info.origin.orientation)
+        fixed_extent_m = float(self.get_parameter("save_fixed_extent_m").value)
+        fixed_center_x = float(self.get_parameter("save_fixed_center_x").value)
+        fixed_center_y = float(self.get_parameter("save_fixed_center_y").value)
+
+        if fixed_extent_m > 0.0:
+            if abs(yaw) > 1e-3:
+                raise RuntimeError("fixed-extent map save requires yaw-aligned map origin")
+            output_width = max(1, int(math.ceil(fixed_extent_m / resolution)))
+            output_height = output_width
+            output_origin_x = fixed_center_x - 0.5 * output_width * resolution
+            output_origin_y = fixed_center_y - 0.5 * output_height * resolution
+            source_origin_x = float(msg.info.origin.position.x)
+            source_origin_y = float(msg.info.origin.position.y)
+
+            with pgm_path.open("wb") as stream:
+                stream.write(
+                    f"P5\n# CREATOR: waver mapping workflow fixed extent\n{output_width} {output_height}\n255\n".encode(
+                        "ascii"
+                    )
+                )
+                for out_y in range(output_height - 1, -1, -1):
+                    row = bytearray()
+                    world_y = output_origin_y + (out_y + 0.5) * resolution
+                    src_y = int(math.floor((world_y - source_origin_y) / resolution))
+                    for out_x in range(output_width):
+                        world_x = output_origin_x + (out_x + 0.5) * resolution
+                        src_x = int(math.floor((world_x - source_origin_x) / resolution))
+                        if 0 <= src_x < width and 0 <= src_y < height:
+                            occupancy = int(msg.data[src_y * width + src_x])
+                        else:
+                            occupancy = -1
+                        if occupancy < 0:
+                            # Keep unknown inside the free/occupied thresholds.
+                            # 205 is interpreted as free by this YAML's
+                            # free_thresh=0.25 path, so use mid-gray.
+                            pixel = 127
+                        elif occupancy >= 65:
+                            pixel = 0
+                        else:
+                            pixel = 254
+                        row.append(pixel)
+                    stream.write(row)
+            payload = {
+                "image": pgm_path.name,
+                "mode": "trinary",
+                "resolution": resolution,
+                "origin": [
+                    output_origin_x,
+                    output_origin_y,
+                    0.0,
+                ],
+                "negate": 0,
+                "occupied_thresh": 0.65,
+                "free_thresh": 0.25,
+            }
+            yaml_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+            return
+
         min_x, min_y, max_x, max_y = 0, 0, width - 1, height - 1
         if bool(self.get_parameter("crop_unknown_border_on_save").value):
             known_indices = [i for i, value in enumerate(msg.data) if int(value) >= 0]
@@ -343,15 +406,15 @@ class MappingWorkflowManagerNode(Node):
                 for value in msg.data[offset + min_x : offset + max_x + 1]:
                     occupancy = int(value)
                     if occupancy < 0:
-                        pixel = 205
+                        # Keep unknown as unknown when loaded by map_server or
+                        # by this node's load_saved_map().
+                        pixel = 127
                     elif occupancy >= 65:
                         pixel = 0
                     else:
                         pixel = 254
                     row.append(pixel)
                 stream.write(row)
-        yaw = self.quaternion_yaw(msg.info.origin.orientation)
-        resolution = float(msg.info.resolution)
         dx = float(min_x) * resolution
         dy = float(min_y) * resolution
         cos_yaw = math.cos(yaw)

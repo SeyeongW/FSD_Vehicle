@@ -30,6 +30,7 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
+from std_msgs.msg import String
 
 from ugv_tools.waver_drive_assist import (
     AssistConfig,
@@ -105,9 +106,9 @@ class WaverGazeboPatrol(Node):
         self.declare_parameter("clamp_waypoints_to_radius", True)
         self.declare_parameter("loop_count", 1)
         self.declare_parameter("max_linear_speed", 0.30)
-        self.declare_parameter("max_angular_speed", 0.7)
+        self.declare_parameter("max_angular_speed", 0.12)
         self.declare_parameter("max_linear_accel", 0.35)
-        self.declare_parameter("max_angular_accel", 1.4)
+        self.declare_parameter("max_angular_accel", 0.25)
         self.declare_parameter("reverse_speed", 0.08)
         self.declare_parameter("xy_tolerance", 0.18)
         self.declare_parameter("yaw_tolerance", 0.35)
@@ -128,6 +129,20 @@ class WaverGazeboPatrol(Node):
         self.declare_parameter("max_recovery_attempts", 3)
         self.declare_parameter("state_topic", "/waver/patrol_state")
         self.declare_parameter("current_waypoint_topic", "/waver/current_waypoint")
+        self.declare_parameter("auto_start", True)
+        self.declare_parameter("start_on_mission_command", True)
+        self.declare_parameter("mission_command_topic", "/waver/mission_command")
+        self.declare_parameter("mode_topic", "/waver/mode")
+        self.declare_parameter("relative_waypoints_to_start", False)
+        self.declare_parameter("reset_relative_origin_on_start", True)
+        self.declare_parameter("allow_open_loop_without_odom", False)
+        self.declare_parameter("open_loop_step_distance_m", 0.3)
+        self.declare_parameter("open_loop_forward_duration_s", 0.0)
+        self.declare_parameter("open_loop_turn_duration_s", 8.2)
+        self.declare_parameter("open_loop_turn_angular_speed", 0.05)
+        self.declare_parameter("open_loop_dwell_s", 0.25)
+        self.declare_parameter("open_loop_turn_direction", 1.0)
+        self.declare_parameter("open_loop_sides_per_loop", 4)
 
         # 역할: 파라미터를 내부 제어 변수로 확정한다.
         self.cmd_vel_topic = str(self.get_parameter("cmd_vel_topic").value)
@@ -175,7 +190,8 @@ class WaverGazeboPatrol(Node):
 
         # 역할: launch 문자열 또는 RViz clicked goal로 들어온 waypoint를 내부 배열로 관리한다.
         waypoint_items = self._waypoint_items()
-        self.waypoints = self.parse_waypoints(waypoint_items)
+        self.template_waypoints = self.parse_waypoints(waypoint_items)
+        self.waypoints = list(self.template_waypoints)
         self.current_index = 0
         self.completed_loops = 0
         self.pose: tuple[float, float, float] | None = None
@@ -188,12 +204,28 @@ class WaverGazeboPatrol(Node):
         self.best_distance = math.inf
         self.last_progress_time = time.monotonic()
         self.last_assist_warn_time = 0.0
-        self.active = bool(self.waypoints)
+        self.auto_start = bool(self.get_parameter("auto_start").value)
+        self.start_on_mission_command = bool(
+            self.get_parameter("start_on_mission_command").value
+        )
+        self.relative_waypoints_to_start = bool(
+            self.get_parameter("relative_waypoints_to_start").value
+        )
+        self.reset_relative_origin_on_start = bool(
+            self.get_parameter("reset_relative_origin_on_start").value
+        )
+        self.relative_origin_set = False
+        self.start_pending_until_odom = False
+        self.allow_open_loop_without_odom = bool(
+            self.get_parameter("allow_open_loop_without_odom").value
+        )
+        self.open_loop_phase = "FORWARD"
+        self.open_loop_phase_started = time.monotonic()
+        self.open_loop_side_index = 0
+        self.active = bool(self.waypoints) and self.auto_start
 
         # 역할: /cmd_vel, /odom, /scan, /goal_pose를 연결하고 모니터링용 상태 토픽을 만든다.
         self.cmd_pub = self.create_publisher(Twist, self.cmd_vel_topic, 10)
-        from std_msgs.msg import String
-
         self.state_pub = self.create_publisher(
             String,
             str(self.get_parameter("state_topic").value),
@@ -206,6 +238,19 @@ class WaverGazeboPatrol(Node):
         )
         self.create_subscription(Odometry, odom_topic, self.odom_callback, 20)
         self.create_subscription(PoseStamped, goal_pose_topic, self.goal_pose_callback, 10)
+        if self.start_on_mission_command:
+            self.create_subscription(
+                String,
+                str(self.get_parameter("mission_command_topic").value),
+                self.mission_command_callback,
+                10,
+            )
+            self.create_subscription(
+                String,
+                str(self.get_parameter("mode_topic").value),
+                self.mode_callback,
+                10,
+            )
         if bool(self.get_parameter("enable_scan_assist").value):
             # 역할: Gazebo/실차 LaserScan은 best_effort인 경우가 많아 sensor_data QoS로 맞춘다.
             self.create_subscription(
@@ -215,12 +260,15 @@ class WaverGazeboPatrol(Node):
                 qos_profile_sensor_data,
             )
         self.timer = self.create_timer(0.05, self.control_tick)
+        self.status_timer = self.create_timer(0.5, self.publish_status_heartbeat)
 
         self.get_logger().info(
             f"Waver assisted patrol loaded {len(self.waypoints)} waypoint(s); "
             f"radius <= {self.max_patrol_radius_m:.2f}m around "
             f"({self.patrol_center_x:.2f}, {self.patrol_center_y:.2f})"
         )
+        if not self.active:
+            self.get_logger().info("Patrol is armed but inactive; send START_PATROL to begin.")
 
     def _waypoint_items(self) -> list[str]:
         # 역할: launch에서 semicolon CSV를 주면 우선 사용하고, 없으면 YAML 파일/list 파라미터를 사용한다.
@@ -337,6 +385,95 @@ class WaverGazeboPatrol(Node):
         ori = msg.pose.pose.orientation
         self.pose = (pos.x, pos.y, yaw_from_quaternion(ori.x, ori.y, ori.z, ori.w))
         self.last_odom_time = self.get_clock().now()
+        if self.start_pending_until_odom:
+            self.activate_patrol("START_PATROL pending until first odom")
+
+    def mission_command_callback(self, msg: String) -> None:
+        command = msg.data.strip().upper()
+        if command in {"START_PATROL", "RESUME_PATROL", "AUTO_MODE", "GAZEBO_TRIAL_START"}:
+            self.activate_patrol(command)
+            return
+        if command in {
+            "STOP",
+            "PAUSE_PATROL",
+            "MANUAL_MODE",
+            "EMERGENCY_STOP",
+            "GAZEBO_TRIAL_STOP",
+        }:
+            self.deactivate_patrol(command)
+
+    def mode_callback(self, msg: String) -> None:
+        mode = msg.data.strip().upper()
+        if mode in {"STANDBY", "MANUAL", "EMERGENCY", "DISABLED"}:
+            self.deactivate_patrol(f"mode={mode}")
+
+    def activate_patrol(self, reason: str) -> None:
+        if not self.template_waypoints:
+            self._set_state(PatrolState.COMPLETE, "no waypoints")
+            self.publish_stop()
+            return
+        if self.pose is None:
+            if self.allow_open_loop_without_odom:
+                self.start_pending_until_odom = False
+                self.waypoints = list(self.template_waypoints)
+                self.current_index = 0
+                self.completed_loops = 0
+                self.active = True
+                self.reset_open_loop(reason)
+                return
+            self.start_pending_until_odom = True
+            self._set_state(PatrolState.WAIT_FOR_ODOM, reason)
+            self.publish_stop()
+            return
+        self.start_pending_until_odom = False
+        if self.relative_waypoints_to_start and (
+            self.reset_relative_origin_on_start or not self.relative_origin_set
+        ):
+            self.apply_relative_origin()
+        else:
+            self.waypoints = list(self.template_waypoints)
+        self.current_index = 0
+        self.completed_loops = 0
+        self.best_distance = math.inf
+        self.last_progress_time = time.monotonic()
+        self.blocked_since = 0.0
+        self.recovery_attempts = 0
+        self.recovery_until = 0.0
+        self.active = True
+        self._set_state(PatrolState.CRUISE, reason)
+
+    def reset_open_loop(self, reason: str) -> None:
+        self.open_loop_phase = "FORWARD"
+        self.open_loop_phase_started = time.monotonic()
+        self.open_loop_side_index = 0
+        self._set_state(PatrolState.CRUISE, f"open_loop {reason}")
+
+    def deactivate_patrol(self, reason: str) -> None:
+        self.start_pending_until_odom = False
+        if self.active or self.state != PatrolState.COMPLETE:
+            self.active = False
+            self._set_state(PatrolState.COMPLETE, reason)
+        self.publish_stop()
+
+    def apply_relative_origin(self) -> None:
+        if self.pose is None:
+            return
+        origin_x, origin_y, origin_yaw = self.pose
+        cos_yaw = math.cos(origin_yaw)
+        sin_yaw = math.sin(origin_yaw)
+        self.patrol_center_x = origin_x
+        self.patrol_center_y = origin_y
+        transformed: list[Waypoint] = []
+        for waypoint in self.template_waypoints:
+            world_x = origin_x + cos_yaw * waypoint.x - sin_yaw * waypoint.y
+            world_y = origin_y + sin_yaw * waypoint.x + cos_yaw * waypoint.y
+            world_yaw = normalize_angle(origin_yaw + waypoint.yaw)
+            transformed.append(Waypoint(world_x, world_y, world_yaw, waypoint.name))
+        self.waypoints = transformed
+        self.relative_origin_set = True
+        self.get_logger().info(
+            f"Patrol origin set from odom: x={origin_x:.3f} y={origin_y:.3f} yaw={origin_yaw:.3f}"
+        )
 
     def scan_callback(self, msg: LaserScan) -> None:
         # 역할: 장애물 sector와 TTC를 갱신해 순찰 중 독립 hard stop에 사용한다.
@@ -383,10 +520,17 @@ class WaverGazeboPatrol(Node):
     def control_tick(self) -> None:
         # 역할: 20Hz 제어 루프. odom, scan, progress 상태를 보고 다음 안전 명령을 결정한다.
         if not self.active or not self.waypoints:
+            if self.start_pending_until_odom:
+                self._set_state(PatrolState.WAIT_FOR_ODOM, "waiting first odom")
+                self.publish_stop()
+                return
             self._set_state(PatrolState.COMPLETE, "inactive")
             self.publish_stop()
             return
         if self.pose is None:
+            if self.allow_open_loop_without_odom:
+                self.control_tick_open_loop()
+                return
             self._set_state(PatrolState.WAIT_FOR_ODOM, "no odom yet")
             self.publish_stop()
             return
@@ -463,6 +607,74 @@ class WaverGazeboPatrol(Node):
         self.publish_drive(
             DriveCommand(speed, angular, "patrol", "regulated waypoint tracking")
         )
+
+    def control_tick_open_loop(self) -> None:
+        # 역할: encoder/odom feedback이 아직 없는 초기 실차 확인에서만 쓰는 초저속 fallback이다.
+        # 정확한 위치제어가 아니라 speed*time 기반 근사 순찰이므로 반드시 감독하에서만 사용한다.
+        now = time.monotonic()
+        speed = max(0.01, min(self.max_linear_speed, float(self.get_parameter("open_loop_step_distance_m").value)))
+        step_distance = max(0.05, float(self.get_parameter("open_loop_step_distance_m").value))
+        configured_forward_duration = float(self.get_parameter("open_loop_forward_duration_s").value)
+        forward_duration = (
+            configured_forward_duration
+            if configured_forward_duration > 0.0
+            else step_distance / max(speed, 1e-3)
+        )
+        turn_duration = max(0.1, float(self.get_parameter("open_loop_turn_duration_s").value))
+        turn_speed = max(
+            0.0,
+            min(
+                self.max_angular_speed,
+                float(self.get_parameter("open_loop_turn_angular_speed").value),
+            ),
+        )
+        dwell = max(0.0, float(self.get_parameter("open_loop_dwell_s").value))
+        elapsed = now - self.open_loop_phase_started
+
+        if self.open_loop_phase == "FORWARD":
+            self._set_state(PatrolState.CRUISE, f"open_loop_side={self.open_loop_side_index}")
+            if elapsed >= forward_duration:
+                self.open_loop_phase = "DWELL_AFTER_FORWARD"
+                self.open_loop_phase_started = now
+                self.publish_stop()
+                return
+            self.publish_drive(DriveCommand(speed, 0.0, "patrol", "open_loop_forward"))
+            return
+
+        if self.open_loop_phase == "DWELL_AFTER_FORWARD":
+            self._set_state(PatrolState.ARRIVED, "open_loop_step_complete")
+            self.publish_stop()
+            if elapsed >= dwell:
+                self.open_loop_phase = "TURN"
+                self.open_loop_phase_started = now
+            return
+
+        if self.open_loop_phase == "TURN":
+            self._set_state(PatrolState.ALIGN_HEADING, "open_loop_square_turn")
+            if elapsed >= turn_duration:
+                self.open_loop_phase = "DWELL_AFTER_TURN"
+                self.open_loop_phase_started = now
+                self.open_loop_side_index += 1
+                self.publish_stop()
+                return
+            direction = 1.0 if float(self.get_parameter("open_loop_turn_direction").value) >= 0.0 else -1.0
+            self.publish_drive(
+                DriveCommand(0.0, direction * turn_speed, "patrol", "open_loop_turn")
+            )
+            return
+
+        self.publish_stop()
+        if elapsed >= dwell:
+            sides_per_loop = max(1, int(self.get_parameter("open_loop_sides_per_loop").value))
+            if self.open_loop_side_index >= sides_per_loop:
+                self.completed_loops += 1
+                self.open_loop_side_index = 0
+                if self.loop_count >= 0 and self.completed_loops >= self.loop_count:
+                    self.active = False
+                    self._set_state(PatrolState.COMPLETE, "open_loop requested loops complete")
+                    return
+            self.open_loop_phase = "FORWARD"
+            self.open_loop_phase_started = now
 
     def _regulated_speed(self, distance: float, heading_error: float) -> float:
         # 역할: 목표 접근 거리, heading 오차, scan 위험도에 따라 사람처럼 천천히 감속한다.
@@ -627,6 +839,13 @@ class WaverGazeboPatrol(Node):
         msg.data = self.state.value if not reason else f"{self.state.value}: {reason}"
         self.state_pub.publish(msg)
 
+    def publish_status_heartbeat(self) -> None:
+        # 역할: 늦게 붙은 `ros2 topic echo --once`도 현재 상태를 바로 확인할 수 있게 한다.
+        self.publish_state("heartbeat")
+        if self.waypoints:
+            index = min(max(self.current_index, 0), len(self.waypoints) - 1)
+            self.publish_current_waypoint(self.waypoints[index])
+
     def publish_current_waypoint(self, waypoint: Waypoint) -> None:
         # 역할: 현재 목표 waypoint를 /waver/current_waypoint로 발행해 RViz/터미널에서 점검한다.
         msg = PoseStamped()
@@ -654,6 +873,9 @@ def main(args=None):
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except RuntimeError as exc:
+        if "Unable to convert call argument to Python object" not in str(exc):
+            raise
     finally:
         node.destroy_node()
         if rclpy.ok():

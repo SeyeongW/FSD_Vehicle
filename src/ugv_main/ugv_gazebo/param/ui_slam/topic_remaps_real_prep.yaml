@@ -1,0 +1,22 @@
+real_prep_topic_remaps:
+  camera:
+    image: /camera/image_raw
+    camera_info: /camera/camera_info
+  lidar:
+    mid360_points: /mid360_PointCloud2
+    scan_slam: /scan_slam
+    scan_safety: /scan_safety
+  navigation:
+    odom: /odom
+    map: /map
+    fixed_map: /map_fixed
+    manual_cmd: /waver/manual_cmd_vel
+    nav_cmd: /waver/cmd_vel_nav2
+    final_cmd: /cmd_vel
+  state:
+    mode: /waver/mode
+    mode_cmd: /waver/mode_cmd
+    mission_command: /waver/mission_command
+    mapping_command: /waver/mapping_command
+    mapping_state: /waver/mapping_state
+    safety_state: /waver/safety_state

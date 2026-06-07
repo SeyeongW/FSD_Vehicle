@@ -1,0 +1,14 @@
+{
+  "images": [],
+  "annotations": [],
+  "categories": [
+    {
+      "id": 1,
+      "name": "bird"
+    }
+  ],
+  "info": {
+    "detector_mode": "lidar",
+    "classifier_mode": "fake_gazebo"
+  }
+}

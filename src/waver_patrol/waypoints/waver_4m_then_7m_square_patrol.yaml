@@ -1,0 +1,11 @@
+route_name: waver_4m_then_7m_square_patrol
+frame_id: odom
+description: >
+  Gazebo UI-SLAM validation route. Start with a 4 m straight leg, then patrol
+  a 7 m square. The launch runs this as relative-to-start odom waypoints.
+waypoints:
+  - {name: straight_4m, x: 4.0, y: 0.0, yaw: 0.0}
+  - {name: square_corner_1, x: 4.0, y: 7.0, yaw: 1.5708}
+  - {name: square_corner_2, x: -3.0, y: 7.0, yaw: 3.1416}
+  - {name: square_corner_3, x: -3.0, y: 0.0, yaw: -1.5708}
+  - {name: square_return, x: 4.0, y: 0.0, yaw: 0.0}

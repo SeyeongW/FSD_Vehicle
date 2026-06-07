@@ -67,6 +67,7 @@ class SafetyCmdMuxNode(Node):
         self.declare_parameter("max_angular_delta_per_tick", 0.08)
         self.declare_parameter("command_timeout_sec", 0.5)
         self.declare_parameter("manual_override_timeout_sec", 0.5)
+        self.declare_parameter("allow_manual_override_in_auto", True)
         self.declare_parameter("stop_on_unknown_state", True)
         self.declare_parameter("timer_hz", 20.0)
 
@@ -83,22 +84,41 @@ class SafetyCmdMuxNode(Node):
         self.battery_safety_state = "UNKNOWN"
         self.last_out = stop_twist()
         self.last_scan_blocking_state = "SCAN_STALE_STOP"
+        self.subscriptions_ = []
 
         self.cmd_pub = self.create_publisher(Twist, str(self.get_parameter("cmd_vel_out_topic").value), 10)
         self.state_pub = self.create_publisher(String, str(self.get_parameter("safety_state_topic").value), 10)
         auto_topic = str(self.get_parameter("cmd_vel_auto_topic").value).strip()
         if not auto_topic:
             auto_topic = str(self.get_parameter("nav2_cmd_topic").value).strip()
-        self.create_subscription(Twist, auto_topic, self.auto_callback, 10)
-        self.create_subscription(Twist, str(self.get_parameter("manual_cmd_vel_topic").value), self.manual_callback, 10)
-        self.create_subscription(LaserScan, str(self.get_parameter("scan_topic").value), self.scan_callback, qos_profile_sensor_data)
-        self.create_subscription(String, str(self.get_parameter("livox_scan_adapter_state_topic").value), self.adapter_state_callback, 10)
-        self.create_subscription(String, str(self.get_parameter("battery_safety_state_topic").value), self.battery_state_callback, 10)
-        self.create_subscription(Bool, str(self.get_parameter("emergency_stop_topic").value), lambda m: setattr(self, "estop", bool(m.data)), 10)
-        self.create_subscription(Bool, str(self.get_parameter("external_stop_topic").value), lambda m: setattr(self, "external_stop", bool(m.data)), 10)
-        self.create_subscription(Float32, str(self.get_parameter("speed_limit_topic").value), self.speed_limit_callback, 10)
-        self.create_subscription(Float32, str(self.get_parameter("angular_speed_limit_topic").value), self.angular_limit_callback, 10)
-        self.create_subscription(String, str(self.get_parameter("mode_topic").value), self.mode_callback, 10)
+        self.subscriptions_.append(self.create_subscription(Twist, auto_topic, self.auto_callback, 10))
+        self.subscriptions_.append(
+            self.create_subscription(Twist, str(self.get_parameter("manual_cmd_vel_topic").value), self.manual_callback, 10)
+        )
+        self.subscriptions_.append(
+            self.create_subscription(LaserScan, str(self.get_parameter("scan_topic").value), self.scan_callback, qos_profile_sensor_data)
+        )
+        self.subscriptions_.append(
+            self.create_subscription(String, str(self.get_parameter("livox_scan_adapter_state_topic").value), self.adapter_state_callback, 10)
+        )
+        self.subscriptions_.append(
+            self.create_subscription(String, str(self.get_parameter("battery_safety_state_topic").value), self.battery_state_callback, 10)
+        )
+        self.subscriptions_.append(
+            self.create_subscription(Bool, str(self.get_parameter("emergency_stop_topic").value), lambda m: setattr(self, "estop", bool(m.data)), 10)
+        )
+        self.subscriptions_.append(
+            self.create_subscription(Bool, str(self.get_parameter("external_stop_topic").value), lambda m: setattr(self, "external_stop", bool(m.data)), 10)
+        )
+        self.subscriptions_.append(
+            self.create_subscription(Float32, str(self.get_parameter("speed_limit_topic").value), self.speed_limit_callback, 10)
+        )
+        self.subscriptions_.append(
+            self.create_subscription(Float32, str(self.get_parameter("angular_speed_limit_topic").value), self.angular_limit_callback, 10)
+        )
+        self.subscriptions_.append(
+            self.create_subscription(String, str(self.get_parameter("mode_topic").value), self.mode_callback, 10)
+        )
         self.create_timer(1.0 / max(float(self.get_parameter("timer_hz").value), 1.0), self.tick)
 
     def auto_callback(self, msg: Twist) -> None:
@@ -210,7 +230,11 @@ class SafetyCmdMuxNode(Node):
                 return stop_twist(), f"{self.mode}_COMMAND_TIMEOUT_STOP", True
             return self.manual_cmd, f"{self.mode}_PASS", False
         if manual_fresh and manual_nonzero:
-            return self.manual_cmd, "MANUAL_OVERRIDE", False
+            auto_like_modes = {"AUTO", "PATROL", "TRACK_ONLY", "RETURN_HOME", "MAPPING_AUTO"}
+            if self.mode not in auto_like_modes or bool(
+                self.get_parameter("allow_manual_override_in_auto").value
+            ):
+                return self.manual_cmd, "MANUAL_OVERRIDE", False
         if self.mode == "STANDBY":
             return stop_twist(), "STANDBY_STOP", True
         if now - self.last_auto_time > float(self.get_parameter("command_timeout_sec").value):

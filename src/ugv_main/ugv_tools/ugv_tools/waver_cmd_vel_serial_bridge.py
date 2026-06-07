@@ -77,7 +77,15 @@ class JsonTransport:
 
         try:
             port = self._resolved_port()
-            self.serial = serial.Serial(port, self.baudrate, timeout=0, write_timeout=0.05)
+            self.serial = serial.Serial(
+                port,
+                self.baudrate,
+                timeout=0,
+                write_timeout=0.05,
+                dsrdtr=None,
+            )
+            self.serial.setRTS(False)
+            self.serial.setDTR(False)
             self.port = port
             self.last_error = ""
         except Exception as exc:
@@ -134,14 +142,22 @@ class WaverCmdVelSerialBridge(Node):
         super().__init__("waver_cmd_vel_serial_bridge")
         # 역할: 실차 적용 전 launch 파라미터로 포트/속도/장애물 제한을 보수적으로 조정한다.
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
-        self.declare_parameter("max_left_right", 0.5)
-        self.declare_parameter("max_demo_ratio", 0.30)
+        self.declare_parameter("max_left_right", 0.28)
+        self.declare_parameter("max_demo_ratio", 0.24)
         self.declare_parameter("linear_gain", 1.0)
         self.declare_parameter("angular_gain", 0.65)
+        self.declare_parameter("pure_turn_mode", "boosted_skid")
+        self.declare_parameter("pure_turn_linear_epsilon", 0.01)
+        self.declare_parameter("pure_turn_min_ratio", 0.14)
+        self.declare_parameter("pure_turn_max_ratio", 0.20)
+        self.declare_parameter("arc_turn_forward_bias", 0.08)
+        self.declare_parameter("mixed_turn_mode", "same_direction_arc")
+        self.declare_parameter("mixed_turn_inner_ratio", 0.08)
+        self.declare_parameter("mixed_turn_outer_ratio", 0.18)
         self.declare_parameter("max_linear_speed", 0.30)
-        self.declare_parameter("max_angular_speed", 0.7)
+        self.declare_parameter("max_angular_speed", 0.16)
         self.declare_parameter("max_linear_accel", 0.35)
-        self.declare_parameter("max_angular_accel", 1.2)
+        self.declare_parameter("max_angular_accel", 0.28)
         self.declare_parameter("reverse_speed", 0.08)
         self.declare_parameter("deadband", 0.01)
         self.declare_parameter("command_rate_hz", 20.0)
@@ -162,6 +178,14 @@ class WaverCmdVelSerialBridge(Node):
         self.max_demo_ratio = float(self.get_parameter("max_demo_ratio").value)
         self.linear_gain = float(self.get_parameter("linear_gain").value)
         self.angular_gain = float(self.get_parameter("angular_gain").value)
+        self.pure_turn_mode = str(self.get_parameter("pure_turn_mode").value).strip().lower()
+        self.pure_turn_linear_epsilon = float(self.get_parameter("pure_turn_linear_epsilon").value)
+        self.pure_turn_min_ratio = float(self.get_parameter("pure_turn_min_ratio").value)
+        self.pure_turn_max_ratio = float(self.get_parameter("pure_turn_max_ratio").value)
+        self.arc_turn_forward_bias = float(self.get_parameter("arc_turn_forward_bias").value)
+        self.mixed_turn_mode = str(self.get_parameter("mixed_turn_mode").value).strip().lower()
+        self.mixed_turn_inner_ratio = float(self.get_parameter("mixed_turn_inner_ratio").value)
+        self.mixed_turn_outer_ratio = float(self.get_parameter("mixed_turn_outer_ratio").value)
         self.deadband = float(self.get_parameter("deadband").value)
         self.cmd_timeout_s = float(self.get_parameter("cmd_timeout_s").value)
         self.stop_repeat = int(self.get_parameter("stop_repeat").value)
@@ -275,12 +299,68 @@ class WaverCmdVelSerialBridge(Node):
 
     def drive_to_wheel(self, command: DriveCommand) -> WheelCommand:
         # 역할: differential/skid-steer 근사식으로 linear/angular를 L/R 비율로 변환한다.
+        if (
+            abs(command.linear) <= self.pure_turn_linear_epsilon
+            and abs(command.angular) >= self.deadband
+        ):
+            return self.pure_turn_to_wheel(command.angular)
+        if (
+            self.mixed_turn_mode == "same_direction_arc"
+            and abs(command.linear) > self.pure_turn_linear_epsilon
+            and abs(command.angular) >= self.deadband
+        ):
+            return self.mixed_turn_to_wheel(command.linear, command.angular)
         left = self.linear_gain * command.linear - self.angular_gain * command.angular
         right = self.linear_gain * command.linear + self.angular_gain * command.angular
         limit = min(self.max_left_right, self.max_demo_ratio)
         left = 0.0 if abs(left) < self.deadband else clamp(left, -limit, limit)
         right = 0.0 if abs(right) < self.deadband else clamp(right, -limit, limit)
         return WheelCommand(left, right)
+
+    def mixed_turn_to_wheel(self, linear: float, angular: float) -> WheelCommand:
+        # 역할: W+A/W+D/S+A/S+D 조합은 안쪽 바퀴가 역회전하면 실제 로봇이
+        # 대각선 주행 대신 제자리 회전에 가까워진다. 조합 입력에서는 양쪽 바퀴를
+        # 같은 방향으로 돌리되 안쪽 바퀴만 느리게 만들어 arc 주행을 만든다.
+        limit = min(self.max_left_right, max(self.max_demo_ratio, self.mixed_turn_outer_ratio))
+        outer_mag = clamp(
+            max(abs(self.linear_gain * linear), self.mixed_turn_outer_ratio),
+            self.deadband,
+            limit,
+        )
+        inner_mag = clamp(self.mixed_turn_inner_ratio, self.deadband, outer_mag)
+        sign = 1.0 if linear > 0.0 else -1.0
+        outer = sign * outer_mag
+        inner = sign * inner_mag
+        if angular > 0.0:
+            if linear > 0.0:
+                return WheelCommand(inner, outer)
+            return WheelCommand(outer, inner)
+        if linear > 0.0:
+            return WheelCommand(outer, inner)
+        return WheelCommand(inner, outer)
+
+    def pure_turn_to_wheel(self, angular: float) -> WheelCommand:
+        # 역할: A/D 단독 입력은 지면 마찰 때문에 일반 skid-steer 비율만으로는 약할 수 있다.
+        # /cmd_vel angular 안전 상한은 safety mux가 유지하고, 여기서는 하위 구동 비율만 보강한다.
+        base_limit = min(self.max_left_right, self.max_demo_ratio)
+        turn_limit = min(max(self.pure_turn_max_ratio, 0.0), self.max_left_right)
+        limit = max(base_limit, turn_limit)
+        turn = abs(self.angular_gain * angular)
+        turn = clamp(turn, min(self.pure_turn_min_ratio, limit), limit)
+        mode = self.pure_turn_mode
+        if mode == "pivot":
+            if angular > 0.0:
+                return WheelCommand(0.0, turn)
+            return WheelCommand(turn, 0.0)
+        if mode == "arc":
+            bias = clamp(self.arc_turn_forward_bias, 0.0, limit)
+            if angular > 0.0:
+                return WheelCommand(clamp(bias * 0.25, -limit, limit), turn)
+            return WheelCommand(turn, clamp(bias * 0.25, -limit, limit))
+        # boosted_skid/current default: in-place turn with a higher turn-only floor.
+        if angular > 0.0:
+            return WheelCommand(-turn, turn)
+        return WheelCommand(turn, -turn)
 
     def send_stop_burst(self) -> None:
         # 역할: 예외/종료 시 stop 명령을 여러 번 보내 하위 제어기 마지막 명령을 정지로 만든다.

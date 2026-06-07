@@ -1,0 +1,25 @@
+time_sec,state
+11.9,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+12.0,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+12.100000000000001,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+12.200000000000001,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+12.3,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+12.4,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+12.5,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+12.600000000000001,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+12.700000000000001,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+12.8,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+12.9,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+13.0,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+13.100000000000001,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+13.200000000000001,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+13.3,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+13.4,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+13.5,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+13.600000000000001,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+13.700000000000001,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+13.8,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+13.9,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+14.0,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+14.100000000000001,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False
+14.200000000000001,CAMERA_ALIGNMENT mode=logical centered=True bearing=-0.095 tilt_cmd=-0.700 joint_publish=False

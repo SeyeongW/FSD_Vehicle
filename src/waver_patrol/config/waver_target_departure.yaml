@@ -1,0 +1,9 @@
+target_departure_monitor_node:
+  ros__parameters:
+    departure_distance_m: 8.0
+    min_wait_after_mission_sec: 1.0
+    target_lost_timeout_sec: 3.0
+    max_wait_departure_sec: 20.0
+    require_mission_action_done: true
+    use_lidar_range_topic: true
+    use_pose_range_fallback: true

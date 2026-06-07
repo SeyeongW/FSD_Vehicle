@@ -1,0 +1,1 @@
+time_sec,trial_id,track_id,robot_x,robot_y,robot_yaw,robot_linear_velocity,robot_angular_velocity_z,raw_displacement_m,compensated_motion_m,static_motion_tolerance_m,high_yaw_rate,classification,dynamic_filter_pass

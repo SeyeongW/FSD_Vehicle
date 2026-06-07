@@ -1,0 +1,51 @@
+route_name: gazebo_bird_patrol_square_4m_7m
+frame_id: odom
+loop: true
+default_dwell_s: 0.5
+
+home:
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+
+charge:
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+
+waypoints:
+  - name: straight_4m
+    x: 4.0
+    y: 0.0
+    yaw_deg: 0.0
+    dwell_s: 0.4
+  - name: square_4m_7m_a
+    x: 11.0
+    y: 0.0
+    yaw_deg: 0.0
+    dwell_s: 0.4
+  - name: square_4m_7m_b
+    x: 11.0
+    y: 7.0
+    yaw_deg: 90.0
+    dwell_s: 0.4
+  - name: square_4m_7m_c
+    x: 4.0
+    y: 7.0
+    yaw_deg: 180.0
+    dwell_s: 0.4
+  - name: square_4m_7m_d
+    x: 4.0
+    y: 0.0
+    yaw_deg: -90.0
+    dwell_s: 0.4
+
+failure_policy:
+  max_patrol_radius_m: 12.0
+  recovery_attempts: 1
+  human_estop_required: false
+
+experiment_tags:
+  - gazebo
+  - seo_world
+  - bird_dynamic_target

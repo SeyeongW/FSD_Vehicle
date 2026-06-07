@@ -22,8 +22,12 @@ else:
 
 serial_port = os.environ.get('SERIAL_PORT', default_port)
 
-# Initialize serial communication with the UGV
-ser = serial.Serial(serial_port, 115200, timeout=1)
+# Initialize serial communication with the UGV. Waveshare's serial examples
+# deassert RTS/DTR after opening the ESP32 slave port; keep the same behavior
+# here so opening ROS does not reset or hold the slave controller.
+ser = serial.Serial(serial_port, 115200, timeout=1, dsrdtr=None)
+ser.setRTS(False)
+ser.setDTR(False)
 
 class UgvDriver(Node):
     def __init__(self, name):
@@ -53,8 +57,10 @@ class UgvDriver(Node):
             elif -0.2 < angular_velocity < 0:
                 angular_velocity = -0.2
 
-        # Send the velocity data to the UGV as a JSON string
-        data = json.dumps({'T': '13', 'X': linear_velocity, 'Z': angular_velocity}) + "\n"
+        # Waveshare's ROS-control command uses numeric T=13. Some firmware
+        # builds ignore the string form ("13"), so keep the payload compact and
+        # type-stable for the real base controller.
+        data = json.dumps({'T': 13, 'X': linear_velocity, 'Z': angular_velocity}, separators=(',', ':')) + "\n"
         ser.write(data.encode())
 
     # Callback for processing joint state updates

@@ -1,0 +1,14 @@
+profile: gazebo
+use_sim_time: true
+world: ugv_world.world
+command_chain: safety_mux_final
+final_cmd_vel_publisher: safety_cmd_mux_node
+mode_authority: mission_patrol_manager_node
+allow_fake_bird_classification: true
+fake_bird_classification_label: GAZEBO_ONLY
+default_mode: STANDBY
+patrol_route: patrol_waypoints_square_4m_7m.yaml
+scan_topic: /scan
+pointcloud_topic: /mid360_PointCloud2
+camera_image_topic: /camera/image_raw
+camera_info_topic: /camera/camera_info

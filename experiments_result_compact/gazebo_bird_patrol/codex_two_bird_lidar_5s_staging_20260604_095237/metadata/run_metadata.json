@@ -1,0 +1,11 @@
+{
+  "experiment_id": "waver_gazebo_bird_patrol",
+  "trial_id": "codex_two_bird_lidar_5s_staging",
+  "run_dir": "/home/chotaehyun/ros2_ws3/FSD_Vehicle/experiments_result/gazebo_bird_patrol/codex_two_bird_lidar_5s_staging_20260604_095237",
+  "created_wall_time": "2026-06-04T09:52:43+0900",
+  "detector_mode": "lidar",
+  "classifier_mode": "fake_gazebo",
+  "random_seed": 531,
+  "git_hash": "ca56c02",
+  "control_publishers": "none"
+}

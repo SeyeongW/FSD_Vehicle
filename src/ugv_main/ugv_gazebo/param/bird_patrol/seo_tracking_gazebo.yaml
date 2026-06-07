@@ -1,0 +1,60 @@
+seo_cluster_tracker_node:
+  ros__parameters:
+    use_sim_time: true
+    pointcloud_topic: /mid360_PointCloud2
+    bird_pose_topic: /bird/nearest_pose
+    use_gazebo_bird_pose_fallback: true
+    detector_mode: ground_truth
+    target_frame: odom
+    base_frame: base_footprint
+    roi_min_range: 0.3
+    roi_max_range: 15.0
+    target_min_height_m: 3.0
+    target_max_height_m: 8.0
+    dbscan_eps: 0.55
+    dbscan_min_samples: 4
+    min_cluster_points: 5
+    track_match_dist_m: 2.5
+    move_threshold_m: 0.03
+    min_motion_frames: 2
+    target_timeout_s: 2.0
+    hold_last_target_sec: 1.0
+    output_smoothing_alpha: 0.30
+    prefer_gazebo_fallback_sec: 0.8
+
+seo_bird_yolo_node:
+  ros__parameters:
+    use_sim_time: true
+    confidence: 0.92
+    confirm_delay_sec: 0.5
+
+seo_camera_tilt_joint_node:
+  ros__parameters:
+    use_sim_time: true
+    target_topic: /waver/lidar_target_pose_base
+    joint_topic: /set_joint_trajectory
+    joint_name: pt_link1_to_pt_link2
+    tilt_axis_sign: -1.0
+    min_tilt_rad: -0.7
+    max_tilt_rad: 0.7
+    center_tolerance_rad: 0.15
+    alignment_mode: logical
+    publish_joint_trajectory: false
+
+seo_observation_body_tracker_node:
+  ros__parameters:
+    use_sim_time: true
+    target_topic: /waver/lidar_target_pose_base
+    cmd_topic: /waver/cmd_vel_target_track
+    angular_gain: 1.0
+    max_angular_speed: 0.35
+    bearing_deadband_rad: 0.08
+
+mission_state_cmd_selector_node:
+  ros__parameters:
+    use_sim_time: true
+    nav_cmd_topic: /waver/cmd_vel_nav2
+    track_cmd_topic: /waver/cmd_vel_target_track
+    output_topic: /waver/cmd_vel_auto_selected
+    mission_state_topic: /waver/mission_state
+    cmd_timeout_sec: 0.5

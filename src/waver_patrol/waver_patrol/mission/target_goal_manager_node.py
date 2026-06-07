@@ -54,6 +54,20 @@ class TargetGoalManagerNode(Node):
     object candidates that already carry 3D coordinates.
     """
 
+    TERMINAL_INSPECTION_STATES = {
+        "SOUND_TASK_DONE",
+        "SOUND_TASK_BLOCKED_BY_CLASS",
+        "SOUND_TASK_TIMEOUT",
+        "TARGET_NOT_BIRD",
+        "TARGET_CLASSIFIED_DRONE",
+        "TARGET_CLASSIFIED_UNKNOWN",
+        "TARGET_CLASSIFIED_IRRELEVANT",
+        "CAMERA_ALIGN_FAILED",
+        "TARGET_LOST_RECOVERY",
+        "RETURN_TO_INTERRUPTED_WAYPOINT",
+        "RESUME_PATROL",
+    }
+
     def __init__(self) -> None:
         super().__init__("target_goal_manager_node")
         self.declare_parameter("global_frame", "map")
@@ -143,6 +157,7 @@ class TargetGoalManagerNode(Node):
         self.robot_pose: PoseStamped | None = None
         self.robot_pose_time = 0.0
         self.inspected_targets: list[InspectedTargetMemory] = []
+        self.pending_inspection_target: PoseStamped | None = None
 
         self.create_subscription(PoseStamped, "/waver/radar_target_goal", self.radar_goal_callback, 10)
         self.create_subscription(Bool, "/waver/radar_target_active", lambda m: setattr(self, "radar_active", bool(m.data)), 10)
@@ -197,6 +212,7 @@ class TargetGoalManagerNode(Node):
         self.create_subscription(String, "/waver/target_class", lambda m: setattr(self, "target_class", m.data.strip().lower()), 10)
         self.create_subscription(Bool, str(self.get_parameter("bird_target_valid_topic").value), lambda m: setattr(self, "bird_target_valid", bool(m.data)), 10)
         self.create_subscription(String, str(self.get_parameter("mode_topic").value), lambda m: setattr(self, "mode", m.data.strip().upper()), 10)
+        self.create_subscription(String, "/waver/mission_state", self.mission_state_callback, 10)
         self.create_subscription(String, str(self.get_parameter("safety_state_topic").value), lambda m: setattr(self, "safety_state", m.data.strip().upper()), 10)
         self.create_subscription(String, str(self.get_parameter("battery_safety_state_topic").value), lambda m: setattr(self, "battery_safety_state", m.data.strip().upper()), 10)
         self.create_subscription(Bool, str(self.get_parameter("emergency_stop_topic").value), lambda m: setattr(self, "estop", bool(m.data)), 10)
@@ -237,8 +253,6 @@ class TargetGoalManagerNode(Node):
         self.robot_pose_time = self._now()
 
     def robot_odom_callback(self, msg: Odometry) -> None:
-        if self.robot_pose is not None:
-            return
         pose = PoseStamped()
         pose.header = msg.header
         pose.pose = msg.pose.pose
@@ -363,9 +377,11 @@ class TargetGoalManagerNode(Node):
         self.active_pub.publish(Bool(data=True))
         self.inspection_target_pub.publish(transformed)
         self.inspection_active_pub.publish(Bool(data=True))
-        self.remember_inspected_target(transformed)
+        self.pending_inspection_target = transformed
         height = transformed.pose.position.z
-        distance = math.hypot(transformed.pose.position.x, transformed.pose.position.y)
+        distance = self.robot_relative_range_xy(transformed)
+        if distance is None:
+            distance = math.hypot(transformed.pose.position.x, transformed.pose.position.y)
         reason_text = (
             f"ACCEPT_INSPECTION_GOAL source={candidate.source} height={height:.2f} range={distance:.2f} "
             f"dynamic={candidate.dynamic_valid} z_valid={candidate.z_valid} bird_confirmed={candidate.bird_confirmed} "
@@ -379,6 +395,13 @@ class TargetGoalManagerNode(Node):
         )
         self.last_goal_time = now
         self.last_candidate_time = now
+
+    def mission_state_callback(self, msg: String) -> None:
+        state = (msg.data or "").strip().split()[0].upper() if (msg.data or "").strip() else "UNKNOWN"
+        if state in self.TERMINAL_INSPECTION_STATES and self.pending_inspection_target is not None:
+            self.remember_inspected_target(self.pending_inspection_target)
+            self._publish_state(f"INSPECTION_MEMORY_COMMITTED terminal_state={state}")
+            self.pending_inspection_target = None
 
     def rejection_reason(self, candidate: Candidate) -> str:
         if self.estop:
@@ -406,7 +429,9 @@ class TargetGoalManagerNode(Node):
         x = float(pose.pose.position.x)
         y = float(pose.pose.position.y)
         z = float(pose.pose.position.z)
-        depth = math.hypot(x, y)
+        depth = self.robot_relative_range_xy(pose)
+        if depth is None:
+            depth = math.hypot(x, y)
         min_height = float(self.get_parameter("min_height_m").value)
         lidar_first = self.is_lidar_inspection_candidate(candidate)
         if bool(self.get_parameter("require_3d_lidar_z_valid_for_inspection").value) and lidar_first and not candidate.z_valid:
@@ -494,6 +519,24 @@ class TargetGoalManagerNode(Node):
 
     def is_lidar_inspection_candidate(self, candidate: Candidate) -> bool:
         return candidate.source in {"elevated_dynamic_target", "aerial_target", "lidar_pose_array"}
+
+    def robot_relative_range_xy(self, target: PoseStamped) -> float | None:
+        if self.robot_pose is None:
+            return None
+        robot = self.robot_pose
+        target_frame = target.header.frame_id or str(self.get_parameter("global_frame").value)
+        robot_frame = robot.header.frame_id or str(self.get_parameter("global_frame").value)
+        target_pose = target
+        robot_pose = robot
+        if target_frame != robot_frame:
+            target_pose = self.transform_to_global(target)
+            robot_pose = self.transform_to_global(robot)
+            if target_pose is None or robot_pose is None or target_pose.header.frame_id != robot_pose.header.frame_id:
+                return None
+        return math.hypot(
+            float(target_pose.pose.position.x) - float(robot_pose.pose.position.x),
+            float(target_pose.pose.position.y) - float(robot_pose.pose.position.y),
+        )
 
     @staticmethod
     def reject_mission_type(reason: str) -> str:

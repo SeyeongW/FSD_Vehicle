@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import os
 import math
 import shlex
@@ -30,6 +32,7 @@ from typing import Optional
 import rclpy
 from geometry_msgs.msg import PoseArray, PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
+from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
@@ -151,6 +154,9 @@ class WaverRemoteNode(Node):
         self.declare_parameter("map_topic", "/map")
         self.declare_parameter("fixed_map_topic", "/map_fixed")
         self.declare_parameter("map_display_mode", "auto")
+        self.declare_parameter("map_view_extent_m", 0.0)
+        self.declare_parameter("map_view_center_x", 0.0)
+        self.declare_parameter("map_view_center_y", 0.0)
         self.declare_parameter("global_path_topic", "/plan")
         self.declare_parameter("local_path_topic", "/local_plan")
         self.declare_parameter("active_nav_goal_topic", "/waver/active_nav_goal")
@@ -231,12 +237,29 @@ class WaverRemoteNode(Node):
         self.declare_parameter("auto_loop_count", -1)
         self.declare_parameter("auto_require_scan", True)
         self.declare_parameter("auto_min_valid_scan_points", 40)
+        self.declare_parameter("allow_start_without_map", False)
+        self.declare_parameter("allow_start_without_localization", False)
+        self.declare_parameter("publish_mode_heartbeat", False)
         self.declare_parameter("auto_cmd_timeout_s", 0.5)
         self.declare_parameter("auto_use_sim_time", False)
         self.declare_parameter("auto_max_patrol_radius_m", 3.0)
         self.declare_parameter("demo_script", "")
         self.declare_parameter("demo_close_on_finish", False)
         self.declare_parameter("stop_backend_on_close", False)
+        self.declare_parameter("remote_bridge_enabled", False)
+        self.declare_parameter("remote_bridge_host", "10.139.225.150")
+        self.declare_parameter("remote_bridge_user", "sw")
+        # ROS CLI parses unquoted numeric-looking values as integers. Allow dynamic
+        # typing here so `remote_bridge_password:=12341234` does not abort UI startup.
+        self.declare_parameter(
+            "remote_bridge_password",
+            "12341234",
+            ParameterDescriptor(dynamic_typing=True),
+        )
+        self.declare_parameter("remote_bridge_workspace", "/home/sw/ros2_ws2/FSD_Vehicle")
+        self.declare_parameter("remote_bridge_ros_domain_id", 30)
+        self.declare_parameter("remote_bridge_rmw", "rmw_cyclonedds_cpp")
+        self.declare_parameter("remote_bridge_command_timeout_s", 0.30)
 
         self.state = state
         self.lock = lock
@@ -252,7 +275,15 @@ class WaverRemoteNode(Node):
         self.last_speed_limit_publish_time = 0.0
         self.last_manual_command_time = 0.0
         self.last_elevated_target_samples = {}
+        self.remote_bridge_enabled = bool(self.get_parameter("remote_bridge_enabled").value)
+        self.remote_bridge_client = None
+        self.remote_bridge_stdin = None
+        self.remote_bridge_stdout = None
+        self.remote_bridge_stderr = None
         self.profile = str(self.get_parameter("profile").value).strip().lower() or "real"
+        self.map_view_extent_m = float(self.get_parameter("map_view_extent_m").value)
+        self.map_view_center_x = float(self.get_parameter("map_view_center_x").value)
+        self.map_view_center_y = float(self.get_parameter("map_view_center_y").value)
         self.publish_direct_cmd_vel = bool(self.get_parameter("publish_direct_cmd_vel").value)
         if self.profile == "real" and self.publish_direct_cmd_vel:
             self.get_logger().error(
@@ -301,6 +332,8 @@ class WaverRemoteNode(Node):
             "Remote map raw LiDAR cluster overlay is "
             f"{'enabled' if self.state.show_raw_lidar_objects_on_map else 'hidden'}"
         )
+        if self.remote_bridge_enabled:
+            self.start_remote_bridge()
 
         # 역할: GUI가 내는 수동 후보 명령, 모드, E-Stop, 속도 제한을 ROS graph에 공개한다.
         self.cmd_pub = self.create_publisher(Twist, self.cmd_output_topic, 10)
@@ -617,6 +650,278 @@ class WaverRemoteNode(Node):
         self.timer = self.create_timer(1.0 / max(rate_hz, 1.0), self.publish_tick)
         self.publish_speed_limits(force=True)
 
+    def start_remote_bridge(self) -> None:
+        # 역할: 로컬 PC UI가 Jetson ROS graph에 직접 후보 명령을 주입하도록 SSH stdin bridge를 연다.
+        # 최종 /cmd_vel은 Jetson의 safety_cmd_mux_node가 계속 단독 발행한다.
+        try:
+            import paramiko
+        except Exception as exc:
+            self.get_logger().error(f"remote bridge disabled: paramiko import failed: {exc}")
+            self.remote_bridge_enabled = False
+            return
+
+        remote_code = r'''
+import json
+import os
+import queue
+import sys
+import threading
+import time
+
+import rclpy
+from geometry_msgs.msg import Twist
+from rclpy.node import Node
+from std_msgs.msg import Bool, Float32, String
+
+
+class RemotePanelBridge(Node):
+    def __init__(self):
+        super().__init__("waver_remote_panel_ssh_bridge")
+        self.declare_parameter(
+            "command_timeout_s",
+            float(os.environ.get("WAVER_REMOTE_BRIDGE_TIMEOUT_S", "0.30")),
+        )
+        self.manual_pub = self.create_publisher(Twist, "/waver/manual_cmd_vel", 10)
+        self.mode_cmd_pub = self.create_publisher(String, "/waver/mode_cmd", 10)
+        self.mission_pub = self.create_publisher(String, "/waver/mission_command", 10)
+        self.mapping_pub = self.create_publisher(String, "/waver/mapping_command", 10)
+        self.operator_pub = self.create_publisher(String, "/waver/operator_command", 10)
+        self.estop_pub = self.create_publisher(Bool, "/waver/emergency_stop", 10)
+        self.speed_pub = self.create_publisher(Float32, "/waver/speed_limit", 10)
+        self.angular_pub = self.create_publisher(Float32, "/waver/angular_speed_limit", 10)
+        self.latest = Twist()
+        self.active = False
+        self.last = 0.0
+        self.timeout_s = float(self.get_parameter("command_timeout_s").value)
+        self.last_status_time = 0.0
+        self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_callback, 10)
+        self.create_subscription(String, "/waver/safety_state", self.safety_state_callback, 10)
+        self.create_subscription(String, "/waver/base_driver_state", self.base_state_callback, 10)
+
+    def emit_status(self, payload):
+        print("BRIDGE_STATUS " + json.dumps(payload, separators=(",", ":")), flush=True)
+
+    def cmd_vel_callback(self, msg):
+        now = time.monotonic()
+        nonzero = abs(msg.linear.x) > 1e-6 or abs(msg.angular.z) > 1e-6
+        if not nonzero and now - self.last_status_time < 0.5:
+            return
+        if nonzero and now - self.last_status_time < 0.08:
+            return
+        self.last_status_time = now
+        self.emit_status({
+            "type": "cmd_vel",
+            "linear_x": float(msg.linear.x),
+            "angular_z": float(msg.angular.z),
+        })
+
+    def safety_state_callback(self, msg):
+        self.emit_status({"type": "safety_state", "data": msg.data})
+
+    def base_state_callback(self, msg):
+        self.emit_status({"type": "base_driver_state", "data": msg.data})
+
+    def publish_zero(self):
+        self.latest = Twist()
+        self.active = False
+        self.manual_pub.publish(self.latest)
+
+    def handle_packet(self, packet):
+        topic = str(packet.get("topic", "manual_cmd_vel"))
+        if topic == "mode_cmd":
+            self.mode_cmd_pub.publish(String(data=str(packet.get("data", ""))))
+            return
+        if topic == "mission_command":
+            self.mission_pub.publish(String(data=str(packet.get("data", ""))))
+            return
+        if topic == "mapping_command":
+            self.mapping_pub.publish(String(data=str(packet.get("data", ""))))
+            return
+        if topic == "operator_command":
+            self.operator_pub.publish(String(data=str(packet.get("data", ""))))
+            return
+        if topic == "emergency_stop":
+            self.estop_pub.publish(Bool(data=bool(packet.get("data", False))))
+            return
+        if topic == "speed_limit":
+            self.speed_pub.publish(Float32(data=float(packet.get("data", 0.0))))
+            return
+        if topic == "angular_speed_limit":
+            self.angular_pub.publish(Float32(data=float(packet.get("data", 0.0))))
+            return
+
+        msg = Twist()
+        msg.linear.x = float(packet.get("lx", 0.0))
+        msg.linear.y = float(packet.get("ly", 0.0))
+        msg.linear.z = float(packet.get("lz", 0.0))
+        msg.angular.x = float(packet.get("ax", 0.0))
+        msg.angular.y = float(packet.get("ay", 0.0))
+        msg.angular.z = float(packet.get("az", 0.0))
+        self.latest = msg
+        self.active = abs(msg.linear.x) > 1e-6 or abs(msg.angular.z) > 1e-6
+        self.last = time.monotonic()
+        self.manual_pub.publish(msg)
+
+
+inbox = queue.Queue()
+
+
+def stdin_reader():
+    try:
+        for line in sys.stdin:
+            inbox.put(line)
+    finally:
+        inbox.put(None)
+
+
+rclpy.init()
+node = RemotePanelBridge()
+threading.Thread(target=stdin_reader, daemon=True).start()
+should_exit = False
+try:
+    while rclpy.ok() and not should_exit:
+        rclpy.spin_once(node, timeout_sec=0.0)
+        while True:
+            try:
+                line = inbox.get_nowait()
+            except queue.Empty:
+                break
+            if line is None:
+                should_exit = True
+                break
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                node.handle_packet(json.loads(line))
+            except Exception as exc:
+                node.get_logger().error(f"bad bridge packet: {exc}")
+        if node.active:
+            if time.monotonic() - node.last > node.timeout_s:
+                node.publish_zero()
+            else:
+                node.manual_pub.publish(node.latest)
+        time.sleep(0.01)
+finally:
+    try:
+        node.publish_zero()
+    except Exception:
+        pass
+    node.destroy_node()
+    rclpy.shutdown()
+'''
+        encoded = base64.b64encode(remote_code.encode("utf-8")).decode("ascii")
+        workspace = str(self.get_parameter("remote_bridge_workspace").value)
+        domain_id = int(self.get_parameter("remote_bridge_ros_domain_id").value)
+        rmw = str(self.get_parameter("remote_bridge_rmw").value)
+        bridge_timeout_s = float(self.get_parameter("remote_bridge_command_timeout_s").value)
+        remote_cmd = (
+            f"cd {shlex.quote(workspace)} && "
+            "source /opt/ros/humble/setup.bash && "
+            "source install/setup.bash && "
+            f"export ROS_DOMAIN_ID={domain_id} && "
+            f"export RMW_IMPLEMENTATION={shlex.quote(rmw)} && "
+            f"export WAVER_REMOTE_BRIDGE_TIMEOUT_S={bridge_timeout_s:.3f} && "
+            "python3 -u -c "
+            + shlex.quote(f"import base64; exec(base64.b64decode('{encoded}').decode('utf-8'))")
+        )
+        try:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(
+                str(self.get_parameter("remote_bridge_host").value),
+                username=str(self.get_parameter("remote_bridge_user").value),
+                password=str(self.get_parameter("remote_bridge_password").value),
+                timeout=8,
+                look_for_keys=False,
+                allow_agent=False,
+            )
+            stdin, stdout, stderr = client.exec_command(
+                f"bash -lc {json.dumps(remote_cmd)}",
+                get_pty=False,
+            )
+            self.remote_bridge_client = client
+            self.remote_bridge_stdin = stdin
+            self.remote_bridge_stdout = stdout
+            self.remote_bridge_stderr = stderr
+            threading.Thread(
+                target=self._drain_remote_bridge_stream,
+                args=(stdout, "stdout"),
+                daemon=True,
+            ).start()
+            threading.Thread(
+                target=self._drain_remote_bridge_stream,
+                args=(stderr, "stderr"),
+                daemon=True,
+            ).start()
+            self.get_logger().info("Remote SSH command bridge active")
+        except Exception as exc:
+            self.get_logger().error(f"remote bridge connection failed: {exc}")
+            self.remote_bridge_enabled = False
+
+    def _drain_remote_bridge_stream(self, stream, label: str) -> None:
+        try:
+            for raw_line in iter(stream.readline, ""):
+                line = raw_line.strip()
+                if not line:
+                    continue
+                if label == "stdout" and line.startswith("BRIDGE_STATUS "):
+                    self.handle_remote_bridge_status(line[len("BRIDGE_STATUS "):])
+                    continue
+                if label == "stderr":
+                    self.get_logger().error(f"remote bridge {label}: {line}")
+                else:
+                    self.get_logger().info(f"remote bridge {label}: {line}")
+        except Exception as exc:
+            if self.remote_bridge_enabled:
+                self.get_logger().warn(f"remote bridge {label} reader stopped: {exc}")
+
+    def handle_remote_bridge_status(self, payload: str) -> None:
+        try:
+            data = json.loads(payload)
+        except Exception:
+            return
+        kind = str(data.get("type", ""))
+        with self.lock:
+            if kind == "cmd_vel":
+                self.state.latest_cmd_linear = float(data.get("linear_x", 0.0))
+                self.state.latest_cmd_angular = float(data.get("angular_z", 0.0))
+            elif kind == "safety_state":
+                self.state.safety_state = str(data.get("data", "unknown"))
+            elif kind == "base_driver_state":
+                self.state.inspection_target_state = str(data.get("data", "unknown"))
+
+    def remote_bridge_write(self, packet: dict) -> None:
+        if not self.remote_bridge_enabled or self.remote_bridge_stdin is None:
+            return
+        try:
+            if packet.get("topic", "manual_cmd_vel") == "manual_cmd_vel":
+                lx = float(packet.get("lx", 0.0))
+                az = float(packet.get("az", 0.0))
+                if abs(lx) > 1e-6 or abs(az) > 1e-6:
+                    self.get_logger().info(
+                        f"remote bridge manual write: lx={lx:.3f} az={az:.3f}"
+                    )
+            self.remote_bridge_stdin.write(json.dumps(packet) + "\n")
+            self.remote_bridge_stdin.flush()
+        except Exception as exc:
+            self.get_logger().error(f"remote bridge write failed: {exc}")
+            self.remote_bridge_enabled = False
+
+    def publish_manual_twist(self, msg: Twist) -> None:
+        self.cmd_pub.publish(msg)
+        self.remote_bridge_write(
+            {
+                "topic": "manual_cmd_vel",
+                "lx": msg.linear.x,
+                "ly": msg.linear.y,
+                "lz": msg.linear.z,
+                "ax": msg.angular.x,
+                "ay": msg.angular.y,
+                "az": msg.angular.z,
+            }
+        )
+
     @staticmethod
     def normalized_map_mode(raw: str) -> str:
         mode = (raw or "auto").strip().lower()
@@ -631,6 +936,17 @@ class WaverRemoteNode(Node):
         if not mode:
             return
         with self.lock:
+            manual_active = (
+                abs(self.state.desired_linear) > 1e-5
+                or abs(self.state.desired_angular) > 1e-5
+            )
+            manual_age = (
+                time.monotonic() - self.last_manual_command_time
+                if self.last_manual_command_time
+                else 999.0
+            )
+            if manual_active and manual_age < 0.75 and mode in {"STANDBY", "AUTO", "PATROL"}:
+                return
             self.state.mode = mode
 
     def ui_map_reset_callback(self, msg: Bool) -> None:
@@ -927,6 +1243,22 @@ class WaverRemoteNode(Node):
             msg.range_max,
         )
 
+    def publish_manual_candidate_once(self) -> None:
+        # 역할: 버튼/키 입력 직후 타이머 주기나 mode state 왕복을 기다리지 않고
+        # 수동 후보 명령을 한 번 즉시 내보낸다. 최종 /cmd_vel은 safety mux가 계속 단독 소유한다.
+        with self.lock:
+            linear = float(self.state.desired_linear)
+            angular = float(self.state.desired_angular)
+            estop = bool(self.state.emergency_stop)
+        msg = Twist()
+        if not estop:
+            command = self.assist.assisted_command(
+                DriveCommand(linear=linear, angular=angular, source="remote_panel_immediate")
+            )
+            msg.linear.x = command.linear
+            msg.angular.z = command.angular
+        self.publish_manual_twist(msg)
+
     def set_mode(self, mode: str) -> None:
         # 역할: GUI 버튼에서 요청한 모드를 상태와 ROS topic 양쪽에 반영한다.
         with self.lock:
@@ -969,6 +1301,7 @@ class WaverRemoteNode(Node):
             f"topic={self.cmd_output_topic}"
         )
         self.publish_mode(force=True)
+        self.publish_manual_candidate_once()
 
     def stop_motion(self, stop_auto: bool = True) -> None:
         # 역할: 일반 정지 버튼. 자동순찰도 함께 멈추고 0속도를 반복 발행한다.
@@ -1162,8 +1495,11 @@ class WaverRemoteNode(Node):
         msg = String(data=normalized)
         if normalized in {"START_MAPPING", "STOP_MAPPING", "SAVE_MAP", "APPLY_FIXED_MAP", "APPLY_MAP", "LOAD_MAP", "START_LOCALIZATION"}:
             self.mapping_command_pub.publish(msg)
+            self.remote_bridge_write({"topic": "mapping_command", "data": normalized})
         self.mission_command_pub.publish(msg)
+        self.remote_bridge_write({"topic": "mission_command", "data": normalized})
         self.operator_command_pub.publish(msg)
+        self.remote_bridge_write({"topic": "operator_command", "data": normalized})
         self.get_logger().info(f"operator command sent: {normalized}")
         with self.lock:
             self.state.auto_status = f"operator command: {normalized}"
@@ -1227,11 +1563,23 @@ class WaverRemoteNode(Node):
             camera = self.state.camera_state.upper()
         if estop:
             reasons.append("emergency_stop_active")
-        if not map_ok:
+        if not map_ok and not bool(self.get_parameter("allow_start_without_map").value):
             reasons.append("map_not_loaded")
-        if pose_age > 2.0:
+        if pose_age > 2.0 and not bool(self.get_parameter("allow_start_without_localization").value):
             reasons.append(f"localization_stale={pose_age:.1f}s")
-        if not safety or safety == "UNKNOWN" or any(token in safety for token in ("STOP", "EMERGENCY", "FAULT")):
+        normal_prestart_stop = safety.startswith("STANDBY_STOP") or safety.startswith("AUTO_COMMAND_TIMEOUT_STOP")
+        fatal_safety = any(
+            token in safety
+            for token in (
+                "EMERGENCY",
+                "FAULT",
+                "SCAN_STALE_STOP",
+                "SCAN_DEGRADED_STOP",
+                "SCAN_HARD_STOP",
+                "BATTERY",
+            )
+        )
+        if not safety or safety == "UNKNOWN" or (fatal_safety and not normal_prestart_stop):
             reasons.append(f"safety_state={safety or 'UNKNOWN'}")
         if any(token in battery for token in ("CRITICAL", "STALE_STOP", "BATTERY_STALE_STOP")):
             reasons.append(f"battery_state={battery}")
@@ -1371,15 +1719,29 @@ class WaverRemoteNode(Node):
             if self.last_manual_command_time:
                 self.state.manual_command_age = now - self.last_manual_command_time
 
-        self.publish_mode()
+        if bool(self.get_parameter("publish_mode_heartbeat").value):
+            self.publish_mode()
         self.publish_estop()
         self.publish_speed_limits()
         with self.lock:
             self.keyboard_state_pub.publish(
                 String(data=f"active={self.state.active_control} age={self.state.manual_command_age:.3f} mode={self.state.mode}")
             )
-        if estop or mode in {"STANDBY", "EMERGENCY"}:
-            self.cmd_pub.publish(Twist())
+        manual_active = abs(linear) > 1e-5 or abs(angular) > 1e-5
+        if estop or mode == "EMERGENCY":
+            self.publish_manual_twist(Twist())
+            return
+        if manual_active:
+            command = self.assist.assisted_command(
+                DriveCommand(linear=linear, angular=angular, source="remote_panel_manual_hold")
+            )
+            msg = Twist()
+            msg.linear.x = command.linear
+            msg.angular.z = command.angular
+            self.publish_manual_twist(msg)
+            return
+        if mode == "STANDBY":
+            self.publish_manual_twist(Twist())
             return
         if mode in {"MANUAL", "MAPPING_MANUAL"}:
             command = self.assist.assisted_command(
@@ -1388,7 +1750,7 @@ class WaverRemoteNode(Node):
             msg = Twist()
             msg.linear.x = command.linear
             msg.angular.z = command.angular
-            self.cmd_pub.publish(msg)
+            self.publish_manual_twist(msg)
         elif mode in {"AUTO", "PATROL", "TRACK_ONLY", "RETURN_HOME", "MAPPING_AUTO"}:
             if not self.publish_direct_cmd_vel:
                 # 역할: AUTO 중에는 Nav2가 `/waver/cmd_vel_nav2`를 계속 만들고,
@@ -1404,16 +1766,16 @@ class WaverRemoteNode(Node):
                     msg = Twist()
                     msg.linear.x = command.linear
                     msg.angular.z = command.angular
-                    self.cmd_pub.publish(msg)
+                    self.publish_manual_twist(msg)
                 else:
-                    self.cmd_pub.publish(Twist())
+                    self.publish_manual_twist(Twist())
                 return
 
             timeout_s = float(self.get_parameter("auto_cmd_timeout_s").value)
             if auto_age > timeout_s:
                 with self.lock:
                     self.state.auto_status = f"auto command stale {auto_age:.1f}s"
-                self.cmd_pub.publish(Twist())
+                self.publish_manual_twist(Twist())
                 return
             command = self.assist.assisted_command(
                 DriveCommand(linear=auto_linear, angular=auto_angular, source="remote_panel_auto")
@@ -1421,7 +1783,7 @@ class WaverRemoteNode(Node):
             msg = Twist()
             msg.linear.x = command.linear
             msg.angular.z = command.angular
-            self.cmd_pub.publish(msg)
+            self.publish_manual_twist(msg)
 
     def publish_mode(self, force: bool = False) -> None:
         # 역할: operator panel은 real profile에서 /waver/mode를 직접 소유하지 않고
@@ -1433,6 +1795,7 @@ class WaverRemoteNode(Node):
             msg = String()
             msg.data = mode
             self.mode_pub.publish(msg)
+            self.remote_bridge_write({"topic": "mode_cmd", "data": mode})
             self.last_mode_publish = mode
             self.last_mode_publish_time = now
 
@@ -1446,6 +1809,7 @@ class WaverRemoteNode(Node):
             msg = Bool()
             msg.data = estop
             self.estop_pub.publish(msg)
+            self.remote_bridge_write({"topic": "emergency_stop", "data": estop})
             self.last_estop_publish = estop
             self.last_estop_publish_time = now
 
@@ -1461,8 +1825,10 @@ class WaverRemoteNode(Node):
         angular_changed = abs(angular_limit - self.last_angular_limit_publish) > 1e-6
         if force or stale or speed_changed or angular_changed:
             self.speed_limit_pub.publish(Float32(data=speed_limit))
+            self.remote_bridge_write({"topic": "speed_limit", "data": speed_limit})
             self.last_speed_limit_publish = speed_limit
             self.angular_limit_pub.publish(Float32(data=angular_limit))
+            self.remote_bridge_write({"topic": "angular_speed_limit", "data": angular_limit})
             self.last_angular_limit_publish = angular_limit
             self.last_speed_limit_publish_time = now
 
@@ -1474,7 +1840,7 @@ class WaverRemoteNode(Node):
     def publish_stop_burst(self) -> None:
         # 역할: 버튼 클릭 직후에도 지연 없이 정지하도록 zero manual 후보를 여러 번 발행한다.
         for _ in range(5):
-            self.cmd_pub.publish(Twist())
+            self.publish_manual_twist(Twist())
             time.sleep(0.02)
 
     def destroy_node(self) -> bool:
@@ -1490,6 +1856,18 @@ class WaverRemoteNode(Node):
         self.stop_optional_process("mapping_process", "mapping")
         self.stop_optional_process("localization_process", "localization")
         self.publish_stop_burst()
+        if self.remote_bridge_client is not None:
+            try:
+                if self.remote_bridge_stdin is not None:
+                    self.remote_bridge_stdin.write(json.dumps({"lx": 0.0, "az": 0.0}) + "\n")
+                    self.remote_bridge_stdin.flush()
+                    self.remote_bridge_stdin.channel.shutdown_write()
+            except Exception:
+                pass
+            try:
+                self.remote_bridge_client.close()
+            except Exception:
+                pass
         return super().destroy_node()
 
 
@@ -1514,10 +1892,29 @@ class WaverRemotePanel:
         self.state = state
         self.lock = lock
         self.active_key: Optional[str] = None
+        self.active_keys: set[str] = set()
+        self.pending_combo_release_keys: set[str] = set()
+        self.key_release_after_ids: dict[str, str] = {}
+        self.demo_script_name = ""
+        self.key_vectors = {
+            "up": (1.0, 0.0),
+            "w": (1.0, 0.0),
+            "down": (-1.0, 0.0),
+            "s": (-1.0, 0.0),
+            "left": (0.0, 1.0),
+            "a": (0.0, 1.0),
+            "right": (0.0, -1.0),
+            "d": (0.0, -1.0),
+        }
+        self.linear_key_names = {"up", "w", "down", "s"}
+        self.angular_key_names = {"left", "a", "right", "d"}
         self.closed = False
         self.direction_buttons = {}
         self.status_cards = {}
         self.last_map_draw_time = 0.0
+        self.map_view_extent_m = float(getattr(node, "map_view_extent_m", 0.0))
+        self.map_view_center_x = float(getattr(node, "map_view_center_x", 0.0))
+        self.map_view_center_y = float(getattr(node, "map_view_center_y", 0.0))
 
         # 역할: 리모콘 창의 전체 레이아웃을 만든다.
         self.root = tk.Tk()
@@ -1532,8 +1929,8 @@ class WaverRemotePanel:
         self.root.grid_rowconfigure(4, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
-        self.root.bind("<KeyPress>", self.on_key_press)
-        self.root.bind("<KeyRelease>", self.on_key_release)
+        self.root.bind_all("<KeyPress>", self.on_key_press)
+        self.root.bind_all("<KeyRelease>", self.on_key_release)
         self.root.bind("<FocusOut>", self.on_focus_loss)
 
         self.mode_var = tk.StringVar(value="STANDBY")
@@ -1566,6 +1963,7 @@ class WaverRemotePanel:
         self.build_header()
         self.build_mode_buttons()
         self.build_body()
+        self.root.after(250, self.root.focus_force)
         self.refresh()
         self.start_demo_script()
 
@@ -1927,6 +2325,10 @@ class WaverRemotePanel:
         # 역할: 방향 버튼 press 이벤트를 수동 명령으로 바꾼다.
         self.highlight_direction(label)
         if label == "stop":
+            self.cancel_pending_key_releases()
+            self.active_keys.clear()
+            self.pending_combo_release_keys.clear()
+            self.active_key = None
             self.node.stop_motion(stop_auto=False)
             return
         self.node.set_manual_command(linear, angular, label)
@@ -1938,6 +2340,9 @@ class WaverRemotePanel:
 
     def on_focus_loss(self, _event) -> None:
         # 역할: 창 포커스를 잃으면 key release가 누락돼도 수동 명령 stuck을 방지한다.
+        self.cancel_pending_key_releases()
+        self.active_keys.clear()
+        self.pending_combo_release_keys.clear()
         self.active_key = None
         self.release_direction()
 
@@ -2048,7 +2453,13 @@ class WaverRemotePanel:
             points_for_bounds.append(object_goal)
         if current_waypoint is not None:
             points_for_bounds.append(current_waypoint)
-        if map_received and map_width > 0 and map_height > 0 and map_resolution > 0.0:
+        if self.map_view_extent_m > 0.0:
+            half_extent = max(1.0, self.map_view_extent_m * 0.5)
+            min_x = self.map_view_center_x - half_extent
+            max_x = self.map_view_center_x + half_extent
+            min_y = self.map_view_center_y - half_extent
+            max_y = self.map_view_center_y + half_extent
+        elif map_received and map_width > 0 and map_height > 0 and map_resolution > 0.0:
             min_x = map_origin_x
             min_y = map_origin_y
             max_x = map_origin_x + map_width * map_resolution
@@ -2200,6 +2611,7 @@ class WaverRemotePanel:
             anchor="w",
             font=("Sans", 10, "bold"),
         )
+        view_text = f"view={self.map_view_extent_m:.0f}m " if self.map_view_extent_m > 0.0 else ""
         canvas.create_text(
             12,
             12,
@@ -2209,6 +2621,7 @@ class WaverRemotePanel:
             text=(
                 f"{map_display_mode} frame={map_frame if map_received else 'odom'} "
                 f"map={'OK' if map_received else 'WAIT'} "
+                f"{view_text}"
                 f"free={len(free_cells)} occ={len(occupied)} "
                 f"pose={pose_source} "
                 f"path={len(global_path)}({global_path_frame or '-'}) "
@@ -2263,23 +2676,21 @@ class WaverRemotePanel:
 
     def on_key_press(self, event) -> None:
         # 역할: 리모콘 창에 포커스가 있을 때 방향키/WASD로도 조작한다.
-        key = event.keysym.lower()
-        if key == self.active_key:
+        if self._ignore_physical_key_event_during_demo():
             return
-        mapping = {
-            "up": (1.0, 0.0, "key-up"),
-            "w": (1.0, 0.0, "key-w"),
-            "down": (-1.0, 0.0, "key-down"),
-            "s": (-1.0, 0.0, "key-s"),
-            "left": (0.0, 1.0, "key-left"),
-            "a": (0.0, 1.0, "key-a"),
-            "right": (0.0, -1.0, "key-right"),
-            "d": (0.0, -1.0, "key-d"),
-        }
-        if key in mapping:
-            self.active_key = key
-            self.press_direction(*mapping[key])
+        key = event.keysym.lower()
+        if key in self.key_vectors:
+            pending = self.key_release_after_ids.pop(key, None)
+            if pending is not None:
+                self.root.after_cancel(pending)
+            self.pending_combo_release_keys.discard(key)
+            self.active_keys.add(key)
+            self.apply_active_key_command()
         elif key in {"space", "k"}:
+            self.cancel_pending_key_releases()
+            self.active_keys.clear()
+            self.pending_combo_release_keys.clear()
+            self.active_key = None
             self.node.stop_motion(stop_auto=True)
         elif key == "e":
             self.node.emergency_stop()
@@ -2289,23 +2700,154 @@ class WaverRemotePanel:
             self.node.send_operator_command("START_PATROL")
 
     def on_key_release(self, event) -> None:
-        # 역할: 눌렀던 방향키를 떼면 정지한다.
+        # 역할: 눌렀던 방향키를 떼면 해당 축만 해제한다. 다른 키가 눌려 있으면 조합 주행을 유지한다.
+        if self._ignore_physical_key_event_during_demo():
+            return
         key = event.keysym.lower()
-        if key == self.active_key:
+        if key in self.active_keys:
+            if self.handle_combo_release(key):
+                return
+            pending = self.key_release_after_ids.pop(key, None)
+            if pending is not None:
+                self.root.after_cancel(pending)
+            self.key_release_after_ids[key] = self.root.after(
+                300,
+                lambda released_key=key: self.finish_key_release(released_key),
+            )
+
+    def finish_key_release(self, key: str) -> None:
+        # 역할: X11/Tk 키 반복이 만드는 짧은 release 이벤트를 debounce한다.
+        self.key_release_after_ids.pop(key, None)
+        self.pending_combo_release_keys.discard(key)
+        if key in self.active_keys:
+            self.active_keys.remove(key)
+            self.apply_active_key_command()
+
+    def handle_combo_release(self, key: str) -> bool:
+        is_linear = key in self.linear_key_names
+        is_angular = key in self.angular_key_names
+        if not (is_linear or is_angular):
+            return False
+        own_axis = self.linear_key_names if is_linear else self.angular_key_names
+        other_axis = self.angular_key_names if is_linear else self.linear_key_names
+        other_active = self.active_keys & other_axis
+        other_pending = self.pending_combo_release_keys & other_axis
+        if other_pending:
+            self.active_keys.discard(key)
+            self.pending_combo_release_keys.discard(key)
+            for pending_key in list(other_pending):
+                self.active_keys.discard(pending_key)
+                self.pending_combo_release_keys.discard(pending_key)
+                after_id = self.key_release_after_ids.pop(pending_key, None)
+                if after_id is not None:
+                    self.root.after_cancel(after_id)
+            self.apply_active_key_command()
+            return True
+        if other_active:
+            # Some X11/Tk setups emit a release for W/S when A/D is pressed.
+            # Keep the key latched while the orthogonal key remains active so
+            # W+D, W+A, S+D, S+A stay diagonal instead of collapsing to A/D.
+            self.pending_combo_release_keys.add(key)
+            self.apply_active_key_command()
+            return True
+        if not (self.active_keys & own_axis):
+            self.pending_combo_release_keys.discard(key)
+        return False
+
+    def cancel_pending_key_releases(self) -> None:
+        for after_id in list(self.key_release_after_ids.values()):
+            self.root.after_cancel(after_id)
+        self.key_release_after_ids.clear()
+        self.pending_combo_release_keys.clear()
+
+    def _ignore_physical_key_event_during_demo(self) -> bool:
+        # 역할: 자동 wheel-on smoke demo 중 실제 키보드 입력이 섞여 들어와
+        # 테스트 명령을 오염시키지 않게 한다. 키보드 경로 자체를 검증하는
+        # demo_script만 예외로 둔다.
+        if not self.demo_script_name:
+            return False
+        keyboard_demos = {
+            "keyboard_smoke",
+            "wasd_0p3m",
+            "keyboard_0p3m",
+            "wasd_bump_verify",
+            "keyboard_wasd_bump",
+            "diagonal_bump_verify",
+            "keyboard_diagonal_bump",
+            "diagonal_0p3m",
+            "wasd_diagonal_0p3m",
+            "diagonal_release_robustness",
+            "wd_release_robustness",
+            "turn_response_test",
+            "ad_turn_response",
+            "mapping_spin_360",
+            "mapping_d_spin_360",
+        }
+        return self.demo_script_name not in keyboard_demos
+
+    def apply_active_key_command(self) -> None:
+        linear = 0.0
+        angular = 0.0
+        for key in self.active_keys:
+            key_linear, key_angular = self.key_vectors[key]
+            linear += key_linear
+            angular += key_angular
+        linear = max(-1.0, min(1.0, linear))
+        angular = max(-1.0, min(1.0, angular))
+        if abs(linear) <= 1e-5 and abs(angular) <= 1e-5:
             self.active_key = None
             self.release_direction()
+            return
+        labels = []
+        if linear > 0.0:
+            labels.append("w")
+        elif linear < 0.0:
+            labels.append("s")
+        if angular > 0.0:
+            labels.append("a")
+        elif angular < 0.0:
+            labels.append("d")
+        label = "key-" + "+".join(labels)
+        self.active_key = label
+        self.press_direction(linear, angular, label)
 
     def start_demo_script(self) -> None:
         # 역할: Gazebo 검증 때 실제 버튼 함수 경로를 자동 호출해 리모콘 클릭 동작을 재현한다.
         script = str(self.node.get_parameter("demo_script").value).strip()
         if not script:
             return
+        self.demo_script_name = script
         if script == "manual_smoke":
             steps = [
                 (800, lambda: self.press_direction(1.0, 0.0, "forward")),
                 (2600, self.release_direction),
                 (3200, lambda: self.node.stop_motion(stop_auto=True)),
                 (4200, self.close_if_demo_requested),
+            ]
+        elif script == "manual_smoke_delayed":
+            steps = [
+                (3500, lambda: self.press_direction(1.0, 0.0, "forward")),
+                (5500, self.release_direction),
+                (6200, lambda: self.node.stop_motion(stop_auto=True)),
+                (7200, self.close_if_demo_requested),
+            ]
+        elif script == "manual_0p3m_forward":
+            # 역할: 로컬 PC UI -> SSH bridge -> Jetson safety mux 경로로 wheel-on 0.3m급
+            # 짧은 전진만 검증한다. default_speed=0.08이면 약 0.30m 전진 후 정지한다.
+            steps = [
+                (3500, lambda: self.press_direction(1.0, 0.0, "forward-0p3m")),
+                (7300, self.release_direction),
+                (7800, lambda: self.node.stop_motion(stop_auto=True)),
+                (9000, self.close_if_demo_requested),
+            ]
+        elif script == "manual_0p3m_strong":
+            # 역할: 모터 deadband 확인용. default_speed=0.12에서 약 2.5초만 전진시켜
+            # L/R ratio가 0.30 부근까지 올라가도록 하되, 전체 이동은 0.3m급으로 제한한다.
+            steps = [
+                (2500, lambda: self.press_direction(1.0, 0.0, "forward-0p3m-strong")),
+                (5000, self.release_direction),
+                (5400, lambda: self.node.stop_motion(stop_auto=True)),
+                (6800, self.close_if_demo_requested),
             ]
         elif script == "manual_auto_smoke":
             steps = [
@@ -2363,6 +2905,122 @@ class WaverRemotePanel:
                 (9000, lambda: self.on_key_press(key_event("p"))),
                 (12000, self.close_if_demo_requested),
             ]
+        elif script in {"wasd_0p3m", "keyboard_0p3m"}:
+            # 역할: wheel-on 저속 확인에서 실제 WASD key handler 경로로 전/후진과 좌/우 회전을
+            # 충분한 시간 유지한다. 최종 /cmd_vel은 safety mux가 계속 제한한다.
+            def key_event(keysym: str):
+                return type("KeyEvent", (), {"keysym": keysym})()
+
+            steps = [
+                (800, lambda: self.on_key_press(key_event("w"))),
+                (7200, lambda: self.on_key_release(key_event("w"))),
+                (8200, lambda: self.on_key_press(key_event("s"))),
+                (14600, lambda: self.on_key_release(key_event("s"))),
+                (15600, lambda: self.on_key_press(key_event("a"))),
+                (20600, lambda: self.on_key_release(key_event("a"))),
+                (21600, lambda: self.on_key_press(key_event("d"))),
+                (26600, lambda: self.on_key_release(key_event("d"))),
+                (27600, lambda: self.node.stop_motion(stop_auto=True)),
+                (29200, self.close_if_demo_requested),
+            ]
+        elif script in {"wasd_bump_verify", "keyboard_wasd_bump"}:
+            # 역할: wheel-on 현장 확인용. 실제 W/A/S/D key handler를 짧게만 눌러
+            # 각 방향 명령이 UI -> remote bridge -> safety mux -> serial까지 통과하는지 본다.
+            def key_event(keysym: str):
+                return type("KeyEvent", (), {"keysym": keysym})()
+
+            steps = [
+                (800, lambda: self.on_key_press(key_event("w"))),
+                (1800, lambda: self.on_key_release(key_event("w"))),
+                (2500, lambda: self.on_key_press(key_event("s"))),
+                (3400, lambda: self.on_key_release(key_event("s"))),
+                (4100, lambda: self.on_key_press(key_event("a"))),
+                (4900, lambda: self.on_key_release(key_event("a"))),
+                (5600, lambda: self.on_key_press(key_event("d"))),
+                (6400, lambda: self.on_key_release(key_event("d"))),
+                (7000, lambda: self.node.stop_motion(stop_auto=True)),
+                (8200, self.close_if_demo_requested),
+            ]
+        elif script in {"diagonal_bump_verify", "keyboard_diagonal_bump"}:
+            # 역할: wheel-on 현장 확인용. W+D, W+A, S+D, S+A가 한쪽 키로
+            # 덮어써지지 않고 linear+angular 조합으로 나가는지 짧게 검증한다.
+            def key_event(keysym: str):
+                return type("KeyEvent", (), {"keysym": keysym})()
+
+            steps = [
+                (800, lambda: self.on_key_press(key_event("w"))),
+                (950, lambda: self.on_key_press(key_event("d"))),
+                (1950, lambda: self.on_key_release(key_event("d"))),
+                (2050, lambda: self.on_key_release(key_event("w"))),
+                (2800, lambda: self.on_key_press(key_event("w"))),
+                (2950, lambda: self.on_key_press(key_event("a"))),
+                (3950, lambda: self.on_key_release(key_event("a"))),
+                (4050, lambda: self.on_key_release(key_event("w"))),
+                (4800, lambda: self.on_key_press(key_event("s"))),
+                (4950, lambda: self.on_key_press(key_event("d"))),
+                (5950, lambda: self.on_key_release(key_event("d"))),
+                (6050, lambda: self.on_key_release(key_event("s"))),
+                (6800, lambda: self.on_key_press(key_event("s"))),
+                (6950, lambda: self.on_key_press(key_event("a"))),
+                (7950, lambda: self.on_key_release(key_event("a"))),
+                (8050, lambda: self.on_key_release(key_event("s"))),
+                (8600, lambda: self.node.stop_motion(stop_auto=True)),
+                (9800, self.close_if_demo_requested),
+            ]
+        elif script in {"diagonal_0p3m", "wasd_diagonal_0p3m"}:
+            # 역할: W+D, S+D 같은 동시 키 입력이 linear+angular 조합 명령으로 나가는지 검증한다.
+            def key_event(keysym: str):
+                return type("KeyEvent", (), {"keysym": keysym})()
+
+            steps = [
+                (800, lambda: self.on_key_press(key_event("w"))),
+                (950, lambda: self.on_key_press(key_event("d"))),
+                (7200, lambda: self.on_key_release(key_event("d"))),
+                (7250, lambda: self.on_key_release(key_event("w"))),
+                (8400, lambda: self.on_key_press(key_event("s"))),
+                (8550, lambda: self.on_key_press(key_event("d"))),
+                (14800, lambda: self.on_key_release(key_event("d"))),
+                (14850, lambda: self.on_key_release(key_event("s"))),
+                (16000, lambda: self.on_key_press(key_event("w"))),
+                (16150, lambda: self.on_key_press(key_event("a"))),
+                (22400, lambda: self.on_key_release(key_event("a"))),
+                (22450, lambda: self.on_key_release(key_event("w"))),
+                (23600, lambda: self.node.stop_motion(stop_auto=True)),
+                (25200, self.close_if_demo_requested),
+            ]
+        elif script in {"diagonal_release_robustness", "wd_release_robustness"}:
+            # 역할: 실제 키보드에서 W+D 도중 W release가 먼저 들어오는 현상을 재현한다.
+            # 기대값은 D만 남지 않고 W+D가 계속 유지되는 것이다.
+            def key_event(keysym: str):
+                return type("KeyEvent", (), {"keysym": keysym})()
+
+            steps = [
+                (800, lambda: self.on_key_press(key_event("w"))),
+                (1000, lambda: self.on_key_press(key_event("d"))),
+                (1300, lambda: self.on_key_release(key_event("w"))),
+                (6200, lambda: self.on_key_release(key_event("d"))),
+                (7600, lambda: self.on_key_press(key_event("s"))),
+                (7800, lambda: self.on_key_press(key_event("a"))),
+                (8100, lambda: self.on_key_release(key_event("s"))),
+                (13000, lambda: self.on_key_release(key_event("a"))),
+                (14400, lambda: self.node.stop_motion(stop_auto=True)),
+                (16000, self.close_if_demo_requested),
+            ]
+        elif script in {"turn_response_test", "ad_turn_response"}:
+            # 역할: A/D 단독 회전 반응을 실제 key handler 경로로 충분히 유지한다.
+            def key_event(keysym: str):
+                return type("KeyEvent", (), {"keysym": keysym})()
+
+            steps = [
+                (800, lambda: self.on_key_press(key_event("a"))),
+                (4800, lambda: self.on_key_release(key_event("a"))),
+                (6200, lambda: self.on_key_press(key_event("d"))),
+                (10200, lambda: self.on_key_release(key_event("d"))),
+                (11600, lambda: self.on_key_press(key_event("a"))),
+                (15600, lambda: self.on_key_release(key_event("a"))),
+                (16800, lambda: self.node.stop_motion(stop_auto=True)),
+                (18400, self.close_if_demo_requested),
+            ]
         elif script == "command_buttons_smoke":
             steps = [
                 (700, lambda: self.node.send_operator_command("START_PATROL")),
@@ -2378,6 +3036,13 @@ class WaverRemotePanel:
                 (10700, lambda: self.node.send_operator_command("EMERGENCY_STOP")),
                 (11700, lambda: self.node.send_operator_command("CLEAR_EMERGENCY_STOP")),
                 (12800, self.close_if_demo_requested),
+            ]
+        elif script in {"start_patrol_once", "start_patrol_0p3m"}:
+            # 역할: Jetson backend가 이미 떠 있는 상태에서 실제 START PATROL 버튼만
+            # 짧게 재현한다. 이동 명령은 patrol backend가 만들고 UI는 command만 낸다.
+            steps = [
+                (900, lambda: self.node.send_operator_command("START_PATROL")),
+                (4500, self.close_if_demo_requested),
             ]
         elif script == "mapping_workflow_smoke":
             # 역할: Gazebo 공항맵에서 리모콘 UI만으로 mapping -> manual movement ->
@@ -2406,6 +3071,24 @@ class WaverRemotePanel:
                 (150000, lambda: self.node.send_operator_command("START_PATROL")),
                 (162000, lambda: self.node.send_operator_command("STOP")),
                 (166000, self.close_if_demo_requested),
+            ]
+        elif script in {"mapping_spin_360", "mapping_d_spin_360"}:
+            # 역할: 사용자가 D 키를 길게 눌러 제자리 우회전을 한 바퀴 시키는
+            # 상황을 실제 Tk key handler 경로로 재현한다. Gazebo SLAM에서 정적
+            # 장애물/벽이 360도 scan accumulation 후 저장맵에 남는지 확인한다.
+            # Gazebo skid-steer 실제 odom 기준으로 angular -0.42rad/s 명령은
+            # 약 9.8deg/s로 회전하므로 40초 이상 유지해야 한 바퀴에 가깝다.
+            def key_event(keysym: str):
+                return type("KeyEvent", (), {"keysym": keysym})()
+
+            steps = [
+                (5000, lambda: self.node.send_operator_command("START_MAPPING")),
+                (18000, lambda: self.on_key_press(key_event("d"))),
+                (59000, lambda: self.on_key_release(key_event("d"))),
+                (68000, lambda: self.node.send_operator_command("SAVE_MAP")),
+                (85000, lambda: self.node.send_operator_command("APPLY_FIXED_MAP")),
+                (95000, lambda: self.node.send_operator_command("STOP")),
+                (101000, self.close_if_demo_requested),
             ]
         elif script == "mapping_full_coverage":
             # 역할: 공항맵에서 smoke보다 넓은 coverage를 만든다. 장시간 자동 검증용이며,
@@ -2667,6 +3350,9 @@ class WaverRemotePanel:
         if self.closed:
             return
         self.closed = True
+        self.cancel_pending_key_releases()
+        self.active_keys.clear()
+        self.pending_combo_release_keys.clear()
         self.active_key = None
         if bool(self.node.get_parameter("stop_backend_on_close").value):
             self.node.stop_motion(stop_auto=True)

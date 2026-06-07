@@ -97,6 +97,11 @@ class BirdRuntime:
     vz: float = 0.0
 
     initialized: bool = False
+    released: bool = True
+    removed: bool = False
+    hidden_applied: bool = False
+    spawn_checked: bool = False
+    target_phase: int = 0
 
 
 class BirdManager(Node):
@@ -113,6 +118,22 @@ class BirdManager(Node):
         self.declare_parameter('min_speed_mps', float(os.environ.get('BIRD_MANAGER_MIN_SPEED_MPS', '0.05')))
         self.declare_parameter('max_speed_mps', float(os.environ.get('BIRD_MANAGER_MAX_SPEED_MPS', '0.18')))
         self.declare_parameter('min_xy_radius_m', 0.0)
+        self.declare_parameter('random_seed', int(os.environ.get('BIRD_MANAGER_RANDOM_SEED', '0')))
+        self.declare_parameter('sequential_release_birds', True)
+        self.declare_parameter('enable_remove_after_detection', True)
+        self.declare_parameter('remove_after_detected_sec', 5.0)
+        self.declare_parameter('detection_hold_grace_sec', 3.0)
+        self.declare_parameter('require_sound_done_for_removal', False)
+        self.declare_parameter('max_removed_birds', 2)
+        self.declare_parameter('removed_z_m', -5.0)
+        self.declare_parameter('hidden_x_m', 50.0)
+        self.declare_parameter('hidden_y_m', 50.0)
+        self.declare_parameter('hidden_z_m', 3.2)
+        self.declare_parameter('stable_demo_spawn', True)
+        self.declare_parameter('removal_state_topic', '/waver/gazebo_bird_removal_state')
+        seed = int(self.get_parameter('random_seed').value)
+        if seed:
+            random.seed(seed)
         self.publish_waver_detection_topics = bool(
             self.get_parameter('publish_waver_detection_topics').value
         )
@@ -128,6 +149,25 @@ class BirdManager(Node):
         if self.z_max < self.z_min:
             self.z_min, self.z_max = self.z_max, self.z_min
         self.min_xy_radius = max(0.0, float(self.get_parameter('min_xy_radius_m').value))
+        self.sequential_release_birds = bool(self.get_parameter('sequential_release_birds').value)
+        self.enable_remove_after_detection = bool(self.get_parameter('enable_remove_after_detection').value)
+        self.remove_after_detected_sec = max(
+            0.0,
+            float(self.get_parameter('remove_after_detected_sec').value),
+        )
+        self.detection_hold_grace_sec = max(
+            0.0,
+            float(self.get_parameter('detection_hold_grace_sec').value),
+        )
+        self.require_sound_done_for_removal = bool(
+            self.get_parameter('require_sound_done_for_removal').value
+        )
+        self.max_removed_birds = max(0, int(self.get_parameter('max_removed_birds').value))
+        self.removed_z_m = float(self.get_parameter('removed_z_m').value)
+        self.hidden_x_m = float(self.get_parameter('hidden_x_m').value)
+        self.hidden_y_m = float(self.get_parameter('hidden_y_m').value)
+        self.hidden_z_m = float(self.get_parameter('hidden_z_m').value)
+        self.stable_demo_spawn = bool(self.get_parameter('stable_demo_spawn').value)
 
         self.dt = 0.08
         self.busy = False
@@ -159,6 +199,16 @@ class BirdManager(Node):
         self.last_metric_samples = {}
         self.obstacle_metrics = {}
         self.last_obstacle_status_time = 0.0
+        self.target_class = 'unknown'
+        self.bird_confirmed = False
+        self.mission_state = 'UNKNOWN'
+        self.dynamic_object_lock = False
+        self.sound_done = False
+        self.sound_done_seen_for_detection = False
+        self.detection_bird_name = ''
+        self.detection_start_wall = None
+        self.detection_last_seen_wall = None
+        self.removed_birds = []
 
         active_names = [
             name.strip()
@@ -176,9 +226,19 @@ class BirdManager(Node):
         ]
 
         self.runtime = {bird.name: BirdRuntime() for bird in self.birds}
+        for index, bird in enumerate(self.birds):
+            runtime = self.runtime[bird.name]
+            runtime.released = (not self.sequential_release_birds) or index == 0
+            runtime.removed = False
+            runtime.hidden_applied = False
 
         self.bird_pose_pub = self.create_publisher(PoseStamped, '/bird/nearest_pose', 10)
         self.bird_visible_pub = self.create_publisher(Bool, '/bird/visible', 10)
+        self.removal_state_pub = self.create_publisher(
+            String,
+            str(self.get_parameter('removal_state_topic').value),
+            10,
+        )
         self.dynamic_targets_pub = None
         self.dynamic_obstacle_state_pub = None
         self.height_filter_debug_pub = None
@@ -207,12 +267,55 @@ class BirdManager(Node):
 
         for bird in self.birds:
             self.pick_new_target(bird.name)
+        self.create_subscription(String, '/waver/target_class', self.target_class_callback, 10)
+        self.create_subscription(Bool, '/waver/bird_confirmed', self.bird_confirmed_callback, 10)
+        self.create_subscription(String, '/waver/mission_state', self.mission_state_callback, 10)
+        self.create_subscription(Bool, '/waver/dynamic_object_lock', self.dynamic_object_lock_callback, 10)
+        self.create_subscription(Bool, '/waver/sound_task_done', self.sound_done_callback, 10)
         self.service_timer = self.create_timer(1.0, self.connect_services_if_ready)
         self.timer = self.create_timer(self.dt, self.update_all)
         self.get_logger().info(
             f'bird_manager started z_range={self.z_min:.2f}-{self.z_max:.2f}m '
-            f'speed_range={min_speed:.2f}-{max_speed:.2f}m/s'
+            f'speed_range={min_speed:.2f}-{max_speed:.2f}m/s '
+            f'active_birds={[bird.name for bird in self.birds]} '
+            f'sequential_release={self.sequential_release_birds} '
+            f'stable_demo_spawn={self.stable_demo_spawn} '
+            f'remove_after_tracking={self.enable_remove_after_detection}:{self.remove_after_detected_sec:.1f}s'
         )
+
+    def target_class_callback(self, msg):
+        self.target_class = msg.data.strip().lower()
+
+    def bird_confirmed_callback(self, msg):
+        self.bird_confirmed = bool(msg.data)
+
+    def mission_state_callback(self, msg):
+        self.mission_state = msg.data.strip()
+
+    def dynamic_object_lock_callback(self, msg):
+        self.dynamic_object_lock = bool(msg.data)
+
+    def sound_done_callback(self, msg):
+        self.sound_done = bool(msg.data)
+        if self.sound_done:
+            self.sound_done_seen_for_detection = True
+
+    def mission_state_token(self):
+        text = self.mission_state.strip()
+        if not text:
+            return 'UNKNOWN'
+        return text.split()[0].upper()
+
+    def is_waver_tracking_active(self):
+        # Removal timing starts only after the LiDAR-driven target has been handed
+        # to the Waver mission flow and the robot is approaching or body-tracking it.
+        return self.mission_state_token() in {
+            'APPROACH_TARGET_OFFSET',
+            'TARGET_REACHED',
+            'CAMERA_ALIGN_TO_TARGET',
+            'CAMERA_ALIGN_DONE',
+            'TARGET_CLASSIFICATION_WAIT',
+        }
 
     def find_service_name(self, preferred, service_type):
         services = self.get_service_names_and_types()
@@ -288,11 +391,308 @@ class BirdManager(Node):
         )
 
     def pick_new_target(self, name):
+        if self.stable_demo_spawn:
+            index = self.bird_index(name)
+            rt = self.runtime[name]
+            rt.target_phase += 1
+            tx, ty, tz = self.stable_demo_target_point(index, rt.target_phase)
+            rt.target_x = tx
+            rt.target_y = ty
+            rt.target_z = tz
+            return
+
         tx, ty, tz = self.pick_random_target()
         rt = self.runtime[name]
         rt.target_x = tx
         rt.target_y = ty
         rt.target_z = tz
+
+    def bird_index(self, name):
+        for index, bird in enumerate(self.birds):
+            if bird.name == name:
+                return index
+        return 0
+
+    def stable_demo_spawn_point(self, index):
+        z = 0.5 * (self.z_min + self.z_max)
+        preset = [
+            (4.5, -0.8, z),
+            (4.2, 0.9, z),
+            (3.8, -1.2, z),
+            (3.8, 1.2, z),
+        ]
+        return preset[index % len(preset)]
+
+    def stable_demo_target_point(self, index, phase):
+        z = 0.5 * (self.z_min + self.z_max)
+        x = 4.5 if index == 0 else 4.2
+        y = 1.0 if phase % 2 else -1.0
+        return (x, y, z)
+
+    def fallback_spawn_point(self, index):
+        if self.stable_demo_spawn:
+            return self.stable_demo_spawn_point(index)
+
+        z = 0.5 * (self.z_min + self.z_max)
+        preset = [
+            (4.5, 0.0, z),
+            (-4.5, 0.0, z),
+            (0.0, 4.5, z),
+            (0.0, -4.5, z),
+        ]
+        if index < len(preset):
+            return preset[index]
+        return self.pick_random_target()
+
+    def is_valid_active_pose(self, state):
+        x = float(state.pose.position.x)
+        y = float(state.pose.position.y)
+        z = float(state.pose.position.z)
+        return (
+            self.x_min <= x <= self.x_max
+            and self.y_min <= y <= self.y_max
+            and self.z_min - 0.25 <= z <= self.z_max + 0.35
+        )
+
+    def enforce_active_spawn_safety(self):
+        for index, bird in enumerate(self.birds):
+            rt = self.runtime[bird.name]
+            if rt.removed:
+                continue
+            if not rt.released:
+                # Sequential-release birds are staged outside the arena until
+                # their turn. Keeping them above ground avoids the "underground
+                # bird" visual artifact while still keeping them out of LiDAR ROI.
+                self.hide_one_bird(bird.name)
+                continue
+
+            state = self.current_states.get(bird.name)
+            if state is None:
+                continue
+            if rt.spawn_checked and self.is_valid_active_pose(state):
+                continue
+
+            rt.spawn_checked = True
+            if self.is_valid_active_pose(state):
+                continue
+
+            x, y, z = self.fallback_spawn_point(index)
+            rt.initialized = False
+            rt.hidden_applied = False
+            rt.vx = rt.vy = rt.vz = 0.0
+            safe_state = self.make_entity_state(
+                bird.name,
+                clamp(x, self.x_min, self.x_max),
+                clamp(y, self.y_min, self.y_max),
+                clamp(z, self.z_min, self.z_max),
+                rt.yaw,
+            )
+            self.set_entity_state(
+                safe_state,
+                reason=(
+                    f'[{bird.name}] corrected invalid spawn pose to '
+                    f'({safe_state.pose.position.x:.2f},'
+                    f'{safe_state.pose.position.y:.2f},'
+                    f'{safe_state.pose.position.z:.2f})'
+                ),
+            )
+
+    def is_bird_active(self, name):
+        rt = self.runtime.get(name)
+        return bool(rt is not None and rt.released and not rt.removed)
+
+    def active_bird_names(self):
+        return [bird.name for bird in self.birds if self.is_bird_active(bird.name)]
+
+    def publish_removal_state(self, text):
+        if not rclpy_ok():
+            return
+        try:
+            self.removal_state_pub.publish(String(data=text))
+        except Exception:
+            return
+
+    def make_entity_state(self, name, x, y, z, yaw=0.0):
+        qx, qy, qz, qw = euler_to_quaternion(0.0, 0.0, yaw)
+        state = EntityState()
+        state.name = name
+        state.reference_frame = 'world'
+        state.pose.position.x = float(x)
+        state.pose.position.y = float(y)
+        state.pose.position.z = float(z)
+        state.pose.orientation.x = qx
+        state.pose.orientation.y = qy
+        state.pose.orientation.z = qz
+        state.pose.orientation.w = qw
+        state.twist.linear.x = 0.0
+        state.twist.linear.y = 0.0
+        state.twist.linear.z = 0.0
+        state.twist.angular.x = 0.0
+        state.twist.angular.y = 0.0
+        state.twist.angular.z = 0.0
+        return state
+
+    def set_entity_state(self, state, reason=''):
+        if self.set_cli is None:
+            return
+        req = SetEntityState.Request()
+        req.state = state
+        self.current_states[state.name] = state
+        future = self.set_cli.call_async(req)
+        future.add_done_callback(lambda fut, name=state.name: self.on_set_done(fut, name))
+        if reason:
+            self.get_logger().info(reason)
+
+    def hide_one_bird(self, name):
+        rt = self.runtime[name]
+        if rt.hidden_applied:
+            return
+        hidden_state = self.make_entity_state(
+            name,
+            self.hidden_x_m,
+            self.hidden_y_m,
+            self.hidden_z_m,
+            rt.yaw,
+        )
+        rt.vx = rt.vy = rt.vz = 0.0
+        rt.hidden_applied = True
+        self.set_entity_state(hidden_state)
+
+    def release_next_bird(self):
+        for bird in self.birds:
+            rt = self.runtime[bird.name]
+            if rt.removed or rt.released:
+                continue
+            if self.stable_demo_spawn:
+                index = self.bird_index(bird.name)
+                x, y, z = self.stable_demo_spawn_point(index)
+            else:
+                x, y, z = self.pick_random_target()
+            rt.released = True
+            rt.hidden_applied = False
+            rt.spawn_checked = False
+            rt.initialized = False
+            rt.vx = rt.vy = rt.vz = 0.0
+            self.pick_new_target(bird.name)
+            yaw = random.uniform(-math.pi, math.pi)
+            visible_state = self.make_entity_state(bird.name, x, y, z, yaw)
+            self.set_entity_state(visible_state)
+            remaining = len([b.name for b in self.birds if not self.runtime[b.name].removed])
+            self.publish_removal_state(
+                f'RELEASED bird={bird.name} removed_count={len(self.removed_birds)} '
+                f'remaining_count={remaining}'
+            )
+            return bird.name
+        return ''
+
+    def remove_bird(self, name, detected_hold_sec):
+        rt = self.runtime[name]
+        if rt.removed:
+            return
+        rt.removed = True
+        rt.released = False
+        rt.hidden_applied = False
+        rt.vx = rt.vy = rt.vz = 0.0
+        if name not in self.removed_birds:
+            self.removed_birds.append(name)
+        self.hide_one_bird(name)
+        remaining = len([bird.name for bird in self.birds if not self.runtime[bird.name].removed])
+        self.publish_removal_state(
+            f'REMOVED bird={name} removed_count={len(self.removed_birds)} '
+            f'remaining_count={remaining} detected_hold_sec={detected_hold_sec:.2f} '
+            f'tracking_hold_sec={detected_hold_sec:.2f} '
+            f'mission_state={self.mission_state_token()} '
+            f'dynamic_lock={self.dynamic_object_lock} '
+            f'sound_done_seen={self.sound_done_seen_for_detection}'
+        )
+        self.detection_bird_name = ''
+        self.detection_start_wall = None
+        self.sound_done_seen_for_detection = False
+        if len(self.removed_birds) < self.max_removed_birds:
+            self.release_next_bird()
+        elif self.max_removed_birds > 0:
+            self.publish_removal_state(
+                f'REMOVAL_GOAL_REACHED removed_count={len(self.removed_birds)} '
+                f'goal={self.max_removed_birds}'
+            )
+
+    def current_visible_bird_name(self):
+        best_name = ''
+        best_z = float('inf')
+        for bird in self.birds:
+            if not self.is_bird_active(bird.name):
+                continue
+            state = self.current_states.get(bird.name)
+            if state is None:
+                continue
+            z = state.pose.position.z
+            if z < best_z:
+                best_z = z
+                best_name = bird.name
+        return best_name
+
+    def update_detection_removal(self):
+        if not self.enable_remove_after_detection:
+            return
+        if self.max_removed_birds > 0 and len(self.removed_birds) >= self.max_removed_birds:
+            return
+        active_name = self.current_visible_bird_name()
+        bird_class_active = bool(
+            self.bird_confirmed and self.target_class in {'bird', 'gazebo_fake_bird'}
+        )
+        tracking_active = bool(
+            self.is_waver_tracking_active()
+            and (self.dynamic_object_lock or bird_class_active)
+        )
+        now = time.monotonic()
+        if not active_name:
+            self.detection_bird_name = ''
+            self.detection_start_wall = None
+            self.detection_last_seen_wall = None
+            self.sound_done_seen_for_detection = False
+            return
+        if not tracking_active:
+            if (
+                self.detection_bird_name == active_name
+                and self.detection_start_wall is not None
+                and self.detection_last_seen_wall is not None
+                and now - self.detection_last_seen_wall <= self.detection_hold_grace_sec
+            ):
+                # Keep the hold timer alive through short LiDAR/classifier/mission-state
+                # dropouts once Waver has already started target approach/tracking.
+                pass
+            else:
+                self.detection_bird_name = ''
+                self.detection_start_wall = None
+                self.detection_last_seen_wall = None
+                self.sound_done_seen_for_detection = False
+                return
+        if self.detection_bird_name != active_name or self.detection_start_wall is None:
+            self.detection_bird_name = active_name
+            self.detection_start_wall = now
+            self.detection_last_seen_wall = now
+            self.sound_done_seen_for_detection = bool(self.sound_done)
+            self.publish_removal_state(
+                f'TRACKING_HOLD_STARTED bird={active_name} '
+                f'mission_state={self.mission_state_token()} '
+                f'target_class={self.target_class} '
+                f'bird_confirmed={self.bird_confirmed} '
+                f'dynamic_lock={self.dynamic_object_lock}'
+            )
+            return
+        if tracking_active:
+            self.detection_last_seen_wall = now
+        if self.sound_done:
+            self.sound_done_seen_for_detection = True
+        detected_hold_sec = now - self.detection_start_wall
+        if detected_hold_sec < self.remove_after_detected_sec:
+            return
+        if self.require_sound_done_for_removal and not self.sound_done_seen_for_detection:
+            self.publish_removal_state(
+                f'WAIT_SOUND_DONE bird={active_name} detected_hold_sec={detected_hold_sec:.2f}'
+            )
+            return
+        self.remove_bird(active_name, detected_hold_sec)
 
     def update_all(self):
         if self.busy:
@@ -344,20 +744,27 @@ class BirdManager(Node):
             self.busy = False
             return
 
+        self.enforce_active_spawn_safety()
         world_info = self.build_world_info()
 
         for bird in self.birds:
             if bird.name not in self.current_states:
                 continue
+            if not self.is_bird_active(bird.name):
+                self.hide_one_bird(bird.name)
+                continue
             self.move_one_bird(bird, world_info)
 
         self.publish_dynamic_obstacles()
         self.publish_nearest_bird()
+        self.update_detection_removal()
         self.busy = False
 
     def build_world_info(self):
         info = {}
         for bird in self.birds:
+            if not self.is_bird_active(bird.name):
+                continue
             state = self.current_states.get(bird.name)
             if state is None:
                 continue
@@ -590,6 +997,8 @@ class BirdManager(Node):
 
     def update_obstacle_metrics(self, now):
         for bird in self.birds:
+            if not self.is_bird_active(bird.name):
+                continue
             state = self.current_states.get(bird.name)
             if state is None:
                 continue
@@ -636,7 +1045,9 @@ class BirdManager(Node):
     def build_obstacle_status_text(self):
         names = [
             bird.name for bird in self.birds
-            if bird.name in self.current_states and bird.name in self.obstacle_metrics
+            if self.is_bird_active(bird.name)
+            and bird.name in self.current_states
+            and bird.name in self.obstacle_metrics
         ]
         if not names:
             return f'start={self.tracking_start_text} | count=0 | no moving dynamic obstacle'
@@ -664,6 +1075,8 @@ class BirdManager(Node):
         msg.header.frame_id = 'odom'
 
         for bird in self.birds:
+            if not self.is_bird_active(bird.name):
+                continue
             state = self.current_states.get(bird.name)
             if state is None:
                 continue
@@ -722,6 +1135,8 @@ class BirdManager(Node):
         best_z = float('inf')
 
         for bird in self.birds:
+            if not self.is_bird_active(bird.name):
+                continue
             if bird.name not in self.current_states:
                 continue
             state = self.current_states[bird.name]

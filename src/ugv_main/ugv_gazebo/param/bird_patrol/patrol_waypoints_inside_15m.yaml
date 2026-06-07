@@ -1,0 +1,46 @@
+route_name: gazebo_bird_patrol_inside_15m
+frame_id: odom
+loop: true
+default_dwell_s: 0.5
+
+home:
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+
+charge:
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+
+waypoints:
+  - name: inside_a
+    x: 1.0
+    y: 0.0
+    yaw_deg: 0.0
+    dwell_s: 0.4
+  - name: inside_b
+    x: 2.0
+    y: 0.0
+    yaw_deg: 0.0
+    dwell_s: 0.4
+  - name: inside_c
+    x: 2.0
+    y: 2.0
+    yaw_deg: 90.0
+    dwell_s: 0.4
+  - name: inside_d
+    x: 1.0
+    y: 2.0
+    yaw_deg: 180.0
+    dwell_s: 0.4
+
+failure_policy:
+  max_patrol_radius_m: 7.0
+  recovery_attempts: 1
+  human_estop_required: false
+
+experiment_tags:
+  - gazebo
+  - inside_15m
+  - bird_dynamic_target

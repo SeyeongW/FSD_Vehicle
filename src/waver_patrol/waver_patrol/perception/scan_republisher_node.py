@@ -3,6 +3,7 @@ from __future__ import annotations
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 
 
@@ -19,7 +20,12 @@ class ScanRepublisherNode(Node):
         self.declare_parameter("input_topic", "/scan")
         self.declare_parameter("output_topic", "/scan_slam")
         self.pub = self.create_publisher(LaserScan, str(self.get_parameter("output_topic").value), 10)
-        self.create_subscription(LaserScan, str(self.get_parameter("input_topic").value), self.scan_callback, 10)
+        self.create_subscription(
+            LaserScan,
+            str(self.get_parameter("input_topic").value),
+            self.scan_callback,
+            qos_profile_sensor_data,
+        )
 
     def scan_callback(self, msg: LaserScan) -> None:
         self.pub.publish(msg)

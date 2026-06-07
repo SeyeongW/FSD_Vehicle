@@ -1,0 +1,11 @@
+{
+  "experiment_id": "waver_gazebo_bird_patrol",
+  "trial_id": "lidar_smoke_lockfirst",
+  "run_dir": "/home/chotaehyun/ros2_ws3/FSD_Vehicle/experiments_result/gazebo_bird_patrol/lidar_smoke_lockfirst_20260603_082249",
+  "created_wall_time": "2026-06-03T08:22:54+0900",
+  "detector_mode": "lidar",
+  "classifier_mode": "fake_gazebo",
+  "random_seed": 534,
+  "git_hash": "ca56c02",
+  "control_publishers": "none"
+}

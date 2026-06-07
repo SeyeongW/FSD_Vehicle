@@ -1,0 +1,1 @@
+time_sec,trial_id,cluster_id,frame_id,x_raw,y_raw,z_raw,x_map,y_map,z_map,distance_to_robot,cluster_size,valid_cluster

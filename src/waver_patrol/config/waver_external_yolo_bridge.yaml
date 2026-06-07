@@ -1,0 +1,9 @@
+external_yolo_bridge_node:
+  ros__parameters:
+    input_detection_topic: /external/yolo/detections
+    input_json_topic: /external/yolo/result_json
+    camera_frame: camera_color_optical_frame
+    bird_class_names: ["bird"]
+    non_bird_class_names: ["person", "vehicle", "drone", "robot"]
+    confidence_threshold: 0.65
+    require_camera_centered_for_mission: true

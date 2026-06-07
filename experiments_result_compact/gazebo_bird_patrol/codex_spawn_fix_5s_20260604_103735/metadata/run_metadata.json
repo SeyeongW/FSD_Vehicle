@@ -1,0 +1,11 @@
+{
+  "experiment_id": "waver_gazebo_bird_patrol",
+  "trial_id": "codex_spawn_fix_5s",
+  "run_dir": "/home/chotaehyun/ros2_ws3/FSD_Vehicle/experiments_result/gazebo_bird_patrol/codex_spawn_fix_5s_20260604_103735",
+  "created_wall_time": "2026-06-04T10:37:41+0900",
+  "detector_mode": "lidar",
+  "classifier_mode": "fake_gazebo",
+  "random_seed": 533,
+  "git_hash": "ca56c02",
+  "control_publishers": "none"
+}

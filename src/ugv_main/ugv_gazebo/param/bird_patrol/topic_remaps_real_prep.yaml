@@ -1,0 +1,19 @@
+real_prep_topic_notes:
+  cmd_vel_in: /waver/cmd_vel_auto_selected
+  cmd_vel_final: /cmd_vel
+  manual_cmd_vel: /waver/manual_cmd_vel
+  mode_state: /waver/mode
+  mode_command: /waver/mode_cmd
+  mission_command: /waver/mission_command
+  pointcloud: /mid360_PointCloud2
+  camera_image: /camera/image_raw
+  camera_info: /camera/camera_info
+
+
+future_real_remap_candidates:
+  gazebo_mid360_pointcloud: /mid360_PointCloud2
+  real_livox_pointcloud_candidate: /livox/lider
+  real_livox_driver_common_pointcloud: /livox/lidar
+  real_livox_imu_candidate: /livox/imu
+  camera_image: /camera/image_raw
+  camera_info: /camera/camera_info

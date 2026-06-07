@@ -1,0 +1,35 @@
+# Waver 0.5 m x 0.5 m odom-relative square patrol for supervised low-speed tests.
+#
+# This route is intentionally tiny. Use it only after confirming a clear floor,
+# reachable E-stop, correct wheel direction, and a single /cmd_vel safety chain.
+
+frame_id: odom
+home:
+  name: home
+  x: 0.0
+  y: 0.0
+  yaw: 0.0
+
+waypoints:
+  - name: start
+    x: 0.0
+    y: 0.0
+    yaw: 0.0
+  - name: forward_0p5
+    x: 0.5
+    y: 0.0
+    yaw: 1.57
+  - name: right_0p5
+    x: 0.5
+    y: 0.5
+    yaw: 3.14
+  - name: return_side
+    x: 0.0
+    y: 0.5
+    yaw: -1.57
+
+failure_policy:
+  max_patrol_radius_m: 0.8
+  recovery_attempts: 0
+  blocked_wait_s: 0.5
+  human_estop_required: true

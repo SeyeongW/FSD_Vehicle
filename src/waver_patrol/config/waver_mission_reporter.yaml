@@ -1,0 +1,7 @@
+mission_data_reporter_node:
+  ros__parameters:
+    trial_id: lidar_first_bird_mission
+    output_root: ~/ros2_ws2/FSD_Vehicle/experiment_results
+    external_send_enabled: false
+    http_post_url: ""
+    write_jsonl: true
