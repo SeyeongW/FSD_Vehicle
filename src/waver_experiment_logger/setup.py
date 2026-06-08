@@ -20,6 +20,8 @@ setup(
         "console_scripts": [
             "seo_mechanism_trial_logger_node = waver_experiment_logger.seo_mechanism_trial_logger_node:main",
             "gazebo_bird_dataset_logger_node = waver_experiment_logger.gazebo_bird_dataset_logger_node:main",
+            "waver_spatial_response_logger_node = waver_experiment_logger.waver_spatial_response_logger_node:main",
+            "waver_spatial_debug_viz_node = waver_experiment_logger.waver_spatial_debug_viz_node:main",
         ],
     },
 )

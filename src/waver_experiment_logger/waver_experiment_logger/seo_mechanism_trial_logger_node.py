@@ -29,17 +29,26 @@ class SeoMechanismTrialLoggerNode(Node):
 
     def __init__(self) -> None:
         super().__init__("seo_mechanism_trial_logger_node")
-        self.declare_parameter("output_root", "/home/chotaehyun/ros2_ws3/FSD_Vehicle/experiments_result/gazebo_bird_patrol")
+        self.declare_parameter("output_root", "/home/chotaehyun/ros2_ws3/FSD_Vehicle/experiment_results/gazebo_bird_patrol")
         self.declare_parameter("trial_id", "gazebo_seo_bird_patrol")
+        self.declare_parameter("run_id", "")
+        self.declare_parameter("run_dir", "")
         self.declare_parameter("summary_period_sec", 0.5)
 
-        root = os.path.expanduser(os.path.expandvars(str(self.get_parameter("output_root").value)))
-        os.makedirs(root, exist_ok=True)
-        stamp = time.strftime("%Y%m%d_%H%M%S")
-        trial_id = str(self.get_parameter("trial_id").value)
-        self.run_dir = os.path.join(root, f"{trial_id}_{stamp}")
-        os.makedirs(self.run_dir, exist_ok=True)
-        self.csv_path = os.path.join(self.run_dir, "mechanism_events.csv")
+        explicit_run_dir = os.path.expanduser(os.path.expandvars(str(self.get_parameter("run_dir").value))).strip()
+        if explicit_run_dir:
+            self.run_dir = explicit_run_dir
+        else:
+            root = os.path.expanduser(os.path.expandvars(str(self.get_parameter("output_root").value)))
+            os.makedirs(root, exist_ok=True)
+            run_id = str(self.get_parameter("run_id").value).strip()
+            if not run_id:
+                stamp = time.strftime("%Y%m%d_%H%M%S")
+                trial_id = str(self.get_parameter("trial_id").value)
+                run_id = f"{trial_id}_{stamp}"
+            self.run_dir = os.path.join(root, run_id)
+        os.makedirs(os.path.join(self.run_dir, "logs"), exist_ok=True)
+        self.csv_path = os.path.join(self.run_dir, "logs", "mechanism_events.csv")
         self.csv_file = open(self.csv_path, "w", newline="", encoding="utf-8")
         self.writer = csv.DictWriter(
             self.csv_file,

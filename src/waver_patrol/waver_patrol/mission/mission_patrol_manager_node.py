@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 from enum import Enum
 from typing import Optional
@@ -131,6 +132,9 @@ class MissionPatrolManagerNode(Node):
         self.declare_parameter("patrol_goal_timeout_sec", 180.0)
         self.declare_parameter("waypoint_dwell_sec_default", 2.0)
         self.declare_parameter("sound_task_timeout_sec", 15.0)
+        self.declare_parameter("wait_bird_clear_after_sound", False)
+        self.declare_parameter("bird_clear_state_topic", "/waver/gazebo_bird_removal_state")
+        self.declare_parameter("bird_clear_timeout_sec", 15.0)
         self.declare_parameter("nav2_action_timeout_sec", 5.0)
         self.declare_parameter("nav2_result_timeout_sec", 240.0)
         self.declare_parameter("cancel_timeout_sec", 2.0)
@@ -167,6 +171,8 @@ class MissionPatrolManagerNode(Node):
         self.return_home_active = False
         self.return_goal: Optional[PoseStamped] = None
         self.sound_task_done = False
+        self.bird_clear_after_sound = False
+        self.bird_clear_wait_reported = False
         self.bird_confirmed = False
         self.target_class = "unknown"
         self.target_confidence = 0.0
@@ -199,6 +205,7 @@ class MissionPatrolManagerNode(Node):
         self.mode_pub = self.create_publisher(String, "/waver/mode", 10)
         self.current_wp_pub = self.create_publisher(PoseStamped, "/waver/current_waypoint", 10)
         self.active_goal_pub = self.create_publisher(PoseStamped, "/waver/active_nav_goal", 10)
+        self.active_goal_meta_pub = self.create_publisher(String, "/waver/active_nav_goal_meta", 10)
         self.sound_request_pub = self.create_publisher(Bool, "/waver/sound_alert_request", 10)
         self.index_pub = self.create_publisher(Int32, "/waver/patrol_index", 10)
         self.camera_aim_target_pub = self.create_publisher(PoseStamped, "/waver/camera_aim_target_pose", 10)
@@ -228,6 +235,7 @@ class MissionPatrolManagerNode(Node):
         self.create_subscription(Bool, "/waver/emergency_stop", lambda m: setattr(self, "estop", bool(m.data)), 10)
         self.create_subscription(Bool, "/waver/external_stop", lambda m: setattr(self, "external_stop", bool(m.data)), 10)
         self.create_subscription(Bool, "/waver/sound_task_done", lambda m: setattr(self, "sound_task_done", bool(m.data)), 10)
+        self.create_subscription(String, str(self.get_parameter("bird_clear_state_topic").value), self.bird_clear_state_callback, 10)
         self.create_subscription(Bool, "/waver/bird_confirmed", lambda m: setattr(self, "bird_confirmed", bool(m.data)), 10)
         self.create_subscription(String, "/waver/target_class", lambda m: setattr(self, "target_class", m.data), 10)
         self.create_subscription(Float32, "/waver/target_confidence", lambda m: setattr(self, "target_confidence", float(m.data)), 10)
@@ -520,6 +528,8 @@ class MissionPatrolManagerNode(Node):
             MissionState.TARGET_CLASSIFIED_IRRELEVANT,
             MissionState.CAMERA_ALIGN_FAILED,
         }:
+            if self.state == MissionState.SOUND_TASK_DONE and self.waiting_for_bird_clear_after_sound():
+                return
             self.return_to_interrupted_waypoint()
             return
         if self.state == MissionState.PATROL_DWELL:
@@ -575,6 +585,8 @@ class MissionPatrolManagerNode(Node):
             self.active_target_pose = goal
         self.camera_target_centered = False
         self.sound_task_done = False
+        self.bird_clear_after_sound = False
+        self.bird_clear_wait_reported = False
         self.cancel_active_goal("target_mission_interrupt")
         self.set_state(MissionState.INSPECTION_GOAL_GENERATED, "lidar_first_inspection_goal")
         self.send_nav_goal(goal, NavGoalType.TARGET_INSPECTION, MissionState.APPROACH_TARGET_OFFSET)
@@ -670,11 +682,34 @@ class MissionPatrolManagerNode(Node):
         if self.sound_task_done:
             self.sound_request_pub.publish(Bool(data=False))
             self.camera_aim_request_pub.publish(Bool(data=False))
+            self.bird_clear_after_sound = False
+            self.bird_clear_wait_reported = False
             self.set_state(MissionState.SOUND_TASK_DONE, "sound_task_done")
         elif self._now() - self.state_enter_time > float(self.get_parameter("sound_task_timeout_sec").value):
             self.sound_request_pub.publish(Bool(data=False))
             self.camera_aim_request_pub.publish(Bool(data=False))
             self.set_state(MissionState.SOUND_TASK_TIMEOUT, "sound_task_timeout_safe_completion")
+
+    def bird_clear_state_callback(self, msg: String) -> None:
+        text = (msg.data or "").strip().upper()
+        if text.startswith("RETURN_DISTANCE_REACHED") or text.startswith("REMOVED"):
+            self.bird_clear_after_sound = True
+            self.publish_event("BIRD_CLEAR_AFTER_SOUND", msg.data)
+
+    def waiting_for_bird_clear_after_sound(self) -> bool:
+        if not bool(self.get_parameter("wait_bird_clear_after_sound").value):
+            return False
+        if self.bird_clear_after_sound:
+            return False
+        elapsed = self._now() - self.state_enter_time
+        if elapsed >= float(self.get_parameter("bird_clear_timeout_sec").value):
+            self.bird_clear_after_sound = True
+            self.publish_event("BIRD_CLEAR_WAIT_TIMEOUT", f"elapsed_sec={elapsed:.2f}")
+            return False
+        if not self.bird_clear_wait_reported:
+            self.bird_clear_wait_reported = True
+            self.publish_event("WAIT_BIRD_CLEAR_AFTER_SOUND", "waiting_for_return_distance_reached")
+        return True
 
     def return_to_interrupted_waypoint(self) -> None:
         if self.interrupted_goal is None:
@@ -721,6 +756,7 @@ class MissionPatrolManagerNode(Node):
         if reset_retries:
             self.goal_retry_count = 0
         goal.header.stamp = self.get_clock().now().to_msg()
+        self.publish_active_goal_meta(goal, goal_type, state)
         self.active_goal_pub.publish(goal)
         self.set_state(state, f"goal_type={goal_type.value}")
         if not self.use_nav2:
@@ -733,6 +769,25 @@ class MissionPatrolManagerNode(Node):
         action_goal.pose = goal
         future = self.nav_client.send_goal_async(action_goal, feedback_callback=self.feedback_callback)
         future.add_done_callback(self.goal_response_callback)
+
+    def publish_active_goal_meta(self, goal: PoseStamped, goal_type: NavGoalType, state: MissionState) -> None:
+        target = self.active_target_pose if goal_type == NavGoalType.TARGET_INSPECTION else None
+        payload = {
+            "time_sec": self._now(),
+            "goal_role": goal_type.value,
+            "mission_state": state.value,
+            "goal_frame": goal.header.frame_id,
+            "goal_x": float(goal.pose.position.x),
+            "goal_y": float(goal.pose.position.y),
+            "goal_z": float(goal.pose.position.z),
+            "source": "object_mission_goal" if goal_type == NavGoalType.TARGET_INSPECTION else "mission_patrol_manager",
+            "target_x": "" if target is None else float(target.pose.position.x),
+            "target_y": "" if target is None else float(target.pose.position.y),
+            "target_z": "" if target is None else float(target.pose.position.z),
+            "target_frame": "" if target is None else target.header.frame_id,
+            "waypoint_index": int(self.current_index),
+        }
+        self.active_goal_meta_pub.publish(String(data=json.dumps(payload, separators=(",", ":"))))
 
     def goal_response_callback(self, future) -> None:
         try:

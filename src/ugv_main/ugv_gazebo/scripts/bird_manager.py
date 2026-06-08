@@ -4,6 +4,7 @@ import math
 import os
 import random
 import time
+import json
 from dataclasses import dataclass
 
 import rclpy
@@ -13,6 +14,7 @@ from rclpy.utilities import ok as rclpy_ok
 from gazebo_msgs.srv import SetEntityState, GetEntityState
 from gazebo_msgs.msg import EntityState
 from geometry_msgs.msg import PoseArray, PoseStamped
+from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, Float32, String
 
 
@@ -102,6 +104,14 @@ class BirdRuntime:
     hidden_applied: bool = False
     spawn_checked: bool = False
     target_phase: int = 0
+    fleeing: bool = False
+    flee_dir_x: float = 0.0
+    flee_dir_y: float = 0.0
+    flee_start_x: float = 0.0
+    flee_start_y: float = 0.0
+    flee_started_wall: float = 0.0
+    return_distance_reported: bool = False
+    flee_started_from_sound: bool = False
 
 
 class BirdManager(Node):
@@ -125,6 +135,18 @@ class BirdManager(Node):
         self.declare_parameter('detection_hold_grace_sec', 3.0)
         self.declare_parameter('require_sound_done_for_removal', False)
         self.declare_parameter('max_removed_birds', 2)
+        self.declare_parameter('enable_flee_after_sound', True)
+        self.declare_parameter('flee_distance_m', 10.0)
+        self.declare_parameter('return_distance_m', 10.0)
+        self.declare_parameter('flee_speed_mps', 1.5)
+        self.declare_parameter('allowed_lidar_x_min_m', -5.0)
+        self.declare_parameter('allowed_lidar_x_max_m', 5.0)
+        self.declare_parameter('allowed_lidar_y_min_m', -5.0)
+        self.declare_parameter('allowed_lidar_y_max_m', 5.0)
+        self.declare_parameter('physical_x_min_m', -15.0)
+        self.declare_parameter('physical_x_max_m', 15.0)
+        self.declare_parameter('physical_y_min_m', -15.0)
+        self.declare_parameter('physical_y_max_m', 15.0)
         self.declare_parameter('removed_z_m', -5.0)
         self.declare_parameter('hidden_x_m', 50.0)
         self.declare_parameter('hidden_y_m', 50.0)
@@ -138,11 +160,16 @@ class BirdManager(Node):
             self.get_parameter('publish_waver_detection_topics').value
         )
 
-        # 15x15 map, leave room from the 2m boundary wall.
-        self.x_min = -6.5
-        self.x_max = 6.5
-        self.y_min = -6.5
-        self.y_max = 6.5
+        # Physical bird motion bounds are wider than the patrol test area so a
+        # sound response can fly out of the 8m square before being hidden.
+        self.x_min = float(self.get_parameter('physical_x_min_m').value)
+        self.x_max = float(self.get_parameter('physical_x_max_m').value)
+        self.y_min = float(self.get_parameter('physical_y_min_m').value)
+        self.y_max = float(self.get_parameter('physical_y_max_m').value)
+        self.allowed_lidar_x_min = float(self.get_parameter('allowed_lidar_x_min_m').value)
+        self.allowed_lidar_x_max = float(self.get_parameter('allowed_lidar_x_max_m').value)
+        self.allowed_lidar_y_min = float(self.get_parameter('allowed_lidar_y_min_m').value)
+        self.allowed_lidar_y_max = float(self.get_parameter('allowed_lidar_y_max_m').value)
 
         self.z_min = float(self.get_parameter('z_min_m').value)
         self.z_max = float(self.get_parameter('z_max_m').value)
@@ -163,6 +190,10 @@ class BirdManager(Node):
             self.get_parameter('require_sound_done_for_removal').value
         )
         self.max_removed_birds = max(0, int(self.get_parameter('max_removed_birds').value))
+        self.enable_flee_after_sound = bool(self.get_parameter('enable_flee_after_sound').value)
+        self.flee_distance_m = max(0.1, float(self.get_parameter('flee_distance_m').value))
+        self.return_distance_m = max(0.1, float(self.get_parameter('return_distance_m').value))
+        self.flee_speed_mps = max(0.1, float(self.get_parameter('flee_speed_mps').value))
         self.removed_z_m = float(self.get_parameter('removed_z_m').value)
         self.hidden_x_m = float(self.get_parameter('hidden_x_m').value)
         self.hidden_y_m = float(self.get_parameter('hidden_y_m').value)
@@ -209,6 +240,9 @@ class BirdManager(Node):
         self.detection_start_wall = None
         self.detection_last_seen_wall = None
         self.removed_birds = []
+        self.robot_x = 0.0
+        self.robot_y = 0.0
+        self.robot_pose_seen = False
 
         active_names = [
             name.strip()
@@ -237,6 +271,11 @@ class BirdManager(Node):
         self.removal_state_pub = self.create_publisher(
             String,
             str(self.get_parameter('removal_state_topic').value),
+            10,
+        )
+        self.bird_kinematics_pub = self.create_publisher(
+            String,
+            '/waver/gazebo_bird_kinematics',
             10,
         )
         self.dynamic_targets_pub = None
@@ -272,6 +311,7 @@ class BirdManager(Node):
         self.create_subscription(String, '/waver/mission_state', self.mission_state_callback, 10)
         self.create_subscription(Bool, '/waver/dynamic_object_lock', self.dynamic_object_lock_callback, 10)
         self.create_subscription(Bool, '/waver/sound_task_done', self.sound_done_callback, 10)
+        self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.service_timer = self.create_timer(1.0, self.connect_services_if_ready)
         self.timer = self.create_timer(self.dt, self.update_all)
         self.get_logger().info(
@@ -280,7 +320,9 @@ class BirdManager(Node):
             f'active_birds={[bird.name for bird in self.birds]} '
             f'sequential_release={self.sequential_release_birds} '
             f'stable_demo_spawn={self.stable_demo_spawn} '
-            f'remove_after_tracking={self.enable_remove_after_detection}:{self.remove_after_detected_sec:.1f}s'
+            f'sound_flee={self.enable_flee_after_sound} flee_distance={self.flee_distance_m:.1f}m '
+            f'lidar_allowed=({self.allowed_lidar_x_min:.1f},{self.allowed_lidar_y_min:.1f})'
+            f'-({self.allowed_lidar_x_max:.1f},{self.allowed_lidar_y_max:.1f})'
         )
 
     def target_class_callback(self, msg):
@@ -299,6 +341,14 @@ class BirdManager(Node):
         self.sound_done = bool(msg.data)
         if self.sound_done:
             self.sound_done_seen_for_detection = True
+            flee_name = self.detection_bird_name or self.current_visible_bird_name()
+            if flee_name:
+                self.start_flee(flee_name)
+
+    def odom_callback(self, msg):
+        self.robot_x = float(msg.pose.pose.position.x)
+        self.robot_y = float(msg.pose.pose.position.y)
+        self.robot_pose_seen = True
 
     def mission_state_token(self):
         text = self.mission_state.strip()
@@ -315,6 +365,8 @@ class BirdManager(Node):
             'CAMERA_ALIGN_TO_TARGET',
             'CAMERA_ALIGN_DONE',
             'TARGET_CLASSIFICATION_WAIT',
+            'SOUND_TASK_RUNNING',
+            'SOUND_TASK_DONE',
         }
 
     def find_service_name(self, preferred, service_type):
@@ -416,17 +468,21 @@ class BirdManager(Node):
     def stable_demo_spawn_point(self, index):
         z = 0.5 * (self.z_min + self.z_max)
         preset = [
-            (4.5, -0.8, z),
-            (4.2, 0.9, z),
-            (3.8, -1.2, z),
-            (3.8, 1.2, z),
+            (4.0, 4.0, z),
+            (4.0, -4.0, z),
+            (-4.0, -4.0, z),
+            (-4.0, 4.0, z),
         ]
         return preset[index % len(preset)]
 
     def stable_demo_target_point(self, index, phase):
         z = 0.5 * (self.z_min + self.z_max)
-        x = 4.5 if index == 0 else 4.2
-        y = 1.0 if phase % 2 else -1.0
+        spawn_x, spawn_y, _ = self.stable_demo_spawn_point(index)
+        # Keep normal patrol targets inside the 8m square so LiDAR decision
+        # candidates are never generated outside the paper test map.
+        inset = 0.35 if phase % 2 else 0.75
+        x = clamp(spawn_x, self.allowed_lidar_x_min + inset, self.allowed_lidar_x_max - inset)
+        y = clamp(spawn_y, self.allowed_lidar_y_min + inset, self.allowed_lidar_y_max - inset)
         return (x, y, z)
 
     def fallback_spawn_point(self, index):
@@ -573,6 +629,9 @@ class BirdManager(Node):
             rt.spawn_checked = False
             rt.initialized = False
             rt.vx = rt.vy = rt.vz = 0.0
+            rt.fleeing = False
+            rt.return_distance_reported = False
+            rt.flee_started_from_sound = False
             self.pick_new_target(bird.name)
             yaw = random.uniform(-math.pi, math.pi)
             visible_state = self.make_entity_state(bird.name, x, y, z, yaw)
@@ -593,6 +652,7 @@ class BirdManager(Node):
         rt.released = False
         rt.hidden_applied = False
         rt.vx = rt.vy = rt.vz = 0.0
+        rt.fleeing = False
         if name not in self.removed_birds:
             self.removed_birds.append(name)
         self.hide_one_bird(name)
@@ -603,7 +663,9 @@ class BirdManager(Node):
             f'tracking_hold_sec={detected_hold_sec:.2f} '
             f'mission_state={self.mission_state_token()} '
             f'dynamic_lock={self.dynamic_object_lock} '
-            f'sound_done_seen={self.sound_done_seen_for_detection}'
+            f'sound_done_seen={self.sound_done_seen_for_detection} '
+            f'flee_started_from_sound={rt.flee_started_from_sound} '
+            f'return_distance_reported={rt.return_distance_reported}'
         )
         self.detection_bird_name = ''
         self.detection_start_wall = None
@@ -615,6 +677,74 @@ class BirdManager(Node):
                 f'REMOVAL_GOAL_REACHED removed_count={len(self.removed_birds)} '
                 f'goal={self.max_removed_birds}'
             )
+
+    def is_within_lidar_allowed_area(self, x, y):
+        return (
+            self.allowed_lidar_x_min <= float(x) <= self.allowed_lidar_x_max
+            and self.allowed_lidar_y_min <= float(y) <= self.allowed_lidar_y_max
+        )
+
+    def robot_distance_xy(self, state):
+        if not self.robot_pose_seen:
+            return float('inf')
+        return math.hypot(
+            float(state.pose.position.x) - self.robot_x,
+            float(state.pose.position.y) - self.robot_y,
+        )
+
+    def start_flee(self, name):
+        if not self.enable_flee_after_sound:
+            self.remove_bird(name, self.remove_after_detected_sec)
+            return
+        rt = self.runtime[name]
+        if rt.fleeing or rt.removed:
+            return
+        state = self.current_states.get(name)
+        if state is None:
+            return
+        bx = float(state.pose.position.x)
+        by = float(state.pose.position.y)
+        dx = bx - self.robot_x
+        dy = by - self.robot_y
+        norm = math.hypot(dx, dy)
+        if norm < 1e-6:
+            dx, dy, norm = 1.0, 0.0, 1.0
+        rt.fleeing = True
+        rt.flee_dir_x = dx / norm
+        rt.flee_dir_y = dy / norm
+        rt.flee_start_x = bx
+        rt.flee_start_y = by
+        rt.flee_started_wall = time.monotonic()
+        rt.return_distance_reported = False
+        rt.flee_started_from_sound = bool(self.sound_done_seen_for_detection or self.sound_done)
+        self.publish_removal_state(
+            f'FLEE_STARTED bird={name} removed_count={len(self.removed_birds)} '
+            f'robot_x={self.robot_x:.3f} robot_y={self.robot_y:.3f} '
+            f'bird_x={bx:.3f} bird_y={by:.3f} '
+            f'flee_dir_x={rt.flee_dir_x:.3f} flee_dir_y={rt.flee_dir_y:.3f} '
+            f'sound_done_seen={self.sound_done_seen_for_detection} '
+            f'flee_started_from_sound={rt.flee_started_from_sound}'
+        )
+
+    def update_flee_completion(self, bird, state):
+        rt = self.runtime[bird.name]
+        if not rt.fleeing:
+            return
+        x = float(state.pose.position.x)
+        y = float(state.pose.position.y)
+        flee_distance = math.hypot(x - rt.flee_start_x, y - rt.flee_start_y)
+        robot_distance = self.robot_distance_xy(state)
+        if robot_distance >= self.return_distance_m and not rt.return_distance_reported:
+            rt.return_distance_reported = True
+            self.publish_removal_state(
+                f'RETURN_DISTANCE_REACHED bird={bird.name} '
+                f'robot_distance_xy={robot_distance:.3f} '
+                f'flee_distance={flee_distance:.3f} '
+                f'threshold={self.return_distance_m:.3f} '
+                f'flee_started_from_sound={rt.flee_started_from_sound}'
+            )
+        if flee_distance >= self.flee_distance_m:
+            self.remove_bird(bird.name, max(0.0, time.monotonic() - rt.flee_started_wall))
 
     def current_visible_bird_name(self):
         best_name = ''
@@ -685,14 +815,12 @@ class BirdManager(Node):
         if self.sound_done:
             self.sound_done_seen_for_detection = True
         detected_hold_sec = now - self.detection_start_wall
-        if detected_hold_sec < self.remove_after_detected_sec:
-            return
-        if self.require_sound_done_for_removal and not self.sound_done_seen_for_detection:
+        if not self.sound_done_seen_for_detection:
             self.publish_removal_state(
                 f'WAIT_SOUND_DONE bird={active_name} detected_hold_sec={detected_hold_sec:.2f}'
             )
             return
-        self.remove_bird(active_name, detected_hold_sec)
+        self.start_flee(active_name)
 
     def update_all(self):
         if self.busy:
@@ -754,9 +882,13 @@ class BirdManager(Node):
                 self.hide_one_bird(bird.name)
                 continue
             self.move_one_bird(bird, world_info)
+            state = self.current_states.get(bird.name)
+            if state is not None:
+                self.update_flee_completion(bird, state)
 
         self.publish_dynamic_obstacles()
         self.publish_nearest_bird()
+        self.publish_kinematics()
         self.update_detection_removal()
         self.busy = False
 
@@ -843,23 +975,31 @@ class BirdManager(Node):
         pos = (x, y, z)
         vel = (rt.vx, rt.vy, rt.vz)
 
-        desired_vel = self.compute_single_seek_velocity(bird, pos, vel)
-
-        desired_vel = self.apply_boundary_soft_push(pos, desired_vel)
-        desired_vel = vec_limit(desired_vel, bird.max_speed)
+        if rt.fleeing:
+            desired_vel = (
+                rt.flee_dir_x * self.flee_speed_mps,
+                rt.flee_dir_y * self.flee_speed_mps,
+                (0.5 * (self.z_min + self.z_max) - z) * 0.25,
+            )
+            max_bird_speed = self.flee_speed_mps
+        else:
+            desired_vel = self.compute_single_seek_velocity(bird, pos, vel)
+            desired_vel = self.apply_boundary_soft_push(pos, desired_vel)
+            desired_vel = vec_limit(desired_vel, bird.max_speed)
+            max_bird_speed = bird.max_speed
 
         speed = vec_len(desired_vel)
         if speed < 1e-6:
             return
 
-        blend = 0.12
+        blend = 0.35 if rt.fleeing else 0.12
         rt.vx = (1.0 - blend) * rt.vx + blend * desired_vel[0]
         rt.vy = (1.0 - blend) * rt.vy + blend * desired_vel[1]
         rt.vz = (1.0 - blend) * rt.vz + blend * desired_vel[2]
 
         current_speed = math.sqrt(rt.vx * rt.vx + rt.vy * rt.vy + rt.vz * rt.vz)
-        if current_speed > bird.max_speed:
-            s = bird.max_speed / current_speed
+        if current_speed > max_bird_speed:
+            s = max_bird_speed / current_speed
             rt.vx *= s
             rt.vy *= s
             rt.vz *= s
@@ -1080,6 +1220,8 @@ class BirdManager(Node):
             state = self.current_states.get(bird.name)
             if state is None:
                 continue
+            if not self.is_within_lidar_allowed_area(state.pose.position.x, state.pose.position.y):
+                continue
             msg.poses.append(state.pose)
 
         try:
@@ -1156,6 +1298,56 @@ class BirdManager(Node):
             state.pose.position.z
         )
         self.publish_detection(pos)
+
+    def publish_kinematics(self):
+        if not rclpy_ok():
+            return
+        birds = []
+        nearest_name = self.current_visible_bird_name()
+        for bird in self.birds:
+            rt = self.runtime[bird.name]
+            state = self.current_states.get(bird.name)
+            if state is not None:
+                x = float(state.pose.position.x)
+                y = float(state.pose.position.y)
+                z = float(state.pose.position.z)
+            else:
+                x = self.hidden_x_m
+                y = self.hidden_y_m
+                z = self.hidden_z_m
+            speed_xy = horizontal_len(rt.vx, rt.vy)
+            speed_3d = vec_len((rt.vx, rt.vy, rt.vz))
+            birds.append(
+                {
+                    'name': bird.name,
+                    'released': bool(rt.released),
+                    'removed': bool(rt.removed),
+                    'fleeing': bool(rt.fleeing),
+                    'x': x,
+                    'y': y,
+                    'z': z,
+                    'vx': rt.vx,
+                    'vy': rt.vy,
+                    'vz': rt.vz,
+                    'speed_xy': speed_xy,
+                    'speed_3d': speed_3d,
+                    'target_x': rt.target_x,
+                    'target_y': rt.target_y,
+                    'target_z': rt.target_z,
+                    'inside_lidar_area': self.is_within_lidar_allowed_area(x, y),
+                }
+            )
+        payload = {
+            'time_sec': self.get_clock().now().nanoseconds * 1e-9,
+            'nearest_name': nearest_name,
+            'robot_x': self.robot_x,
+            'robot_y': self.robot_y,
+            'birds': birds,
+        }
+        try:
+            self.bird_kinematics_pub.publish(String(data=json.dumps(payload, separators=(',', ':'))))
+        except Exception:
+            return
 
     def on_set_done(self, future, name):
         try:

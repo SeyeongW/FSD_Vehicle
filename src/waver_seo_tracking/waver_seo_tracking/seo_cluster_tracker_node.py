@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import time
+import json
 from dataclasses import dataclass
 
 import numpy as np
@@ -36,6 +37,7 @@ except Exception:  # pragma: no cover
 class TargetTrack:
     pose: PoseStamped
     previous_pose: PoseStamped | None = None
+    track_id: int = 0
     last_seen: float = 0.0
     seen_count: int = 0
     motion_count: int = 0
@@ -83,10 +85,15 @@ class SeoClusterTrackerNode(Node):
         self.declare_parameter("hold_last_target_sec", 1.0)
         self.declare_parameter("output_smoothing_alpha", 0.35)
         self.declare_parameter("prefer_gazebo_fallback_sec", 0.8)
+        self.declare_parameter("allowed_target_x_min_m", -5.0)
+        self.declare_parameter("allowed_target_x_max_m", 5.0)
+        self.declare_parameter("allowed_target_y_min_m", -5.0)
+        self.declare_parameter("allowed_target_y_max_m", 5.0)
         self.declare_parameter("state_topic", "/waver/lidar_tracking_state")
 
         self.target_frame = str(self.get_parameter("target_frame").value)
         self.track: TargetTrack | None = None
+        self.next_track_id = 1
         self.last_pc_time = 0.0
         self.last_fallback_time = 0.0
         self.last_publish_time = 0.0
@@ -97,6 +104,7 @@ class SeoClusterTrackerNode(Node):
         self.odom: Odometry | None = None
 
         self.state_pub = self.create_publisher(String, str(self.get_parameter("state_topic").value), 10)
+        self.filter_response_pub = self.create_publisher(String, "/waver/lidar_filter_response", 10)
         self.objects_pub = self.create_publisher(PoseArray, "/waver/elevated_dynamic_targets", 10)
         self.lock_pub = self.create_publisher(Bool, "/waver/dynamic_object_lock", 10)
         self.lock_state_pub = self.create_publisher(String, "/waver/dynamic_object_lock_state", 10)
@@ -105,6 +113,7 @@ class SeoClusterTrackerNode(Node):
         self.target_odom_pub = self.create_publisher(PoseStamped, "/waver/lidar_target_pose_odom", 10)
         self.bird_target_pub = self.create_publisher(PointStamped, "/bird_target", 10)
         self.marker_pub = self.create_publisher(MarkerArray, "/cluster_markers", 10)
+        self.filtered_points_pub = self.create_publisher(PointCloud2, "/filtered_points", 10)
 
         if Buffer is not None:
             self.tf_buffer = Buffer()
@@ -132,12 +141,68 @@ class SeoClusterTrackerNode(Node):
         self.odom = msg
 
     def pointcloud_callback(self, msg: PointCloud2) -> None:
-        self.last_pc_time = self._now()
+        wall_start = time.perf_counter()
+        wall_receive = wall_start
+        receive_time = self._now()
+        pc_stamp_sec = self.stamp_to_sec(msg)
+        self.last_pc_time = receive_time
         target = self.target_from_pointcloud(msg)
+        filter_done_time = self._now()
+        wall_done = time.perf_counter()
         if target is None:
+            self.publish_filter_response(
+                pc_stamp_sec,
+                receive_time,
+                filter_done_time,
+                wall_receive,
+                wall_done,
+                target_ok=False,
+                source="none",
+                target=None,
+            )
             self.publish_state("WAITING_CLUSTER pointcloud_received=true")
             return
+        if not self.pose_inside_allowed_area(target):
+            self.track = None
+            empty = PoseArray()
+            empty.header = target.header
+            self.objects_pub.publish(empty)
+            self.lock_pub.publish(Bool(data=False))
+            self.moving_pub.publish(Bool(data=False))
+            self.lock_state_pub.publish(
+                String(
+                    data=(
+                        "OUTSIDE_FORBIDDEN_ZONE "
+                        f"x={target.pose.position.x:.2f} y={target.pose.position.y:.2f}"
+                    )
+                )
+            )
+            self.publish_filter_response(
+                pc_stamp_sec,
+                receive_time,
+                filter_done_time,
+                wall_receive,
+                wall_done,
+                target_ok=False,
+                source="outside_forbidden_zone",
+                target=target,
+            )
+            self.publish_state(
+                "OUTSIDE_FORBIDDEN_ZONE "
+                f"x={target.pose.position.x:.2f} y={target.pose.position.y:.2f}"
+            )
+            return
         self.update_and_publish_track(target, "lidar_cluster")
+        self.publish_filter_response(
+            pc_stamp_sec,
+            receive_time,
+            filter_done_time,
+            wall_receive,
+            wall_done,
+            target_ok=True,
+            source="lidar_cluster",
+            target=target,
+        )
 
     def bird_pose_callback(self, msg: PoseStamped) -> None:
         mode = self.detector_mode()
@@ -184,6 +249,11 @@ class SeoClusterTrackerNode(Node):
         if max_input > 0 and len(points) > max_input:
             stride = max(1, math.ceil(len(points) / max_input))
             points = points[::stride]
+        try:
+            filtered = point_cloud2.create_cloud_xyz32(msg.header, points)
+            self.filtered_points_pub.publish(filtered)
+        except Exception:
+            pass
         arr = np.asarray(points, dtype=np.float32)
         if DBSCAN is not None:
             labels = DBSCAN(
@@ -251,7 +321,15 @@ class SeoClusterTrackerNode(Node):
             return
 
         if self.track is None or distance_xy(self.track.pose, pose) > float(self.get_parameter("track_match_dist_m").value):
-            self.track = TargetTrack(pose=pose, last_seen=now, seen_count=1, motion_count=1, source=source)
+            self.track = TargetTrack(
+                pose=pose,
+                track_id=self.next_track_id,
+                last_seen=now,
+                seen_count=1,
+                motion_count=1,
+                source=source,
+            )
+            self.next_track_id += 1
         else:
             dt = max(1e-3, now - self.track.last_seen)
             raw_motion = distance_xy(self.track.pose, pose)
@@ -293,6 +371,25 @@ class SeoClusterTrackerNode(Node):
         pose.header.stamp = self.get_clock().now().to_msg()
         self.last_publish_time = self._now()
         detector_mode = self.detector_mode()
+        if not self.pose_inside_allowed_area(pose):
+            empty = PoseArray()
+            empty.header = pose.header
+            self.objects_pub.publish(empty)
+            self.lock_pub.publish(Bool(data=False))
+            self.moving_pub.publish(Bool(data=False))
+            self.lock_state_pub.publish(
+                String(
+                    data=(
+                        f"OUTSIDE_FORBIDDEN_ZONE source={source} "
+                        f"x={pose.pose.position.x:.2f} y={pose.pose.position.y:.2f}"
+                    )
+                )
+            )
+            self.publish_state(
+                f"OUTSIDE_FORBIDDEN_ZONE source={source} "
+                f"x={pose.pose.position.x:.2f} y={pose.pose.position.y:.2f}"
+            )
+            return
         decision_allowed = source != "gazebo_bird_pose_fallback" or detector_mode in {"ground_truth", "fused"}
         dynamic_decision = bool(moving) and decision_allowed
         arr = PoseArray()
@@ -401,12 +498,109 @@ class SeoClusterTrackerNode(Node):
         mode = self.detector_mode()
         fallback_allowed = mode in {"ground_truth", "fused"} and bool(self.get_parameter("use_gazebo_bird_pose_fallback").value)
         decision_allowed = not (mode == "lidar" and "gazebo_bird_pose_fallback" in text)
+        track_id = int(self.track.track_id) if self.track is not None else -1
+        track_age = int(self.track.seen_count) if self.track is not None else 0
+        missed_frames = 0
+        speed = float(self.track.speed_mps) if self.track is not None else 0.0
+        valid = self.track is not None and self._now() - self.track.last_seen <= float(self.get_parameter("target_timeout_s").value)
+        age = max(0.0, self._now() - self.track.last_seen) if self.track is not None else 1.0e9
         state = (
             f"{text} detector_mode={mode} provenance={'gazebo_gt' if 'fallback' in text or 'GT_' in text else 'lidar'} "
             f"raw={self.last_raw_count} roi={self.last_roi_count} cluster={self.last_cluster_count} "
-            f"tf_ok={self.last_tf_ok} fallback_allowed={fallback_allowed} decision_allowed={decision_allowed}"
+            f"tf_ok={self.last_tf_ok} fallback_allowed={fallback_allowed} decision_allowed={decision_allowed} "
+            f"track_id={track_id} track_age_frames={track_age} missed_frames={missed_frames} "
+            f"estimated_target_speed_mps={speed:.3f} lidar_target_valid={valid} lidar_target_age_sec={age:.3f}"
         )
         self.state_pub.publish(String(data=state))
+
+    def pose_inside_allowed_area(self, pose: PoseStamped) -> bool:
+        x = float(pose.pose.position.x)
+        y = float(pose.pose.position.y)
+        return (
+            float(self.get_parameter("allowed_target_x_min_m").value) <= x <= float(self.get_parameter("allowed_target_x_max_m").value)
+            and float(self.get_parameter("allowed_target_y_min_m").value) <= y <= float(self.get_parameter("allowed_target_y_max_m").value)
+        )
+
+    @staticmethod
+    def stamp_to_sec(msg: PointCloud2) -> float | None:
+        stamp = getattr(getattr(msg, "header", None), "stamp", None)
+        if stamp is None:
+            return None
+        sec = float(stamp.sec) + float(stamp.nanosec) * 1e-9
+        return sec if sec > 0.0 else None
+
+    def publish_filter_response(
+        self,
+        pc_stamp_sec: float | None,
+        tracker_receive_time_sec: float,
+        filter_done_time_sec: float,
+        tracker_receive_wall_time_sec: float,
+        filter_done_wall_time_sec: float,
+        *,
+        target_ok: bool,
+        source: str,
+        target: PoseStamped | None,
+    ) -> None:
+        raw = max(0, int(self.last_raw_count))
+        roi = max(0, int(self.last_roi_count))
+        cluster = max(0, int(self.last_cluster_count))
+        detector_mode = self.detector_mode()
+        track_id = int(self.track.track_id) if self.track is not None else -1
+        track_age = int(self.track.seen_count) if self.track is not None else 0
+        missed_frames = 0
+        if self.track is not None:
+            age = max(0.0, self._now() - self.track.last_seen)
+            missed_frames = 0 if age <= max(0.2, float(self.get_parameter("hold_last_target_sec").value)) else 1
+        lidar_target_age = ""
+        if self.track is not None:
+            lidar_target_age = max(0.0, self._now() - self.track.last_seen)
+        provenance = "gazebo_gt" if source == "gazebo_bird_pose_fallback" else "lidar"
+        fallback_allowed = detector_mode in {"ground_truth", "fused"} and bool(self.get_parameter("use_gazebo_bird_pose_fallback").value)
+        decision_allowed = not (detector_mode == "lidar" and provenance != "lidar")
+        payload = {
+            "pc_stamp_sec": pc_stamp_sec,
+            "tracker_receive_time_sec": tracker_receive_time_sec,
+            "filter_done_time_sec": filter_done_time_sec,
+            "tracker_receive_sim_time_sec": tracker_receive_time_sec,
+            "filter_done_sim_time_sec": filter_done_time_sec,
+            "tracker_receive_wall_time_sec": tracker_receive_wall_time_sec,
+            "filter_done_wall_time_sec": filter_done_wall_time_sec,
+            "pc_age_at_receive_ms": None if pc_stamp_sec is None else (tracker_receive_time_sec - pc_stamp_sec) * 1000.0,
+            "pc_age_at_receive_sim_ms": None if pc_stamp_sec is None else (tracker_receive_time_sec - pc_stamp_sec) * 1000.0,
+            "filter_runtime_ms": (filter_done_wall_time_sec - tracker_receive_wall_time_sec) * 1000.0,
+            "filter_runtime_wall_ms": (filter_done_wall_time_sec - tracker_receive_wall_time_sec) * 1000.0,
+            "pc_stamp_to_filter_done_ms": None if pc_stamp_sec is None else (filter_done_time_sec - pc_stamp_sec) * 1000.0,
+            "pc_stamp_to_filter_done_sim_ms": None if pc_stamp_sec is None else (filter_done_time_sec - pc_stamp_sec) * 1000.0,
+            "raw_points": raw,
+            "roi_points": roi,
+            "cluster_points": cluster,
+            "roi_ratio": (float(roi) / float(raw)) if raw else 0.0,
+            "cluster_ratio": (float(cluster) / float(max(1, roi))) if roi else 0.0,
+            "dbscan_cluster_count": 1 if cluster else 0,
+            "tf_ok": bool(self.last_tf_ok),
+            "target_ok": bool(target_ok),
+            "target_lost": not bool(target_ok),
+            "source": source,
+            "provenance": provenance,
+            "detector_mode": detector_mode,
+            "fallback_allowed": fallback_allowed,
+            "decision_allowed": decision_allowed,
+            "moving": bool(self.track.moving) if self.track is not None else False,
+            "track_id": track_id,
+            "track_age_frames": track_age,
+            "missed_frames": missed_frames,
+            "estimated_target_speed_mps": float(self.track.speed_mps) if self.track is not None else 0.0,
+            "lidar_target_x_m": None if target is None else float(target.pose.position.x),
+            "lidar_target_y_m": None if target is None else float(target.pose.position.y),
+            "lidar_target_z_m": None if target is None else float(target.pose.position.z),
+            "lidar_target_frame": "" if target is None else str(target.header.frame_id),
+            "lidar_target_valid": bool(target_ok),
+            "lidar_target_age_sec": lidar_target_age,
+        }
+        try:
+            self.filter_response_pub.publish(String(data=json.dumps(payload, separators=(",", ":"))))
+        except Exception:
+            return
 
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9 if self.get_clock().now().nanoseconds else time.monotonic()

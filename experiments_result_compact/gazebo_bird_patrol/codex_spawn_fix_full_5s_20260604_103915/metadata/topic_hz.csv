@@ -1,8 +1,0 @@
-topic,count,duration_sec,hz,last_stamp
-/bird/nearest_pose,834,85.1,9.800235017626322,87.0
-/mid360_PointCloud2,352,83.6,4.210526315789474,85.9
-/odom,8485,85.1,99.70622796709753,86.98
-/pt_camera/camera_info,2722,85.1,31.985898942420683,86.975
-/pt_camera/image_raw,2616,85.1,30.74030552291422,86.975
-/waver/elevated_dynamic_targets,53,5.8999999999999915,8.98305084745764,81.0
-/waver/lidar_tracking_state,1567,85.0,18.435294117647057,86.9

@@ -84,7 +84,7 @@ class GazeboBirdDatasetLoggerNode(Node):
 
     def __init__(self) -> None:
         super().__init__("gazebo_bird_dataset_logger_node")
-        self.declare_parameter("output_root", str(Path.home() / "ros2_ws3/FSD_Vehicle/experiments_result/gazebo_bird_patrol"))
+        self.declare_parameter("output_root", str(Path.home() / "ros2_ws3/FSD_Vehicle/experiment_results/gazebo_bird_patrol"))
         self.declare_parameter("trial_id", "gazebo_bird_patrol")
         self.declare_parameter("experiment_id", "waver_gazebo_bird_patrol")
         self.declare_parameter("run_id", "")

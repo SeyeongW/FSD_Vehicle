@@ -1,8 +1,0 @@
-{
-  "image_count": 1181,
-  "coco_annotation_count": 0,
-  "gt_rows": true,
-  "lidar_detection_count_latest": 1,
-  "gt_used_for_decision": "true",
-  "detector_mode": "ground_truth"
-}

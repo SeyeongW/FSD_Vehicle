@@ -1,7 +1,0 @@
-time_sec,state,bird_name,removed_count,remaining_count
-8.5,TRACKING_HOLD_STARTED bird=bird_test_target mission_state=APPROACH_TARGET_OFFSET target_class=bird bird_confirmed=True dynamic_lock=True,bird_test_target,0,
-11.0,REMOVED bird=bird_test_target removed_count=1 remaining_count=1 detected_hold_sec=5.21 tracking_hold_sec=5.21 mission_state=APPROACH_TARGET_OFFSET dynamic_lock=False sound_done_seen=False,bird_test_target,1,1
-11.0,RELEASED bird=bird_single removed_count=1 remaining_count=1,bird_single,1,1
-11.700000000000001,TRACKING_HOLD_STARTED bird=bird_single mission_state=APPROACH_TARGET_OFFSET target_class=unknown bird_confirmed=False dynamic_lock=True,bird_single,1,
-14.100000000000001,REMOVED bird=bird_single removed_count=2 remaining_count=0 detected_hold_sec=5.12 tracking_hold_sec=5.12 mission_state=CAMERA_ALIGN_TO_TARGET dynamic_lock=True sound_done_seen=False,bird_single,2,0
-14.100000000000001,REMOVAL_GOAL_REACHED removed_count=2 goal=2,,2,

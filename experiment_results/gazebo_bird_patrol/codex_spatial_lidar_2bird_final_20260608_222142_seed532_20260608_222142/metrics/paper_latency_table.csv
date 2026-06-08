@@ -1,0 +1,8 @@
+metric,value,unit,meaning
+filter_runtime_wall_mean_ms,188.64333557832612,ms,Mean LiDAR filtering wall runtime
+pc_stamp_to_filter_done_mean_ms,66.44182124789614,ms,PointCloud stamp to filter completion latency
+lidar_target_ok_to_dynamic_lock_ms,899.9999999999999,ms,LiDAR target to dynamic lock
+dynamic_lock_to_object_mission_goal_ms,7300.000000000001,ms,Dynamic lock to object mission goal
+object_mission_goal_to_active_target_nav_goal_ms,8300.0,ms,Object mission goal to active target nav goal
+lidar_target_ok_to_first_target_cmd_vel_ms,44700.0,ms,LiDAR target to first target command
+active_target_nav_goal_to_odom_motion_ms,5399.999999999998,ms,Active target nav goal to odom motion

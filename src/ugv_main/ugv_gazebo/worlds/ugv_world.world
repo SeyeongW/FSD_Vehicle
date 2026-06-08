@@ -26,13 +26,25 @@
 
     <include>
       <uri>model://bird</uri>
-      <name>bird_test_target</name>
-      <pose>4.5 0.0 3.2 0 0 0</pose>
+      <name>bird_1</name>
+      <pose>4.0 4.0 3.2 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://bird</uri>
-      <name>bird_single</name>
+      <name>bird_2</name>
+      <pose>50.0 50.0 3.2 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://bird</uri>
+      <name>bird_3</name>
+      <pose>50.0 50.0 3.2 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://bird</uri>
+      <name>bird_4</name>
       <pose>50.0 50.0 3.2 0 0 0</pose>
     </include>
 

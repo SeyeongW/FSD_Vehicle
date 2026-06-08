@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 
 import rclpy
@@ -50,6 +51,12 @@ class SimpleNav2CmdSimNode(Node):
         self.declare_parameter("linear_kp", 0.55)
         self.declare_parameter("angular_kp", 1.4)
         self.declare_parameter("heading_slowdown_rad", 0.55)
+        self.declare_parameter("rotate_in_place_heading_error_rad", 0.75)
+        self.declare_parameter("slowdown_distance_m", 1.0)
+        self.declare_parameter("min_linear_speed_near_goal", 0.025)
+        self.declare_parameter("max_linear_accel_mps2", 0.35)
+        self.declare_parameter("max_angular_accel_radps2", 1.2)
+        self.declare_parameter("arrived_latch_sec", 0.15)
         self.declare_parameter("odom_timeout_sec", 0.7)
         self.declare_parameter("goal_timeout_sec", 90.0)
         self.declare_parameter("timer_hz", 20.0)
@@ -59,16 +66,23 @@ class SimpleNav2CmdSimNode(Node):
         self.goal_time = 0.0
         self.last_odom_time = 0.0
         self.obstacle: PointStamped | None = None
+        self.goal_meta: dict[str, object] = {}
         self.last_obstacle_time = 0.0
         self.arrived_latched = False
+        self.arrived_latch_until = 0.0
         self.mode = "AUTO"
         self.estop = False
         self.external_stop = False
+        self.last_tick_time = self._now()
+        self.last_cmd_linear = 0.0
+        self.last_cmd_angular = 0.0
 
         self.cmd_pub = self.create_publisher(Twist, str(self.get_parameter("cmd_vel_topic").value), 10)
         self.arrived_pub = self.create_publisher(Bool, str(self.get_parameter("arrived_topic").value), 10)
         self.state_pub = self.create_publisher(String, str(self.get_parameter("state_topic").value), 10)
+        self.debug_pub = self.create_publisher(String, "/waver/sim_nav2_debug", 10)
         self.create_subscription(PoseStamped, str(self.get_parameter("active_goal_topic").value), self.goal_callback, 10)
+        self.create_subscription(String, "/waver/active_nav_goal_meta", self.goal_meta_callback, 10)
         self.create_subscription(Odometry, str(self.get_parameter("odom_topic").value), self.odom_callback, 10)
         self.create_subscription(
             PointStamped,
@@ -87,6 +101,7 @@ class SimpleNav2CmdSimNode(Node):
         self.goal = msg
         self.goal_time = self._now()
         self.arrived_latched = False
+        self.arrived_latch_until = 0.0
         self.arrived_pub.publish(Bool(data=False))
         self.state_pub.publish(
             String(
@@ -96,6 +111,12 @@ class SimpleNav2CmdSimNode(Node):
                 )
             )
         )
+
+    def goal_meta_callback(self, msg: String) -> None:
+        try:
+            self.goal_meta = json.loads(msg.data)
+        except Exception:
+            self.goal_meta = {"raw": msg.data}
 
     def odom_callback(self, msg: Odometry) -> None:
         self.odom = msg
@@ -107,6 +128,8 @@ class SimpleNav2CmdSimNode(Node):
 
     def tick(self) -> None:
         now = self._now()
+        dt = max(1.0 / max(float(self.get_parameter("timer_hz").value), 1.0), now - self.last_tick_time)
+        self.last_tick_time = now
         self.arrived_pub.publish(Bool(data=False))
         if self.estop or self.external_stop or self.mode in {"EMERGENCY", "DISABLED", "STANDBY", "MANUAL"}:
             self.publish_stop(f"BLOCKED mode={self.mode} estop={self.estop} external_stop={self.external_stop}")
@@ -151,26 +174,39 @@ class SimpleNav2CmdSimNode(Node):
                 if not self.arrived_latched:
                     self.arrived_latched = True
                     self.arrived_pub.publish(Bool(data=True))
-                self.publish_stop(f"ARRIVED distance={distance:.3f} yaw_error={yaw_error:.3f}")
+                self.arrived_latch_until = max(self.arrived_latch_until, now + float(self.get_parameter("arrived_latch_sec").value))
+                self.publish_stop(f"ARRIVED distance={distance:.3f} yaw_error={yaw_error:.3f}", robot_x, robot_y, yaw, goal_x, goal_y, goal_yaw, distance, heading_error, yaw_error, True)
                 return
             cmd = Twist()
-            cmd.angular.z = clamp(
+            target_angular = clamp(
                 float(self.get_parameter("angular_kp").value) * yaw_error,
                 -float(self.get_parameter("max_angular_speed").value),
                 float(self.get_parameter("max_angular_speed").value),
             )
+            cmd.angular.z = self.limit_rate(self.last_cmd_angular, target_angular, float(self.get_parameter("max_angular_accel_radps2").value), dt)
+            self.last_cmd_linear = 0.0
+            self.last_cmd_angular = cmd.angular.z
             self.cmd_pub.publish(cmd)
             self.state_pub.publish(String(data=f"ALIGN_YAW distance={distance:.3f} yaw_error={yaw_error:.3f}"))
+            self.publish_debug("ALIGN_YAW", robot_x, robot_y, yaw, goal_x, goal_y, goal_yaw, distance, heading_error, yaw_error, cmd.linear.x, cmd.angular.z, False, "")
             return
 
         max_linear = float(self.get_parameter("max_linear_speed").value)
         max_angular = float(self.get_parameter("max_angular_speed").value)
         cmd = Twist()
-        cmd.angular.z = clamp(float(self.get_parameter("angular_kp").value) * heading_error, -max_angular, max_angular)
+        target_angular = clamp(float(self.get_parameter("angular_kp").value) * heading_error, -max_angular, max_angular)
         if abs(heading_error) < float(self.get_parameter("heading_slowdown_rad").value):
-            cmd.linear.x = clamp(float(self.get_parameter("linear_kp").value) * distance, 0.0, max_linear)
+            target_linear = clamp(float(self.get_parameter("linear_kp").value) * distance, 0.0, max_linear)
+            if distance < float(self.get_parameter("slowdown_distance_m").value):
+                target_linear = min(target_linear, max(max_linear * distance / max(float(self.get_parameter("slowdown_distance_m").value), 1e-3), float(self.get_parameter("min_linear_speed_near_goal").value)))
         else:
-            cmd.linear.x = 0.0
+            target_linear = 0.0
+        if abs(heading_error) >= float(self.get_parameter("rotate_in_place_heading_error_rad").value):
+            target_linear = 0.0
+        cmd.linear.x = self.limit_rate(self.last_cmd_linear, target_linear, float(self.get_parameter("max_linear_accel_mps2").value), dt)
+        cmd.angular.z = self.limit_rate(self.last_cmd_angular, target_angular, float(self.get_parameter("max_angular_accel_radps2").value), dt)
+        self.last_cmd_linear = cmd.linear.x
+        self.last_cmd_angular = cmd.angular.z
         self.cmd_pub.publish(cmd)
         state_name = "AVOIDING" if avoiding else "TRACKING"
         self.state_pub.publish(
@@ -181,6 +217,7 @@ class SimpleNav2CmdSimNode(Node):
                 )
             )
         )
+        self.publish_debug(state_name, robot_x, robot_y, yaw, goal_x, goal_y, goal_yaw, distance, heading_error, yaw_error, cmd.linear.x, cmd.angular.z, False, avoid_detail)
 
     def avoidance_target(
         self,
@@ -217,9 +254,68 @@ class SimpleNav2CmdSimNode(Node):
         detour_y = oy + side * ny * offset
         return detour_x, detour_y, True, f"obstacle=({ox:.2f},{oy:.2f}) detour=({detour_x:.2f},{detour_y:.2f})"
 
-    def publish_stop(self, state: str) -> None:
+    def publish_stop(
+        self,
+        state: str,
+        robot_x: float = math.nan,
+        robot_y: float = math.nan,
+        robot_yaw: float = math.nan,
+        goal_x: float = math.nan,
+        goal_y: float = math.nan,
+        goal_yaw: float = math.nan,
+        distance: float = math.nan,
+        heading_error: float = math.nan,
+        yaw_error: float = math.nan,
+        arrived: bool = False,
+    ) -> None:
         self.cmd_pub.publish(Twist())
+        self.last_cmd_linear = 0.0
+        self.last_cmd_angular = 0.0
         self.state_pub.publish(String(data=state))
+        self.publish_debug(state, robot_x, robot_y, robot_yaw, goal_x, goal_y, goal_yaw, distance, heading_error, yaw_error, 0.0, 0.0, arrived, state)
+
+    def publish_debug(
+        self,
+        state: str,
+        robot_x: float,
+        robot_y: float,
+        robot_yaw: float,
+        goal_x: float,
+        goal_y: float,
+        goal_yaw: float,
+        distance: float,
+        heading_error: float,
+        yaw_error: float,
+        cmd_linear: float,
+        cmd_angular: float,
+        arrived: bool,
+        blocked_reason: str,
+    ) -> None:
+        payload = {
+            "time_sec": self._now(),
+            "state": state,
+            "goal_role": self.goal_meta.get("goal_role", "UNKNOWN"),
+            "mission_state": self.goal_meta.get("mission_state", ""),
+            "robot_x": robot_x,
+            "robot_y": robot_y,
+            "robot_yaw": robot_yaw,
+            "goal_x": goal_x,
+            "goal_y": goal_y,
+            "goal_yaw": goal_yaw,
+            "distance_to_goal_m": distance,
+            "heading_error_rad": heading_error,
+            "yaw_error_rad": yaw_error,
+            "cmd_linear_x": cmd_linear,
+            "cmd_angular_z": cmd_angular,
+            "arrived": bool(arrived),
+            "blocked_reason": blocked_reason,
+        }
+        self.debug_pub.publish(String(data=json.dumps(payload, separators=(",", ":"))))
+
+    @staticmethod
+    def limit_rate(previous: float, target: float, max_rate: float, dt: float) -> float:
+        step = max(0.0, max_rate) * max(0.0, dt)
+        return clamp(target, previous - step, previous + step)
 
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9

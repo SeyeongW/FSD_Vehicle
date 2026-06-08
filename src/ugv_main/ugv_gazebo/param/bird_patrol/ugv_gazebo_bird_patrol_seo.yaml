@@ -1,7 +1,7 @@
 mission_patrol_manager_node:
   ros__parameters:
     use_sim_time: true
-    waypoint_file: /home/chotaehyun/ros2_ws3/FSD_Vehicle/src/ugv_main/ugv_gazebo/param/bird_patrol/patrol_waypoints_square_4m_7m.yaml
+    waypoint_file: /home/chotaehyun/ros2_ws3/FSD_Vehicle/src/ugv_main/ugv_gazebo/param/bird_patrol/patrol_waypoints_square_8m_paper.yaml
     use_nav2: false
     enable_sim_nav_goal_arrival: true
     default_mode: STANDBY
@@ -21,9 +21,12 @@ mission_patrol_manager_node:
     min_classification_confidence: 0.50
     waypoint_dwell_sec_default: 0.5
     sound_task_timeout_sec: 8.0
+    wait_bird_clear_after_sound: true
+    bird_clear_state_topic: /waver/gazebo_bird_removal_state
+    bird_clear_timeout_sec: 15.0
     max_goal_retries: 1
     recovery_retry_count: 1
-    post_target_resume_cooldown_sec: 8.0
+    post_target_resume_cooldown_sec: 2.0
 
 target_goal_manager_node:
   ros__parameters:
@@ -55,6 +58,10 @@ target_goal_manager_node:
     inspected_target_lockout_sec: 25.0
     inspected_target_radius_m: 1.5
     enforce_mode_gate: false
+    allowed_goal_x_min_m: -5.0
+    allowed_goal_x_max_m: 5.0
+    allowed_goal_y_min_m: -5.0
+    allowed_goal_y_max_m: 5.0
 
 simple_nav2_cmd_sim_node:
   ros__parameters:
@@ -126,9 +133,9 @@ waver_remote_panel:
     mode_topic: /waver/mode
     mode_cmd_topic: /waver/mode_cmd
     mission_command_topic: /waver/mission_command
-    default_speed: 0.12
+    default_speed: 0.24
     default_angular: 0.35
-    max_linear_speed: 0.25
+    max_linear_speed: 0.35
     max_angular_speed: 0.55
     command_rate_hz: 20.0
     auto_mode_strategy: mission_nav2

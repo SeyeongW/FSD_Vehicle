@@ -1,0 +1,52 @@
+route_name: gazebo_bird_patrol_square_8m_paper
+frame_id: odom
+loop: true
+default_dwell_s: 0.5
+
+home:
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+
+charge:
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+
+waypoints:
+  - name: initial_forward_4m
+    x: 4.0
+    y: 0.0
+    yaw_deg: 0.0
+    dwell_s: 0.4
+  - name: square_corner_ne
+    x: 4.0
+    y: 4.0
+    yaw_deg: 90.0
+    dwell_s: 0.4
+  - name: square_corner_se
+    x: 4.0
+    y: -4.0
+    yaw_deg: -90.0
+    dwell_s: 0.4
+  - name: square_corner_sw
+    x: -4.0
+    y: -4.0
+    yaw_deg: 180.0
+    dwell_s: 0.4
+  - name: square_corner_nw
+    x: -4.0
+    y: 4.0
+    yaw_deg: 90.0
+    dwell_s: 0.4
+
+failure_policy:
+  max_patrol_radius_m: 6.0
+  recovery_attempts: 1
+  human_estop_required: false
+
+experiment_tags:
+  - gazebo
+  - paper_spatial_response
+  - 8m_square
+  - bird_dynamic_target

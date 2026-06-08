@@ -76,14 +76,20 @@ def _launch_setup(context, *args, **kwargs):
     tracking_params = os.path.join(config_dir, "seo_tracking_gazebo.yaml")
     logger_params = os.path.join(config_dir, "experiment_logging.yaml")
     inside_waypoints = os.path.join(config_dir, "patrol_waypoints_inside_15m.yaml")
+    paper_waypoints = os.path.join(config_dir, "patrol_waypoints_square_8m_paper.yaml")
+    legacy_waypoints = os.path.join(config_dir, "patrol_waypoints_square_4m_7m.yaml")
 
     use_sim_time = LaunchConfiguration("use_sim_time")
     start_remote_panel = LaunchConfiguration("start_remote_panel")
     enable_fake_bird_classifier = LaunchConfiguration("enable_fake_bird_classifier")
     enable_trial_logger = LaunchConfiguration("enable_trial_logger")
     enable_dataset_logger = LaunchConfiguration("enable_dataset_logger")
+    enable_spatial_response_logger = LaunchConfiguration("enable_spatial_response_logger")
+    enable_spatial_debug_viz = LaunchConfiguration("enable_spatial_debug_viz")
     enable_rosbag_record = LaunchConfiguration("enable_rosbag_record")
+    enable_rviz = LaunchConfiguration("enable_rviz")
     use_gui = LaunchConfiguration("use_gui")
+    rviz_config_arg = LaunchConfiguration("rviz_config").perform(context)
     detector_mode_value = LaunchConfiguration("detector_mode").perform(context).strip().lower()
     classifier_mode_value = LaunchConfiguration("classifier_mode").perform(context).strip().lower()
     random_seed_value = LaunchConfiguration("random_seed").perform(context)
@@ -94,7 +100,12 @@ def _launch_setup(context, *args, **kwargs):
     run_dir = os.path.join(output_root, run_id)
     os.makedirs(os.path.join(run_dir, "bags"), exist_ok=True)
     use_inside_waypoints = LaunchConfiguration("use_inside_15m_waypoints").perform(context).strip().lower() in {"1", "true", "yes", "on"}
-    waypoint_file = inside_waypoints if use_inside_waypoints else os.path.join(config_dir, "patrol_waypoints_square_4m_7m.yaml")
+    use_legacy_waypoints = LaunchConfiguration("use_legacy_4m_7m_waypoints").perform(context).strip().lower() in {"1", "true", "yes", "on"}
+    waypoint_file = inside_waypoints if use_inside_waypoints else (legacy_waypoints if use_legacy_waypoints else paper_waypoints)
+    inspection_goal_offset = float(LaunchConfiguration("inspection_goal_offset_distance_m").perform(context))
+    rviz_config = os.path.expanduser(os.path.expandvars(rviz_config_arg))
+    if not os.path.isabs(rviz_config):
+        rviz_config = os.path.join(ugv_share, "rviz", rviz_config)
     use_gt_fallback = detector_mode_value in {"ground_truth", "fused"}
     launch_args_yaml = json.dumps(
         {
@@ -112,11 +123,20 @@ def _launch_setup(context, *args, **kwargs):
             "bird_removal_goal_count": LaunchConfiguration("bird_removal_goal_count").perform(context),
             "use_inside_15m_waypoints": use_inside_waypoints,
             "waypoint_file": waypoint_file,
+            "inspection_goal_offset_distance_m": inspection_goal_offset,
         }
     )
 
     common_params = [{"use_sim_time": use_sim_time}]
-    mission_common = [mission_params, {"waypoint_file": waypoint_file}, *common_params]
+    mission_common = [
+        mission_params,
+        {
+            "waypoint_file": waypoint_file,
+            "inspection_goal_offset_distance_m": inspection_goal_offset,
+            "goal_offset_distance_m": inspection_goal_offset,
+        },
+        *common_params,
+    ]
     tracking_common = [
         tracking_params,
         {
@@ -125,6 +145,10 @@ def _launch_setup(context, *args, **kwargs):
             "center_tolerance_rad": 0.15,
             "alignment_mode": "logical",
             "publish_joint_trajectory": False,
+            "allowed_target_x_min_m": -5.0,
+            "allowed_target_x_max_m": 5.0,
+            "allowed_target_y_min_m": -5.0,
+            "allowed_target_y_max_m": 5.0,
         },
         *common_params,
     ]
@@ -202,6 +226,14 @@ def _launch_setup(context, *args, **kwargs):
                             "detection_hold_grace_sec": LaunchConfiguration("detection_hold_grace_sec"),
                             "require_sound_done_for_removal": LaunchConfiguration("require_sound_done_for_removal"),
                             "max_removed_birds": LaunchConfiguration("bird_removal_goal_count"),
+                            "enable_flee_after_sound": True,
+                            "flee_distance_m": LaunchConfiguration("bird_flee_distance_m"),
+                            "return_distance_m": LaunchConfiguration("bird_return_distance_m"),
+                            "flee_speed_mps": LaunchConfiguration("bird_flee_speed_mps"),
+                            "allowed_lidar_x_min_m": -5.0,
+                            "allowed_lidar_x_max_m": 5.0,
+                            "allowed_lidar_y_min_m": -5.0,
+                            "allowed_lidar_y_max_m": 5.0,
                         }
                     ],
                 )
@@ -300,7 +332,11 @@ def _launch_setup(context, *args, **kwargs):
                     executable="seo_mechanism_trial_logger_node",
                     name="seo_mechanism_trial_logger_node",
                     output="screen",
-                    parameters=[logger_params, *common_params],
+                    parameters=[
+                        logger_params,
+                        {"output_root": output_root, "trial_id": trial_id_value, "run_id": run_id, "run_dir": run_dir},
+                        *common_params,
+                    ],
                     condition=IfCondition(enable_trial_logger),
                 ),
                 Node(
@@ -332,11 +368,48 @@ def _launch_setup(context, *args, **kwargs):
                     condition=IfCondition(enable_dataset_logger),
                 ),
                 Node(
+                    package="waver_experiment_logger",
+                    executable="waver_spatial_response_logger_node",
+                    name="waver_spatial_response_logger_node",
+                    output="screen",
+                    parameters=[
+                        {
+                            "use_sim_time": use_sim_time,
+                            "output_root": output_root,
+                            "trial_id": trial_id_value,
+                            "run_id": run_id,
+                            "run_dir": run_dir,
+                            "detector_mode": detector_mode_value,
+                            "configured_offset_m": inspection_goal_offset,
+                            "sample_period_sec": 1.0,
+                        }
+                    ],
+                    condition=IfCondition(enable_spatial_response_logger),
+                ),
+                Node(
+                    package="waver_experiment_logger",
+                    executable="waver_spatial_debug_viz_node",
+                    name="waver_spatial_debug_viz_node",
+                    output="screen",
+                    parameters=[
+                        {
+                            "use_sim_time": use_sim_time,
+                            "frame_id": "odom",
+                            "configured_offset_m": inspection_goal_offset,
+                        }
+                    ],
+                    condition=IfCondition(enable_spatial_debug_viz),
+                ),
+                Node(
                     package="waver_patrol",
                     executable="gazebo_trial_logger_node",
                     name="gazebo_trial_logger_node",
                     output="screen",
-                    parameters=[logger_params, *common_params],
+                    parameters=[
+                        logger_params,
+                        {"output_root": output_root, "trial_id": 1},
+                        *common_params,
+                    ],
                     condition=IfCondition(enable_trial_logger),
                 ),
                 TimerAction(
@@ -355,9 +428,20 @@ def _launch_setup(context, *args, **kwargs):
                                 "/bird/nearest_pose",
                                 "/mid360_PointCloud2",
                                 "/waver/elevated_dynamic_targets",
+                                "/waver/lidar_target_pose_odom",
                                 "/waver/lidar_tracking_state",
+                                "/waver/lidar_filter_response",
+                                "/waver/object_mission_goal",
+                                "/waver/object_mission_goal_debug",
+                                "/waver/active_nav_goal",
+                                "/waver/active_nav_goal_meta",
+                                "/waver/sim_nav2_debug",
+                                "/waver/spatial_debug_markers",
+                                "/waver/gazebo_bird_kinematics",
                                 "/waver/mission_state",
                                 "/waver/mission_event",
+                                "/filtered_points",
+                                "/cluster_markers",
                                 LaunchConfiguration("camera_image_topic"),
                                 LaunchConfiguration("camera_info_topic"),
                             ],
@@ -378,6 +462,15 @@ def _launch_setup(context, *args, **kwargs):
                     ],
                     condition=IfCondition(start_remote_panel),
                 ),
+                Node(
+                    package="rviz2",
+                    executable="rviz2",
+                    name="waver_spatial_response_rviz",
+                    arguments=["-d", rviz_config],
+                    output="screen",
+                    parameters=common_params,
+                    condition=IfCondition(enable_rviz),
+                ),
             ],
         ),
     ]
@@ -393,26 +486,35 @@ def generate_launch_description():
             DeclareLaunchArgument("enable_fake_bird_classifier", default_value="true"),
             DeclareLaunchArgument("enable_trial_logger", default_value="true"),
             DeclareLaunchArgument("enable_dataset_logger", default_value="true"),
+            DeclareLaunchArgument("enable_spatial_response_logger", default_value="true"),
+            DeclareLaunchArgument("enable_spatial_debug_viz", default_value="true"),
             DeclareLaunchArgument("enable_rosbag_record", default_value="false"),
-            DeclareLaunchArgument("experiment_profile", default_value="mechanism_ground_truth_smoke"),
-            DeclareLaunchArgument("detector_mode", default_value="ground_truth"),
+            DeclareLaunchArgument("enable_rviz", default_value="false"),
+            DeclareLaunchArgument("rviz_config", default_value="waver_spatial_response_debug.rviz"),
+            DeclareLaunchArgument("inspection_goal_offset_distance_m", default_value="2.0"),
+            DeclareLaunchArgument("experiment_profile", default_value="spatial_lidar_response_smoke"),
+            DeclareLaunchArgument("detector_mode", default_value="lidar"),
             DeclareLaunchArgument("classifier_mode", default_value="fake_gazebo"),
             DeclareLaunchArgument("random_seed", default_value="530"),
-            DeclareLaunchArgument("active_birds", default_value="bird_test_target,bird_single"),
+            DeclareLaunchArgument("active_birds", default_value="bird_1,bird_2,bird_3,bird_4"),
             DeclareLaunchArgument("sequential_release_birds", default_value="true"),
             DeclareLaunchArgument("enable_bird_removal_after_detection", default_value="true"),
             DeclareLaunchArgument("bird_removal_detection_hold_sec", default_value="5.0"),
             DeclareLaunchArgument("detection_hold_grace_sec", default_value="3.0"),
-            DeclareLaunchArgument("require_sound_done_for_removal", default_value="false"),
+            DeclareLaunchArgument("require_sound_done_for_removal", default_value="true"),
+            DeclareLaunchArgument("bird_flee_distance_m", default_value="10.0"),
+            DeclareLaunchArgument("bird_return_distance_m", default_value="10.0"),
+            DeclareLaunchArgument("bird_flee_speed_mps", default_value="1.5"),
             DeclareLaunchArgument("bird_removal_goal_count", default_value="2"),
             DeclareLaunchArgument("trial_id", default_value="gazebo_seo_bird_patrol"),
             DeclareLaunchArgument("experiment_id", default_value="waver_gazebo_bird_patrol"),
-            DeclareLaunchArgument("output_root", default_value=os.path.expanduser("~/ros2_ws3/FSD_Vehicle/experiments_result/gazebo_bird_patrol")),
+            DeclareLaunchArgument("output_root", default_value=os.path.expanduser("~/ros2_ws3/FSD_Vehicle/experiment_results/gazebo_bird_patrol")),
             DeclareLaunchArgument("save_images", default_value="true"),
             DeclareLaunchArgument("save_every_nth_image", default_value="5"),
             DeclareLaunchArgument("write_coco", default_value="true"),
             DeclareLaunchArgument("write_yolo", default_value="true"),
-            DeclareLaunchArgument("use_inside_15m_waypoints", default_value="true"),
+            DeclareLaunchArgument("use_inside_15m_waypoints", default_value="false"),
+            DeclareLaunchArgument("use_legacy_4m_7m_waypoints", default_value="false"),
             DeclareLaunchArgument("camera_image_topic", default_value="/pt_camera/image_raw"),
             DeclareLaunchArgument("camera_info_topic", default_value="/pt_camera/camera_info"),
             DeclareLaunchArgument("world", default_value="ugv_world.world"),

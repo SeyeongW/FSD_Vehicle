@@ -1,7 +1,0 @@
-time_sec,state,bird_name,removed_count,remaining_count
-7.500000000000001,DETECTION_HOLD_STARTED bird=bird_test_target target_class=bird,bird_test_target,0,
-13.3,REMOVED bird=bird_test_target removed_count=1 remaining_count=1 detected_hold_sec=12.05 sound_done_seen=False,bird_test_target,1,1
-13.3,RELEASED bird=bird_single removed_count=1 remaining_count=1,bird_single,1,1
-13.4,DETECTION_HOLD_STARTED bird=bird_single target_class=bird,bird_single,1,
-18.3,REMOVED bird=bird_single removed_count=2 remaining_count=0 detected_hold_sec=10.17 sound_done_seen=False,bird_single,2,0
-18.3,REMOVAL_GOAL_REACHED removed_count=2 goal=2,,2,

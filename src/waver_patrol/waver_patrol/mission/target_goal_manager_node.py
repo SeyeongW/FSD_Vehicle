@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
 
@@ -124,8 +125,13 @@ class TargetGoalManagerNode(Node):
         self.declare_parameter("subscribe_raw_lidar_objects", False)
         self.declare_parameter("subscribe_lidar_objects_map", False)
         self.declare_parameter("target_goal_state_topic", "/waver/target_goal_state")
+        self.declare_parameter("allowed_goal_x_min_m", -1.0e9)
+        self.declare_parameter("allowed_goal_x_max_m", 1.0e9)
+        self.declare_parameter("allowed_goal_y_min_m", -1.0e9)
+        self.declare_parameter("allowed_goal_y_max_m", 1.0e9)
 
         self.goal_pub = self.create_publisher(PoseStamped, "/waver/object_mission_goal", 10)
+        self.goal_debug_pub = self.create_publisher(String, "/waver/object_mission_goal_debug", 10)
         self.active_pub = self.create_publisher(Bool, "/waver/object_mission_goal_active", 10)
         self.state_pub = self.create_publisher(String, "/waver/object_mission_goal_state", 10)
         self.target_goal_state_pub = self.create_publisher(String, str(self.get_parameter("target_goal_state_topic").value), 10)
@@ -347,6 +353,15 @@ class TargetGoalManagerNode(Node):
             self.active_pub.publish(Bool(data=False))
             self.inspection_active_pub.publish(Bool(data=False))
             return
+        if self.outside_allowed_goal_area(transformed):
+            candidate.mission_type = "REJECTED_FORBIDDEN_ZONE"
+            self._publish_state(
+                f"REJECT forbidden_zone source={candidate.source} "
+                f"x={transformed.pose.position.x:.2f} y={transformed.pose.position.y:.2f}"
+            )
+            self.active_pub.publish(Bool(data=False))
+            self.inspection_active_pub.publish(Bool(data=False))
+            return
         inspected_reject = self.recently_inspected_rejection_reason(transformed)
         if inspected_reject:
             self._publish_state(f"REJECT source={candidate.source} mission_type=REJECTED_ALREADY_INSPECTED {inspected_reject}")
@@ -373,6 +388,7 @@ class TargetGoalManagerNode(Node):
             robot_pose=robot_pose,
         )
         goal.header.stamp = self.get_clock().now().to_msg()
+        self.publish_goal_debug(candidate, transformed, goal, robot_pose, offset_distance)
         self.goal_pub.publish(goal)
         self.active_pub.publish(Bool(data=True))
         self.inspection_target_pub.publish(transformed)
@@ -395,6 +411,51 @@ class TargetGoalManagerNode(Node):
         )
         self.last_goal_time = now
         self.last_candidate_time = now
+
+    def publish_goal_debug(
+        self,
+        candidate: Candidate,
+        target: PoseStamped,
+        goal: PoseStamped,
+        robot_pose: PoseStamped | None,
+        offset_distance: float,
+    ) -> None:
+        target_x = float(target.pose.position.x)
+        target_y = float(target.pose.position.y)
+        target_z = float(target.pose.position.z)
+        goal_x = float(goal.pose.position.x)
+        goal_y = float(goal.pose.position.y)
+        goal_z = float(goal.pose.position.z)
+        robot_x = math.nan
+        robot_y = math.nan
+        if robot_pose is not None:
+            robot_x = float(robot_pose.pose.position.x)
+            robot_y = float(robot_pose.pose.position.y)
+        goal_to_target = math.hypot(goal_x - target_x, goal_y - target_y)
+        payload = {
+            "time_sec": self._now(),
+            "goal_role": "TARGET_INSPECTION" if self.is_lidar_inspection_candidate(candidate) else "RADAR_TARGET",
+            "source": candidate.source,
+            "candidate_provenance": "lidar" if candidate.source in {"elevated_dynamic_target", "aerial_target", "lidar_pose_array"} else candidate.source,
+            "target_frame": target.header.frame_id,
+            "target_x": target_x,
+            "target_y": target_y,
+            "target_z": target_z,
+            "goal_frame": goal.header.frame_id,
+            "goal_x": goal_x,
+            "goal_y": goal_y,
+            "goal_z": goal_z,
+            "offset_distance_m": offset_distance,
+            "robot_x": robot_x,
+            "robot_y": robot_y,
+            "goal_to_target_xy_m": goal_to_target,
+            "goal_yaw_policy": str(self.get_parameter("goal_yaw_policy").value),
+            "candidate_track_id": -1,
+            "moving": candidate.moving,
+            "dynamic_valid": candidate.dynamic_valid,
+            "bird_confirmed": candidate.bird_confirmed,
+        }
+        self.goal_debug_pub.publish(String(data=json.dumps(payload, separators=(",", ":"))))
 
     def mission_state_callback(self, msg: String) -> None:
         state = (msg.data or "").strip().split()[0].upper() if (msg.data or "").strip() else "UNKNOWN"
@@ -536,6 +597,14 @@ class TargetGoalManagerNode(Node):
         return math.hypot(
             float(target_pose.pose.position.x) - float(robot_pose.pose.position.x),
             float(target_pose.pose.position.y) - float(robot_pose.pose.position.y),
+        )
+
+    def outside_allowed_goal_area(self, pose: PoseStamped) -> bool:
+        x = float(pose.pose.position.x)
+        y = float(pose.pose.position.y)
+        return not (
+            float(self.get_parameter("allowed_goal_x_min_m").value) <= x <= float(self.get_parameter("allowed_goal_x_max_m").value)
+            and float(self.get_parameter("allowed_goal_y_min_m").value) <= y <= float(self.get_parameter("allowed_goal_y_max_m").value)
         )
 
     @staticmethod
