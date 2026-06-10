@@ -81,7 +81,44 @@ def _launch_setup(context, *args, **kwargs):
     common_params = [{"use_sim_time": use_sim_time}]
 
     slam_toolbox_condition = IfCondition(PythonExpression(["'", backend, "' == 'slam_toolbox' and '", start_slam, "' == 'true'"]))
+    scan_mapper_condition = IfCondition(PythonExpression(["'", backend, "' == 'scan_mapper' and '", start_slam, "' == 'true'"]))
     fake_map_condition = IfCondition(PythonExpression(["'", backend, "' == 'gazebo_live' and '", start_slam, "' == 'true'"]))
+
+    static_obstacle_field = [
+        ("mapping_static_obs_01", "1.0", "1.3"),
+        ("mapping_static_obs_02", "2.3", "-1.3"),
+        ("mapping_static_obs_03", "-1.1", "1.1"),
+        ("mapping_static_obs_04", "-1.4", "-0.9"),
+        ("mapping_static_obs_05", "3.0", "1.6"),
+        ("mapping_static_obs_06", "-2.0", "0.4"),
+    ]
+    static_obstacle_field_actions = [
+        TimerAction(
+            period=3.8 + 0.25 * index,
+            actions=[
+                Node(
+                    package="gazebo_ros",
+                    executable="spawn_entity.py",
+                    name=f"spawn_{entity}",
+                    arguments=[
+                        "-entity",
+                        entity,
+                        "-file",
+                        LaunchConfiguration("static_obstacle_sdf"),
+                        "-x",
+                        x,
+                        "-y",
+                        y,
+                        "-z",
+                        LaunchConfiguration("static_obstacle_z"),
+                    ],
+                    output="screen",
+                )
+            ],
+            condition=IfCondition(LaunchConfiguration("spawn_static_obstacle_field")),
+        )
+        for index, (entity, x, y) in enumerate(static_obstacle_field)
+    ]
 
     return [
         SetEnvironmentVariable("GAZEBO_MODEL_DATABASE_URI", ""),
@@ -133,6 +170,31 @@ def _launch_setup(context, *args, **kwargs):
             ],
         ),
         TimerAction(
+            period=3.5,
+            actions=[
+                Node(
+                    package="gazebo_ros",
+                    executable="spawn_entity.py",
+                    name="spawn_mapping_static_obstacle",
+                    arguments=[
+                        "-entity",
+                        LaunchConfiguration("static_obstacle_entity"),
+                        "-file",
+                        LaunchConfiguration("static_obstacle_sdf"),
+                        "-x",
+                        LaunchConfiguration("static_obstacle_x"),
+                        "-y",
+                        LaunchConfiguration("static_obstacle_y"),
+                        "-z",
+                        LaunchConfiguration("static_obstacle_z"),
+                    ],
+                    output="screen",
+                )
+            ],
+            condition=IfCondition(LaunchConfiguration("spawn_static_obstacle")),
+        ),
+        *static_obstacle_field_actions,
+        TimerAction(
             period=4.0,
             actions=[
                 Node(
@@ -161,6 +223,34 @@ def _launch_setup(context, *args, **kwargs):
                     parameters=[ui_slam_params, *common_params],
                     output="screen",
                     condition=slam_toolbox_condition,
+                ),
+                Node(
+                    package="waver_patrol",
+                    executable="laser_scan_occupancy_mapper_node",
+                    name="laser_scan_occupancy_mapper_node",
+                    parameters=[
+                        {
+                            "use_sim_time": use_sim_time,
+                            "scan_topic": "/scan_slam",
+                            "odom_topic": "/odom",
+                            "map_topic": "/map",
+                            "map_frame": "map",
+                            "odom_frame": "odom",
+                            "base_frame": "base_footprint",
+                            "resolution": 0.05,
+                            "extent_m": 30.0,
+                            "center_x": 0.0,
+                            "center_y": 0.0,
+                            "max_range_m": 12.0,
+                            "ray_step": 2,
+                            "occupied_inflate_cells": 1,
+                            "publish_rate_hz": 2.0,
+                            "publish_map_to_odom_tf": True,
+                        },
+                        *common_params,
+                    ],
+                    output="screen",
+                    condition=scan_mapper_condition,
                 ),
                 Node(
                     package="waver_patrol",
@@ -277,6 +367,8 @@ def _launch_setup(context, *args, **kwargs):
 
 
 def generate_launch_description():
+    waver_share = get_package_share_directory("waver_patrol")
+    default_static_obstacle_sdf = os.path.join(waver_share, "models", "static_obstacle_box", "model.sdf")
     return LaunchDescription(
         [
             DeclareLaunchArgument("use_sim_time", default_value="true"),
@@ -286,7 +378,7 @@ def generate_launch_description():
             DeclareLaunchArgument("robot_spawn_x", default_value="0.0"),
             DeclareLaunchArgument("robot_spawn_y", default_value="0.0"),
             DeclareLaunchArgument("robot_spawn_z", default_value="0.15"),
-            DeclareLaunchArgument("mapping_backend", default_value="slam_toolbox"),
+            DeclareLaunchArgument("mapping_backend", default_value="scan_mapper"),
             DeclareLaunchArgument("start_slam", default_value="true"),
             DeclareLaunchArgument("start_remote_panel", default_value="true"),
             DeclareLaunchArgument("start_rviz", default_value="false"),
@@ -294,6 +386,13 @@ def generate_launch_description():
             DeclareLaunchArgument("demo_close_on_finish", default_value="false"),
             DeclareLaunchArgument("start_patrol_node", default_value="true"),
             DeclareLaunchArgument("save_dir", default_value=os.path.expanduser("~/ros2_ws3/FSD_Vehicle/maps")),
+            DeclareLaunchArgument("spawn_static_obstacle", default_value="false"),
+            DeclareLaunchArgument("spawn_static_obstacle_field", default_value="false"),
+            DeclareLaunchArgument("static_obstacle_entity", default_value="mapping_static_test_box"),
+            DeclareLaunchArgument("static_obstacle_sdf", default_value=default_static_obstacle_sdf),
+            DeclareLaunchArgument("static_obstacle_x", default_value="1.0"),
+            DeclareLaunchArgument("static_obstacle_y", default_value="0.0"),
+            DeclareLaunchArgument("static_obstacle_z", default_value="0.0"),
             OpaqueFunction(function=_launch_setup),
         ]
     )

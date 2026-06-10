@@ -1,9 +1,0 @@
-metric,value
-image_count,2785
-coco_annotation_count,0
-gt_rows,True
-lidar_detection_count_latest,0
-removed_bird_count,2
-two_bird_removal_success,True
-gt_used_for_decision,false
-detector_mode,lidar

@@ -224,6 +224,10 @@ class WaverSpatialResponseLoggerNode(Node):
                     "goal_role",
                     "mission_state",
                     "is_target_related_goal",
+                    "target_track_id",
+                    "target_bird_name",
+                    "association_method",
+                    "association_distance_m",
                     "bird_name",
                     "bird_state",
                     "bird_x_m",
@@ -249,6 +253,7 @@ class WaverSpatialResponseLoggerNode(Node):
                     "lidar_target_y_m",
                     "lidar_target_z_m",
                     "lidar_target_valid",
+                    "lidar_target_age_sec",
                     "lidar_track_id",
                     "goal_to_lidar_target_xy_m",
                     "goal_to_lidar_target_3d_m",
@@ -637,7 +642,7 @@ class WaverSpatialResponseLoggerNode(Node):
     def infer_active_goal_role(self, goal: PoseStamped) -> str:
         state_token = self.mission_state.strip().split()[0].upper() if self.mission_state.strip() else "UNKNOWN"
         meta_role = str(self.latest_active_goal_meta.get("goal_role", "UNKNOWN")).upper()
-        target_states = {"PATROL_NAVIGATING", "INSPECTION_GOAL_GENERATED", "APPROACH_TARGET_OFFSET", "TARGET_NAVIGATING"}
+        target_states = {"INSPECTION_GOAL_GENERATED", "APPROACH_TARGET_OFFSET", "TARGET_NAVIGATING"}
         terminal_target_states = {
             "TARGET_REACHED",
             "CAMERA_ALIGN_TO_TARGET",
@@ -648,12 +653,22 @@ class WaverSpatialResponseLoggerNode(Node):
             gx, gy, _gz, _gyaw = self.goal_xy(goal)
             ox, oy, _oz, _oyaw = self.goal_xy(self.latest_object_goal)
             object_age = self.now_sec() - self.latest_object_goal_time
+            recent_object_match = (
+                math.isfinite(gx)
+                and math.isfinite(gy)
+                and math.isfinite(ox)
+                and math.isfinite(oy)
+                and object_age <= 2.0
+                and dist_xy(gx, gy, ox, oy) <= 0.35
+            )
+            if recent_object_match:
+                return "TARGET_INSPECTION"
             if (
                 math.isfinite(gx)
                 and math.isfinite(gy)
                 and math.isfinite(ox)
                 and math.isfinite(oy)
-                and object_age <= 8.0
+                and object_age <= 2.0
                 and dist_xy(gx, gy, ox, oy) <= 0.35
                 and (state_token in target_states or state_token in terminal_target_states)
             ):
@@ -753,11 +768,11 @@ class WaverSpatialResponseLoggerNode(Node):
         lidar_y = safe_float(lidar.get("y"))
         lidar_z = safe_float(lidar.get("z"))
         lidar_valid = bool(lidar.get("valid", bool(self.dynamic_lock)))
+        lidar_age = safe_float(lidar.get("age"))
         lidar_track_id = safe_float(lidar.get("track_id"), -1)
         goal_role = self.goal_role_for(event_type)
         state_token = self.mission_state.strip().split()[0].upper() if self.mission_state.strip() else "UNKNOWN"
         active_target_states = {
-            "PATROL_NAVIGATING",
             "INSPECTION_GOAL_GENERATED",
             "APPROACH_TARGET_OFFSET",
             "TARGET_NAVIGATING",
@@ -766,11 +781,29 @@ class WaverSpatialResponseLoggerNode(Node):
             "CAMERA_ALIGN_DONE",
             "TARGET_CLASSIFICATION_WAIT",
         }
-        if event_type == "active_nav_goal" and goal_role == "TARGET_INSPECTION" and state_token not in active_target_states:
+        recent_object_match = False
+        if event_type == "active_nav_goal" and self.latest_object_goal is not None:
+            ox, oy, _oz, _oyaw = self.goal_xy(self.latest_object_goal)
+            object_age = self.now_sec() - self.latest_object_goal_time
+            recent_object_match = (
+                math.isfinite(goal_x)
+                and math.isfinite(goal_y)
+                and math.isfinite(ox)
+                and math.isfinite(oy)
+                and object_age <= 2.0
+                and dist_xy(goal_x, goal_y, ox, oy) <= 0.35
+            )
+        if (
+            event_type == "active_nav_goal"
+            and goal_role == "TARGET_INSPECTION"
+            and state_token not in active_target_states
+            and not recent_object_match
+        ):
             goal_role = "PATROL" if state_token in {"RESUME_PATROL", "PATROL_DWELL", "PATROL_NAVIGATING"} else state_token
         target_related = goal_role == "TARGET_INSPECTION"
         goal_to_bird = dist_xy(goal_x, goal_y, bird["x"], bird["y"])
         goal_to_lidar = dist_xy(goal_x, goal_y, lidar_x, lidar_y)
+        lidar_to_bird = dist_xy(lidar_x, lidar_y, bird["x"], bird["y"])
         self.csvs["goal_bird_distance_events"].row(
             {
                 "time_sec": self.now_sec(),
@@ -778,6 +811,10 @@ class WaverSpatialResponseLoggerNode(Node):
                 "goal_role": goal_role,
                 "mission_state": self.mission_state,
                 "is_target_related_goal": str(target_related).lower(),
+                "target_track_id": lidar_track_id if target_related else "",
+                "target_bird_name": bird["name"] if target_related else "",
+                "association_method": "nearest_active_gt_at_goal_generation" if target_related else "",
+                "association_distance_m": lidar_to_bird if target_related else "",
                 "bird_name": bird["name"],
                 "bird_state": bird["state"],
                 "bird_x_m": bird["x"],
@@ -803,10 +840,11 @@ class WaverSpatialResponseLoggerNode(Node):
                 "lidar_target_y_m": lidar_y,
                 "lidar_target_z_m": lidar_z,
                 "lidar_target_valid": str(lidar_valid).lower(),
+                "lidar_target_age_sec": lidar_age,
                 "lidar_track_id": lidar_track_id,
                 "goal_to_lidar_target_xy_m": goal_to_lidar,
                 "goal_to_lidar_target_3d_m": dist_3d(goal_x, goal_y, goal_z, lidar_x, lidar_y, lidar_z),
-                "lidar_target_to_bird_xy_m": dist_xy(lidar_x, lidar_y, bird["x"], bird["y"]),
+                "lidar_target_to_bird_xy_m": lidar_to_bird,
                 "standoff_error_to_bird_m": "" if math.isnan(goal_to_bird) else goal_to_bird - self.configured_offset_m,
                 "standoff_error_to_lidar_target_m": "" if math.isnan(goal_to_lidar) else goal_to_lidar - self.configured_offset_m,
             }
@@ -955,6 +993,7 @@ class WaverSpatialResponseLoggerNode(Node):
             "mechanism.has_active_target_nav_goal": "first_active_target_nav_goal_time_sec" in self.first_times,
             "mechanism.has_nonzero_cmd_vel": "first_nonzero_cmd_vel_time_sec" in self.first_times,
             "mechanism.has_nonzero_cmd_vel_after_target_goal": "first_nonzero_cmd_after_target_goal_time_sec" in self.first_times,
+            "mechanism.has_target_cmd_vel": "first_nonzero_cmd_after_target_goal_time_sec" in self.first_times,
             "mechanism.has_odom_motion_after_target_goal": "first_odom_motion_after_target_goal_time_sec" in self.first_times,
             "mechanism.has_return_resume": has_return_resume,
             "mechanism.has_sound_task": self.sound_done_seen,

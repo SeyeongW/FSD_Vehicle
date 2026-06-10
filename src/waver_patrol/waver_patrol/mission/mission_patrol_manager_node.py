@@ -455,6 +455,12 @@ class MissionPatrolManagerNode(Node):
             return
         self.object_goal = msg
         self.object_goal_active = True
+        if self.can_preempt_patrol_for_target():
+            self.publish_event(
+                "TARGET_PREEMPTS_PATROL_IMMEDIATELY",
+                f"state={self.state.value} active_goal={self.active_goal_type.value}",
+            )
+            self.start_target_mission()
 
     def inspection_target_callback(self, msg: PoseStamped) -> None:
         if self.object_goal_stale(msg):
@@ -590,6 +596,21 @@ class MissionPatrolManagerNode(Node):
         self.cancel_active_goal("target_mission_interrupt")
         self.set_state(MissionState.INSPECTION_GOAL_GENERATED, "lidar_first_inspection_goal")
         self.send_nav_goal(goal, NavGoalType.TARGET_INSPECTION, MissionState.APPROACH_TARGET_OFFSET)
+
+    def can_preempt_patrol_for_target(self) -> bool:
+        if self.estop or self.external_stop or self.return_home_active:
+            return False
+        if self.mapping_active or self.mode in {"STANDBY", "MANUAL", "MAPPING_AUTO", "MAPPING_MANUAL", "MAPPING", "EMERGENCY", "DISABLED"}:
+            return False
+        if self.target_interrupt_blocked() or self.target_mission_active():
+            return False
+        return self.active_goal_type == NavGoalType.PATROL or self.state in {
+            MissionState.IDLE,
+            MissionState.RESUME_PATROL,
+            MissionState.PATROL_NAVIGATING,
+            MissionState.PATROL_DWELL,
+            MissionState.NAV2_FAILED,
+        }
 
     def handle_target_confirmation(self) -> None:
         elapsed = self._now() - self.state_enter_time

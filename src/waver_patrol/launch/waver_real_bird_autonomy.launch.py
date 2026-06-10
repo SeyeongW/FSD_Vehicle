@@ -64,7 +64,7 @@ def generate_launch_description() -> LaunchDescription:
     default_nav2_params = os.path.join(share, "config", "nav2_params_waver_real.yaml")
     default_mission_params = os.path.join(share, "config", "waver_nav2_radar_bird_mission_real.yaml")
     default_ekf_params = os.path.join(share, "config", "ekf_waver_real.yaml")
-    default_map = os.path.expanduser("~/ros2_ws2/FSD_Vehicle/maps/waver_latest_map.yaml")
+    default_map = os.path.expanduser("~/ros2_ws3/FSD_Vehicle/maps/waver_latest_map.yaml")
 
     common = [
         LaunchConfiguration("mission_params_file"),
@@ -89,7 +89,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_sound_deterrent", default_value="true"),
             DeclareLaunchArgument("enable_experiment_logger", default_value="true"),
             DeclareLaunchArgument("experiment_name", default_value="waver_lidar_first_bird_deterrence"),
-            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ros2_ws2/FSD_Vehicle/experiments_result"),
+            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ros2_ws3/FSD_Vehicle/experiment_results"),
             DeclareLaunchArgument("enable_sound_output", default_value="false"),
             DeclareLaunchArgument("sound_safety_ack", default_value="false"),
             DeclareLaunchArgument("enable_robot_localization", default_value="true"),

@@ -59,16 +59,17 @@ EOF
 cleanup
 trap cleanup EXIT
 
-if [ "${WAVER_SPAWN_TEST_OBSTACLE:-false}" = "true" ]; then
-  spawn_test_obstacle &
-fi
-
 set +e
 timeout --foreground "${WAVER_UI_SLAM_TIMEOUT:-180}" \
   ros2 launch ugv_gazebo ugv_gazebo_ui_slam_mapping.launch.py \
     use_sim_time:=true \
     use_gui:="${WAVER_USE_GUI:-false}" \
-    mapping_backend:="${WAVER_MAPPING_BACKEND:-slam_toolbox}" \
+    mapping_backend:="${WAVER_MAPPING_BACKEND:-scan_mapper}" \
+    start_rviz:="${WAVER_START_RVIZ:-false}" \
+    spawn_static_obstacle:="${WAVER_SPAWN_TEST_OBSTACLE:-false}" \
+    static_obstacle_x:="${WAVER_TEST_OBSTACLE_X:-1.35}" \
+    static_obstacle_y:="${WAVER_TEST_OBSTACLE_Y:-0.65}" \
+    static_obstacle_z:="${WAVER_TEST_OBSTACLE_Z:-0.0}" \
     start_remote_panel:=true \
     remote_panel_demo_script:="${WAVER_REMOTE_PANEL_DEMO:-mapping_workflow_smoke}" \
     demo_close_on_finish:=true \
@@ -80,6 +81,17 @@ if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
   exit "$status"
 fi
 
-python3 scripts/check_remote_ui_slam_mapping_result.py \
-  --map-yaml "$HOME/ros2_ws3/FSD_Vehicle/maps/waver_latest_map.yaml" \
+CHECK_ARGS=(
+  --map-yaml "$HOME/ros2_ws3/FSD_Vehicle/maps/waver_latest_map.yaml"
   --skip-graph
+)
+if [ "${WAVER_SPAWN_TEST_OBSTACLE:-false}" = "true" ]; then
+  CHECK_ARGS+=(
+    --expect-obstacle
+    --obstacle-x "${WAVER_TEST_OBSTACLE_X:-1.35}"
+    --obstacle-y "${WAVER_TEST_OBSTACLE_Y:-0.65}"
+    --obstacle-radius-m "${WAVER_TEST_OBSTACLE_CHECK_RADIUS_M:-0.8}"
+    --min-obstacle-occupied "${WAVER_TEST_OBSTACLE_MIN_OCCUPIED:-10}"
+  )
+fi
+python3 scripts/check_remote_ui_slam_mapping_result.py "${CHECK_ARGS[@]}"

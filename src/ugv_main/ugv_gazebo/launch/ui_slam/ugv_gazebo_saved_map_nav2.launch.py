@@ -16,6 +16,7 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterFile
+from launch_ros.parameter_descriptions import ParameterValue
 from nav2_common.launch import RewrittenYaml
 
 
@@ -148,6 +149,30 @@ def _launch_setup(context, *args, **kwargs):
             ],
         ),
         TimerAction(
+            period=3.5,
+            actions=[
+                Node(
+                    package="gazebo_ros",
+                    executable="spawn_entity.py",
+                    name="spawn_static_nav_obstacle",
+                    arguments=[
+                        "-entity",
+                        LaunchConfiguration("static_obstacle_entity"),
+                        "-file",
+                        LaunchConfiguration("static_obstacle_sdf"),
+                        "-x",
+                        LaunchConfiguration("static_obstacle_x"),
+                        "-y",
+                        LaunchConfiguration("static_obstacle_y"),
+                        "-z",
+                        LaunchConfiguration("static_obstacle_z"),
+                    ],
+                    output="screen",
+                )
+            ],
+            condition=IfCondition(LaunchConfiguration("spawn_static_obstacle")),
+        ),
+        TimerAction(
             period=4.0,
             actions=[
                 Node(
@@ -175,7 +200,10 @@ def _launch_setup(context, *args, **kwargs):
                     parameters=[
                         ui_slam_params,
                         {
-                            "use_nav2": True,
+                            "use_nav2": ParameterValue(
+                                LaunchConfiguration("mission_manager_use_nav2"),
+                                value_type=bool,
+                            ),
                             "waypoint_file": waypoint_file,
                             "default_mode": "STANDBY",
                             "enable_sim_nav_goal_arrival": False,
@@ -204,6 +232,20 @@ def _launch_setup(context, *args, **kwargs):
                     parameters=[configured_nav2_params],
                     arguments=["--ros-args", "--log-level", LaunchConfiguration("nav2_log_level")],
                     remappings=[("/tf", "tf"), ("/tf_static", "tf_static")],
+                ),
+                Node(
+                    package="waver_patrol",
+                    executable="static_map_state_publisher_node",
+                    name="static_map_state_publisher_node",
+                    output="screen",
+                    parameters=[
+                        {
+                            "use_sim_time": use_sim_time,
+                            "map_topic": "/map",
+                            "map_path": map_file,
+                            "publish_period_sec": 0.5,
+                        }
+                    ],
                 ),
                 Node(
                     package="nav2_amcl",
@@ -293,6 +335,8 @@ def _launch_setup(context, *args, **kwargs):
 
 
 def generate_launch_description():
+    waver_share = get_package_share_directory("waver_patrol")
+    default_static_obstacle_sdf = os.path.join(waver_share, "models", "static_obstacle_box", "model.sdf")
     return LaunchDescription(
         [
             DeclareLaunchArgument("use_sim_time", default_value="true"),
@@ -302,7 +346,21 @@ def generate_launch_description():
             DeclareLaunchArgument("robot_spawn_x", default_value="0.0"),
             DeclareLaunchArgument("robot_spawn_y", default_value="0.0"),
             DeclareLaunchArgument("robot_spawn_z", default_value="0.15"),
+            DeclareLaunchArgument("spawn_static_obstacle", default_value="false"),
+            DeclareLaunchArgument("static_obstacle_entity", default_value="nav_static_test_box"),
+            DeclareLaunchArgument("static_obstacle_sdf", default_value=default_static_obstacle_sdf),
+            DeclareLaunchArgument("static_obstacle_x", default_value="1.00"),
+            DeclareLaunchArgument("static_obstacle_y", default_value="0.0"),
+            DeclareLaunchArgument("static_obstacle_z", default_value="0.0"),
             DeclareLaunchArgument("start_remote_panel", default_value="false"),
+            DeclareLaunchArgument(
+                "mission_manager_use_nav2",
+                default_value="false",
+                description=(
+                    "Keep false for direct Nav2/localization validation so the mission manager "
+                    "does not inject patrol waypoint goals. Set true only when testing START_PATROL."
+                ),
+            ),
             DeclareLaunchArgument("remote_panel_demo_script", default_value=""),
             DeclareLaunchArgument("demo_close_on_finish", default_value="false"),
             DeclareLaunchArgument(

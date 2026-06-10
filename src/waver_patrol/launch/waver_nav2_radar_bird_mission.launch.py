@@ -108,7 +108,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_camera_gimbal_controller", default_value="true"),
             DeclareLaunchArgument("enable_experiment_logger", default_value="true"),
             DeclareLaunchArgument("experiment_name", default_value="waver_lidar_first_bird_deterrence"),
-            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ros2_ws2/FSD_Vehicle/experiments_result"),
+            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ros2_ws3/FSD_Vehicle/experiment_results"),
             DeclareLaunchArgument("enable_keyboard_teleop", default_value="false"),
             DeclareLaunchArgument("enable_test_publishers", default_value="false"),
             DeclareLaunchArgument("start_serial_bridge", default_value="false"),

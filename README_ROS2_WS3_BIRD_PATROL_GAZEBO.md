@@ -4,7 +4,7 @@ Workspace: `/home/chotaehyun/ros2_ws3/FSD_Vehicle`
 
 Branch: `jo`
 
-This workspace is the Gazebo integration sandbox for the Waver bird patrol mechanism. The local `ros2_ws2` workspace and the cloned `seo` branch archive are reference-only sources and must not be modified by this integration.
+This workspace is the Gazebo integration sandbox for the Waver bird patrol mechanism. The active code branch is `jo`. The `seo` branch may be checked out only in a separate read-only worktree for Gazebo/RViz/topic-structure reference.
 
 ## Scope
 
@@ -13,27 +13,45 @@ The implemented Gazebo mechanism is:
 1. Launch Gazebo Classic with Waver UGV, Mid360/Livox point cloud, camera topics, and Gazebo bird target.
 2. Launch `waver_remote_panel` as the operator UI.
 3. Start patrol through `/waver/mission_command` or the UI Start Patrol path.
-4. Patrol starts with a 4 m straight segment, then repeats a 7 m square waypoint pattern.
+4. Patrol starts with a 4 m straight segment, then repeats the paper square waypoint pattern.
 5. Gazebo LiDAR/target tracker publishes dynamic target lock topics.
 6. Patrol is interrupted and a target-relative inspection offset goal is generated.
 7. The robot approaches the target offset, aligns camera/body, performs Gazebo fake bird classification, triggers the simulated sound stub, returns to the interrupted waypoint, and resumes patrol.
 
-## Final Gazebo Entrypoint
+## Build
 
 ```bash
 cd ~/ros2_ws3/FSD_Vehicle
 source /opt/ros/humble/setup.bash
-source install/setup.bash
-unset ROS_DOMAIN_ID
 
-ros2 launch ugv_gazebo ugv_gazebo_bird_patrol_seo.launch.py \
-  use_gui:=true \
-  start_remote_panel:=true \
-  enable_trial_logger:=true \
-  remote_panel_demo_script:=start_patrol_once
+colcon build --symlink-install --packages-select \
+  ugv_description ugv_gazebo ugv_tools \
+  waver_patrol waver_seo_tracking waver_experiment_logger \
+  livox_ros_driver2 ros2_livox_simulation
+
+source install/setup.bash
+test -f install/ros2_livox_simulation/lib/libros2_livox.so
 ```
 
-The final launch file is provided by `ugv_gazebo`:
+## Verified Entrypoints
+
+Headless smoke run:
+
+```bash
+cd ~/ros2_ws3/FSD_Vehicle
+USE_GUI=false ENABLE_RVIZ=false START_REMOTE_PANEL=true SKIP_BUILD=true TIMEOUT_SEC=260 RANDOM_SEED=530 \
+  bash scripts/run_gazebo_lidar_spatial_visual_experiment.sh
+```
+
+Gazebo GUI and RViz:
+
+```bash
+cd ~/ros2_ws3/FSD_Vehicle
+USE_GUI=true ENABLE_RVIZ=true START_REMOTE_PANEL=true SKIP_BUILD=true TIMEOUT_SEC=260 RANDOM_SEED=530 \
+  bash scripts/run_gazebo_lidar_spatial_visual_experiment.sh
+```
+
+The final launch file is wrapped by the runner and provided by `ugv_gazebo`:
 
 ```text
 src/ugv_main/ugv_gazebo/launch/bird_patrol/ugv_gazebo_bird_patrol_seo.launch.py
@@ -61,6 +79,17 @@ src/ugv_main/ugv_gazebo/launch/bird_patrol/ugv_gazebo_bird_patrol_seo.launch.py
 - Classification state: `/waver/classification_state`
 - Sound state: `/waver/sound_alert_state`
 - Trial logger state: `/waver/seo_trial_logger_state`
+- Spatial debug markers: `/waver/spatial_debug_markers`
+
+The final `/cmd_vel` authority must remain:
+
+```text
+simple_nav2_cmd_sim_node or target/body command source
+  -> intermediate command topic
+  -> mission_state_cmd_selector_node
+  -> safety_cmd_mux_node
+  -> /cmd_vel
+```
 
 ## Verification Commands
 
@@ -77,51 +106,66 @@ ros2 topic echo --once /waver/mission_state
 ros2 topic echo --once /waver/dynamic_object_lock_state
 ```
 
-A successful mechanism run should show:
+The runner stores a graph snapshot during launch:
 
 ```text
-SEEN=patrol,dynamic_target,lock,inspection_goal,camera_align,classification,sound,return_or_resume MISSING=none
+<run_dir>/logs/cmd_vel_topic_info.txt
+<run_dir>/logs/topic_list_snapshot.txt
+<run_dir>/logs/node_list_snapshot.txt
 ```
 
-## Latest Verified Run
-
-The mechanism was directly verified with Gazebo GUI and `waver_remote_panel` running. The latest verified successful log set is:
-
-```text
-experiments_result/gazebo_bird_patrol/gazebo_seo_bird_patrol_20260603_072230/mechanism_events.csv
-experiments_result/gazebo_bird_patrol/gazebo_trial_01_20260603_072230/
-```
-
-Observed mission flow:
-
-```text
-APPROACH_TARGET_OFFSET
-TARGET_REACHED
-CAMERA_ALIGN_DONE
-TARGET_CLASSIFICATION_WAIT
-SOUND_TASK_REQUESTED
-SOUND_TASK_RUNNING
-SOUND_TASK_DONE
-RETURN_TO_INTERRUPTED_WAYPOINT
-RESUME_PATROL
-PATROL_NAVIGATING
-```
-
-
-## Mechanism Log Verification
-
-The latest verified log can be checked without relaunching Gazebo:
+Verifier:
 
 ```bash
-cd ~/ros2_ws3/FSD_Vehicle
-python3 scripts/verify_ros2_ws3_bird_patrol_log.py \
-  experiments_result/gazebo_bird_patrol/gazebo_seo_bird_patrol_20260603_072230/mechanism_events.csv
+python3 scripts/verify_gazebo_spatial_response_trial.py <run_dir> --mode spatial --min-removed-birds 2
+python3 scripts/verify_gazebo_spatial_response_trial.py <run_dir> --mode full --min-removed-birds 2
 ```
 
-Expected result from the latest run:
+Expected result:
 
 ```text
-MECHANISM_LOG_VERIFY=PASS rows=4358 nonzero_cmd_rows=3994 odom_dx=5.948 odom_dy=0.127
+VERIFY_GAZEBO_SPATIAL_RESPONSE=PASS
+GAZEBO_LIDAR_SPATIAL_VISUAL_EXPERIMENT=PASS
+```
+
+## Output Policy
+
+Runtime outputs are generated under:
+
+```text
+experiment_results/
+```
+
+They are intentionally ignored by Git. Use the generated `metrics/` and `logs/` for paper analysis, but do not commit generated runs.
+
+## Paper Metrics
+
+Core output files:
+
+```text
+logs/spatial_distance_timeseries.csv
+logs/goal_bird_distance_events.csv
+logs/bird_kinematics.csv
+logs/lidar_filter_response.csv
+logs/lidar_waver_latency_events.csv
+logs/cmd_vel_response.csv
+metrics/spatial_response_metrics.json
+metrics/paper_spatial_table.csv
+metrics/paper_latency_table.csv
+```
+
+Important clean metrics:
+
+```text
+spatial.target_goal_to_bird_xy_first_m
+spatial.target_goal_to_lidar_target_xy_mean_m
+spatial.valid_lidar_target_to_bird_xy_mean_m
+lidar.filter_runtime_wall_mean_ms
+latency.active_target_nav_goal_to_cmd_vel_ms
+latency.active_target_nav_goal_to_odom_motion_ms
+navigation.odom_path_length_m
+safety.cmd_vel_safety_mux_sole_publisher
+mechanism.lidar_only_decision_clean
 ```
 
 ## Target Pose Smoothing

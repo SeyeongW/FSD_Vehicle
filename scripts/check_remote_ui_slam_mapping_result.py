@@ -42,33 +42,49 @@ def topic_once(topic: str, timeout: float = 6.0) -> str:
     return (result.stdout or "") + (result.stderr or "")
 
 
-def map_quality(yaml_path: pathlib.Path) -> tuple[bool, str]:
+def load_pgm_map(yaml_path: pathlib.Path) -> tuple[dict, int, int, bytes, pathlib.Path] | None:
     if not yaml_path.exists():
-        return False, f"missing_map_yaml={yaml_path}"
+        return None
     meta = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
     image = pathlib.Path(str(meta.get("image", "")))
     if not image.is_absolute():
         image = yaml_path.parent / image
     if not image.exists():
-        return False, f"missing_map_image={image}"
+        return None
     raw = image.read_bytes()
     if not raw.startswith(b"P5"):
-        return False, f"unsupported_map_image={image}"
+        return None
     cursor = 0
     header_lines: list[bytes] = []
     while len(header_lines) < 3:
         end = raw.find(b"\n", cursor)
         if end < 0:
-            return False, "bad_pgm_header"
+            return None
         line = raw[cursor:end].strip()
         cursor = end + 1
         if not line or line.startswith(b"#"):
             continue
         header_lines.append(line)
     if header_lines[0] != b"P5":
-        return False, f"unsupported_map_image={image}"
+        return None
     width, height = [int(v) for v in header_lines[1].split()[:2]]
     data = raw[cursor : cursor + width * height]
+    return meta, width, height, data, image
+
+
+def map_quality(yaml_path: pathlib.Path) -> tuple[bool, str]:
+    loaded = load_pgm_map(yaml_path)
+    if loaded is None:
+        if not yaml_path.exists():
+            return False, f"missing_map_yaml={yaml_path}"
+        meta = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        image = pathlib.Path(str(meta.get("image", "")))
+        if not image.is_absolute():
+            image = yaml_path.parent / image
+        if not image.exists():
+            return False, f"missing_map_image={image}"
+        return False, f"unsupported_or_bad_map_image={image}"
+    _meta, width, height, data, image = loaded
     occupied = sum(1 for value in data if value < 80)
     free = sum(1 for value in data if value > 220)
     unknown = sum(1 for value in data if 80 <= value <= 220)
@@ -91,6 +107,46 @@ def map_quality(yaml_path: pathlib.Path) -> tuple[bool, str]:
     )
 
 
+def obstacle_quality(
+    yaml_path: pathlib.Path,
+    obstacle_x_m: float,
+    obstacle_y_m: float,
+    radius_m: float,
+    min_occupied: int,
+) -> tuple[bool, str]:
+    loaded = load_pgm_map(yaml_path)
+    if loaded is None:
+        return False, "map_unavailable_for_obstacle_check"
+    meta, width, height, data, _image = loaded
+    resolution = float(meta.get("resolution", 0.05))
+    origin = meta.get("origin", [0.0, 0.0, 0.0])
+    if not resolution > 0.0:
+        return False, f"bad_resolution={resolution}"
+
+    # map_saver stores PGM rows top-to-bottom while OccupancyGrid coordinates
+    # are bottom-left origin.  Check both row conventions and accept the best.
+    center_x = int(round((obstacle_x_m - float(origin[0])) / resolution))
+    center_y_grid = int(round((obstacle_y_m - float(origin[1])) / resolution))
+    center_y_pgm = int(round((height - 1) - center_y_grid))
+    radius_px = max(1, int(round(radius_m / resolution)))
+
+    counts: dict[str, int] = {}
+    for label, center_y in {"grid_y": center_y_grid, "pgm_flipped_y": center_y_pgm}.items():
+        count = 0
+        for py in range(max(0, center_y - radius_px), min(height, center_y + radius_px + 1)):
+            row = py * width
+            for px in range(max(0, center_x - radius_px), min(width, center_x + radius_px + 1)):
+                if data[row + px] < 80:
+                    count += 1
+        counts[label] = count
+    best_label, best_count = max(counts.items(), key=lambda item: item[1])
+    ok = best_count >= min_occupied
+    return ok, (
+        f"obstacle_x={obstacle_x_m:.2f} obstacle_y={obstacle_y_m:.2f} radius_m={radius_m:.2f} "
+        f"min_occupied={min_occupied} best={best_label}:{best_count} counts={counts}"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -101,6 +157,11 @@ def main() -> int:
     )
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--skip-graph", action="store_true", help="Only check saved map files; use after launch shutdown.")
+    parser.add_argument("--expect-obstacle", action="store_true")
+    parser.add_argument("--obstacle-x", type=float, default=1.35)
+    parser.add_argument("--obstacle-y", type=float, default=0.65)
+    parser.add_argument("--obstacle-radius-m", type=float, default=0.8)
+    parser.add_argument("--min-obstacle-occupied", type=int, default=10)
     args = parser.parse_args()
 
     failures: list[str] = []
@@ -133,6 +194,17 @@ def main() -> int:
     checks.append(f"map_quality={detail}")
     if not ok:
         failures.append("map_quality_failed")
+    if args.expect_obstacle:
+        obstacle_ok, obstacle_detail = obstacle_quality(
+            map_yaml,
+            args.obstacle_x,
+            args.obstacle_y,
+            args.obstacle_radius_m,
+            args.min_obstacle_occupied,
+        )
+        checks.append(f"obstacle_quality={obstacle_detail}")
+        if not obstacle_ok:
+            failures.append("obstacle_not_mapped")
 
     print("REMOTE_UI_SLAM_MAPPING_CHECK")
     for line in checks:

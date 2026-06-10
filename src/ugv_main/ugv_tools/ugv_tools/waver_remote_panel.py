@@ -35,7 +35,7 @@ from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool, Float32, String
 
@@ -382,6 +382,12 @@ class WaverRemoteNode(Node):
             str(self.get_parameter("angular_speed_limit_topic").value),
             10,
         )
+        map_qos = QoSProfile(depth=1)
+        map_qos.reliability = ReliabilityPolicy.RELIABLE
+        map_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
+        state_qos = QoSProfile(depth=1)
+        state_qos.reliability = ReliabilityPolicy.RELIABLE
+        state_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
 
         # 역할: 상태창 표시용으로 실제 최종 /cmd_vel, Nav2 후보, odom, mission state를 구독한다.
         self.create_subscription(Twist, self.final_cmd_vel_topic, self.cmd_callback, 10)
@@ -408,13 +414,13 @@ class WaverRemoteNode(Node):
             OccupancyGrid,
             str(self.get_parameter("map_topic").value),
             self.map_callback,
-            10,
+            map_qos,
         )
         self.create_subscription(
             OccupancyGrid,
             str(self.get_parameter("fixed_map_topic").value),
             self.fixed_map_callback,
-            10,
+            map_qos,
         )
         self.create_subscription(
             Path,
@@ -600,7 +606,7 @@ class WaverRemoteNode(Node):
             String,
             str(self.get_parameter("map_apply_state_topic").value),
             lambda msg: self.set_text_state("map_apply_state", msg.data),
-            10,
+            state_qos,
         )
         self.create_subscription(
             Bool,
@@ -612,7 +618,7 @@ class WaverRemoteNode(Node):
             String,
             str(self.get_parameter("current_map_source_topic").value),
             self.current_map_source_callback,
-            10,
+            state_qos,
         )
         self.create_subscription(
             String,
@@ -1019,8 +1025,8 @@ finally:
         if width <= 0 or height <= 0 or resolution <= 0.0:
             return
         step = max(1, int(max(width, height) / 260))
-        free: list[tuple[float, float]] = []
-        occupied: list[tuple[float, float]] = []
+        free_candidates: list[tuple[float, float]] = []
+        occupied_candidates: list[tuple[float, float]] = []
         data = msg.data
         max_free_points = 12000
         max_occupied_points = 9000
@@ -1033,15 +1039,11 @@ finally:
                 wx = msg.info.origin.position.x + (x + 0.5) * resolution
                 wy = msg.info.origin.position.y + (y + 0.5) * resolution
                 if value > 50:
-                    if len(occupied) >= max_occupied_points:
-                        continue
-                    occupied.append((float(wx), float(wy)))
+                    occupied_candidates.append((float(wx), float(wy)))
                 else:
-                    if len(free) >= max_free_points:
-                        continue
-                    free.append((float(wx), float(wy)))
-            if len(free) >= max_free_points and len(occupied) >= max_occupied_points:
-                break
+                    free_candidates.append((float(wx), float(wy)))
+        free = self.evenly_sample_points(free_candidates, max_free_points)
+        occupied = self.evenly_sample_points(occupied_candidates, max_occupied_points)
         # Sparse early SLAM maps may have only obstacle endpoints.  Draw the known
         # free cells too so the operator sees the growing mapped area instead of
         # only a handful of points.
@@ -1059,6 +1061,17 @@ finally:
             self.state.map_free = free
             self.state.map_occupied = occupied
             self.state.map_sequence += 1
+
+    @staticmethod
+    def evenly_sample_points(
+        points: list[tuple[float, float]],
+        max_points: int,
+    ) -> list[tuple[float, float]]:
+        # 역할: map 표시용 점을 한쪽부터 잘라내지 않고 전체 지도에 걸쳐 균등하게 남긴다.
+        if max_points <= 0 or len(points) <= max_points:
+            return points
+        stride = len(points) / float(max_points)
+        return [points[min(len(points) - 1, int(i * stride))] for i in range(max_points)]
 
     def fixed_map_callback(self, msg: OccupancyGrid) -> None:
         with self.lock:
@@ -2478,11 +2491,20 @@ class WaverRemotePanel:
             max_y = min_y + 1.0
 
         pad = 18
-        scale = min((width - 2 * pad) / (max_x - min_x), (height - 2 * pad) / (max_y - min_y))
+        world_width = max_x - min_x
+        world_height = max_y - min_y
+        available_width = max(1.0, width - 2 * pad)
+        available_height = max(1.0, height - 2 * pad)
+        scale = min(available_width / world_width, available_height / world_height)
+        plot_width = world_width * scale
+        plot_height = world_height * scale
+        plot_left = pad + max(0.0, (available_width - plot_width) * 0.5)
+        plot_top = pad + max(0.0, (available_height - plot_height) * 0.5)
+        plot_bottom = plot_top + plot_height
 
         def w2c(x: float, y: float) -> tuple[float, float]:
-            cx = pad + (x - min_x) * scale
-            cy = height - pad - (y - min_y) * scale
+            cx = plot_left + (x - min_x) * scale
+            cy = plot_bottom - (y - min_y) * scale
             return cx, cy
 
         # 배경 grid: map이 없어도 odom 기준 위치와 path 상대관계를 볼 수 있게 한다.
@@ -2491,13 +2513,13 @@ class WaverRemotePanel:
         x = start_x
         while x <= max_x:
             cx, _ = w2c(x, min_y)
-            canvas.create_line(cx, pad, cx, height - pad, fill="#17252f")
+            canvas.create_line(cx, plot_top, cx, plot_bottom, fill="#17252f")
             x += grid_step_m
         start_y = math.floor(min_y / grid_step_m) * grid_step_m
         y = start_y
         while y <= max_y:
             _, cy = w2c(min_x, y)
-            canvas.create_line(pad, cy, width - pad, cy, fill="#17252f")
+            canvas.create_line(plot_left, cy, plot_left + plot_width, cy, fill="#17252f")
             y += grid_step_m
 
         if map_received:
@@ -2612,23 +2634,23 @@ class WaverRemotePanel:
             font=("Sans", 10, "bold"),
         )
         view_text = f"view={self.map_view_extent_m:.0f}m " if self.map_view_extent_m > 0.0 else ""
+        status_text = (
+            f"{map_display_mode} {map_frame if map_received else 'odom'} "
+            f"{'OK' if map_received else 'WAIT'} "
+            f"{view_text}"
+            f"free={len(free_cells)} occ={len(occupied)} "
+            f"pose={pose_source} "
+            f"path={len(global_path)}/{len(local_path)} "
+            f"dyn={len(elevated_targets)}"
+        )
         canvas.create_text(
             12,
             12,
             anchor="nw",
             fill="#eceff1",
             font=("Sans", 9, "bold"),
-            text=(
-                f"{map_display_mode} frame={map_frame if map_received else 'odom'} "
-                f"map={'OK' if map_received else 'WAIT'} "
-                f"{view_text}"
-                f"free={len(free_cells)} occ={len(occupied)} "
-                f"pose={pose_source} "
-                f"path={len(global_path)}({global_path_frame or '-'}) "
-                f"local={len(local_path)}({local_path_frame or '-'}) "
-                f"raw clusters={'shown' if show_raw_lidar_objects else 'hidden'}:{len(lidar_objects)}({lidar_objects_frame or '-'}) "
-                f"dynamic={len(elevated_targets)}({elevated_targets_frame or '-'})"
-            ),
+            text=status_text,
+            width=max(180, int(width * 0.65)),
         )
         canvas.create_text(
             width - 12,
@@ -3072,23 +3094,40 @@ class WaverRemotePanel:
                 (162000, lambda: self.node.send_operator_command("STOP")),
                 (166000, self.close_if_demo_requested),
             ]
-        elif script in {"mapping_spin_360", "mapping_d_spin_360"}:
-            # 역할: 사용자가 D 키를 길게 눌러 제자리 우회전을 한 바퀴 시키는
-            # 상황을 실제 Tk key handler 경로로 재현한다. Gazebo SLAM에서 정적
-            # 장애물/벽이 360도 scan accumulation 후 저장맵에 남는지 확인한다.
-            # Gazebo skid-steer 실제 odom 기준으로 angular -0.42rad/s 명령은
-            # 약 9.8deg/s로 회전하므로 40초 이상 유지해야 한 바퀴에 가깝다.
-            def key_event(keysym: str):
-                return type("KeyEvent", (), {"keysym": keysym})()
-
+        elif script == "mapping_patrol_smoke":
+            # 역할: SLAM mapping 중 START_PATROL을 눌렀을 때 Gazebo patrol backend가
+            # waypoint 후보 명령을 만들고, safety mux를 거쳐 주행하며 map을 저장/적용하는지
+            # 확인한다. mission manager는 mapping mode에서 Nav2 mission goal을 막지만,
+            # Gazebo mapping debug의 waver_gazebo_patrol helper는 같은 START_PATROL
+            # command를 받아 저속 순찰 후보를 낸다.
             steps = [
                 (5000, lambda: self.node.send_operator_command("START_MAPPING")),
-                (18000, lambda: self.on_key_press(key_event("d"))),
-                (59000, lambda: self.on_key_release(key_event("d"))),
-                (68000, lambda: self.node.send_operator_command("SAVE_MAP")),
-                (85000, lambda: self.node.send_operator_command("APPLY_FIXED_MAP")),
-                (95000, lambda: self.node.send_operator_command("STOP")),
-                (101000, self.close_if_demo_requested),
+                (17000, lambda: self.node.send_operator_command("START_PATROL")),
+                (105000, lambda: self.node.send_operator_command("SAVE_MAP")),
+                (122000, lambda: self.node.send_operator_command("APPLY_FIXED_MAP")),
+                (137000, lambda: self.node.send_operator_command("STOP")),
+                (143000, self.close_if_demo_requested),
+            ]
+        elif script in {"mapping_spin_360", "mapping_d_spin_360"}:
+            # 역할: 사용자가 D 키를 길게 눌러 제자리 우회전을 한 바퀴 시키는
+            # 상황을 리모콘 manual command 경로로 재현한다. Tk key event를 한 번만
+            # 주입하면 key-repeat watchdog이 1~2초 뒤 release를 내므로, demo에서는
+            # press_direction으로 명령을 유지한다. Gazebo SLAM에서 정적 장애물/벽이
+            # 360도 scan accumulation 후 저장맵에 남는지 확인한다.
+            # Gazebo skid-steer 실제 odom 기준으로 angular -0.45rad/s 명령은
+            # 바닥 접촉/마찰 때문에 이상값보다 느리다. 65초 이상 유지해야
+            # 한 바퀴에 가깝고, 자동 검증에서는 map 좌표 안정성을 함께 본다.
+            steps = [
+                (5000, lambda: self.node.send_operator_command("START_MAPPING")),
+                *[
+                    (delay_ms, lambda: self.press_direction(0.0, -1.0, "mapping-spin-d"))
+                    for delay_ms in range(18000, 85000, 250)
+                ],
+                (85000, self.release_direction),
+                (94000, lambda: self.node.send_operator_command("SAVE_MAP")),
+                (111000, lambda: self.node.send_operator_command("APPLY_FIXED_MAP")),
+                (121000, lambda: self.node.send_operator_command("STOP")),
+                (127000, self.close_if_demo_requested),
             ]
         elif script == "mapping_full_coverage":
             # 역할: 공항맵에서 smoke보다 넓은 coverage를 만든다. 장시간 자동 검증용이며,

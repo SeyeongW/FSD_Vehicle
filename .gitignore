@@ -50,9 +50,25 @@ map_points.txt
 
 # ROS/Gazebo experiment outputs (논문 원본 rosbag/대용량 결과는 런타임 생성)
 bags/
+**/bags/
+**/rosbag/
+**/rosbag*/
+*.bag
+*.sqlite3
 experiments_result/
+experiment_results/
+experiments_result_compact/
 waver_experiments/
 waver_experiments*/
-**/rosbag/
 *.db3
 *.mcap
+
+# Generated dataset / analysis artifacts
+**/metrics/
+**/plots/
+**/annotations/
+**/images/
+**/screenshots/
+
+# Local env
+.env

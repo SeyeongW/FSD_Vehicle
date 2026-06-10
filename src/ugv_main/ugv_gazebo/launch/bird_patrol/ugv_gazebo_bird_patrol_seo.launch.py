@@ -94,10 +94,12 @@ def _launch_setup(context, *args, **kwargs):
     classifier_mode_value = LaunchConfiguration("classifier_mode").perform(context).strip().lower()
     random_seed_value = LaunchConfiguration("random_seed").perform(context)
     trial_id_value = LaunchConfiguration("trial_id").perform(context)
+    run_id_arg = LaunchConfiguration("run_id").perform(context).strip()
+    run_dir_arg = os.path.expanduser(os.path.expandvars(LaunchConfiguration("run_dir").perform(context).strip()))
     active_birds_value = LaunchConfiguration("active_birds").perform(context)
     output_root = os.path.expanduser(os.path.expandvars(LaunchConfiguration("output_root").perform(context)))
-    run_id = f"{trial_id_value}_{time.strftime('%Y%m%d_%H%M%S')}"
-    run_dir = os.path.join(output_root, run_id)
+    run_id = run_id_arg or f"{trial_id_value}_{time.strftime('%Y%m%d_%H%M%S')}"
+    run_dir = run_dir_arg or os.path.join(output_root, run_id)
     os.makedirs(os.path.join(run_dir, "bags"), exist_ok=True)
     use_inside_waypoints = LaunchConfiguration("use_inside_15m_waypoints").perform(context).strip().lower() in {"1", "true", "yes", "on"}
     use_legacy_waypoints = LaunchConfiguration("use_legacy_4m_7m_waypoints").perform(context).strip().lower() in {"1", "true", "yes", "on"}
@@ -507,6 +509,8 @@ def generate_launch_description():
             DeclareLaunchArgument("bird_flee_speed_mps", default_value="1.5"),
             DeclareLaunchArgument("bird_removal_goal_count", default_value="2"),
             DeclareLaunchArgument("trial_id", default_value="gazebo_seo_bird_patrol"),
+            DeclareLaunchArgument("run_id", default_value=""),
+            DeclareLaunchArgument("run_dir", default_value=""),
             DeclareLaunchArgument("experiment_id", default_value="waver_gazebo_bird_patrol"),
             DeclareLaunchArgument("output_root", default_value=os.path.expanduser("~/ros2_ws3/FSD_Vehicle/experiment_results/gazebo_bird_patrol")),
             DeclareLaunchArgument("save_images", default_value="true"),

@@ -68,23 +68,55 @@ class SavedMapNav2Check(Node):
         self.amcl: PoseWithCovarianceStamped | None = None
         self.cmd_vel: Twist | None = None
         self.nav_cmd: Twist | None = None
+        self.safety_state = ""
+        self.odom_path: list[tuple[float, float]] = []
+        self.max_abs_y = 0.0
+        self.min_obstacle_distance = math.inf
+        self.max_final_linear = 0.0
+        self.max_final_angular = 0.0
+        self.max_nav_linear = 0.0
+        self.max_nav_angular = 0.0
+        self.final_nonzero_count = 0
+        self.nav_nonzero_count = 0
         self.create_subscription(Odometry, "/odom", self._odom_cb, 20)
         self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self._amcl_cb, 10)
         self.create_subscription(Twist, "/cmd_vel", self._cmd_cb, 10)
         self.create_subscription(Twist, "/waver/cmd_vel_nav2", self._nav_cmd_cb, 10)
+        self.create_subscription(String, "/waver/safety_state", self._safety_cb, 10)
         self.client = ActionClient(self, NavigateToPose, "/navigate_to_pose")
 
     def _odom_cb(self, msg: Odometry) -> None:
         self.odom = msg
+        x = float(msg.pose.pose.position.x)
+        y = float(msg.pose.pose.position.y)
+        if not self.odom_path or math.hypot(x - self.odom_path[-1][0], y - self.odom_path[-1][1]) >= 0.01:
+            self.odom_path.append((x, y))
+            if len(self.odom_path) > 5000:
+                self.odom_path = self.odom_path[-5000:]
+        self.max_abs_y = max(self.max_abs_y, abs(y - float(self.args.initial_y)))
+        if self.args.require_obstacle_clearance:
+            distance = math.hypot(x - self.args.obstacle_x, y - self.args.obstacle_y)
+            self.min_obstacle_distance = min(self.min_obstacle_distance, distance)
 
     def _amcl_cb(self, msg: PoseWithCovarianceStamped) -> None:
         self.amcl = msg
 
     def _cmd_cb(self, msg: Twist) -> None:
         self.cmd_vel = msg
+        self.max_final_linear = max(self.max_final_linear, abs(float(msg.linear.x)))
+        self.max_final_angular = max(self.max_final_angular, abs(float(msg.angular.z)))
+        if abs(float(msg.linear.x)) > 1e-4 or abs(float(msg.angular.z)) > 1e-4:
+            self.final_nonzero_count += 1
 
     def _nav_cmd_cb(self, msg: Twist) -> None:
         self.nav_cmd = msg
+        self.max_nav_linear = max(self.max_nav_linear, abs(float(msg.linear.x)))
+        self.max_nav_angular = max(self.max_nav_angular, abs(float(msg.angular.z)))
+        if abs(float(msg.linear.x)) > 1e-4 or abs(float(msg.angular.z)) > 1e-4:
+            self.nav_nonzero_count += 1
+
+    def _safety_cb(self, msg: String) -> None:
+        self.safety_state = msg.data
 
     def spin_until(self, predicate, timeout_sec: float) -> bool:
         deadline = time.monotonic() + timeout_sec
@@ -191,6 +223,11 @@ def main() -> int:
     parser.add_argument("--nav2-active-timeout", type=float, default=80.0)
     parser.add_argument("--action-server-timeout", type=float, default=30.0)
     parser.add_argument("--result-timeout", type=float, default=90.0)
+    parser.add_argument("--require-obstacle-clearance", action="store_true")
+    parser.add_argument("--obstacle-x", type=float, default=0.65)
+    parser.add_argument("--obstacle-y", type=float, default=0.0)
+    parser.add_argument("--min-obstacle-distance", type=float, default=0.34)
+    parser.add_argument("--min-lateral-deviation", type=float, default=0.0)
     args = parser.parse_args()
 
     rclpy.init()
@@ -217,8 +254,24 @@ def main() -> int:
         print(f"map_publishers={map_count} nodes={map_nodes}")
         print(f"nav2_goal_status={status}")
         print(f"odom_distance_m={distance:.3f}")
+        print(f"odom_path_points={len(node.odom_path)}")
+        print(f"max_lateral_deviation_m={node.max_abs_y:.3f}")
+        if args.require_obstacle_clearance:
+            min_obs = node.min_obstacle_distance if math.isfinite(node.min_obstacle_distance) else -1.0
+            print(
+                "obstacle_clearance="
+                f"center=({args.obstacle_x:.3f},{args.obstacle_y:.3f}) "
+                f"min_distance_m={min_obs:.3f} required_m={args.min_obstacle_distance:.3f}"
+            )
         print(f"final_cmd_seen={final_cmd_seen}")
         print(f"nav_cmd_seen={nav_cmd_seen}")
+        print(
+            "cmd_stats="
+            f"nav_max=({node.max_nav_linear:.3f},{node.max_nav_angular:.3f}) "
+            f"final_max=({node.max_final_linear:.3f},{node.max_final_angular:.3f}) "
+            f"nav_nonzero={node.nav_nonzero_count} final_nonzero={node.final_nonzero_count}"
+        )
+        print(f"safety_state={node.safety_state or 'NONE'}")
 
         failures: list[str] = []
         if not odom_ok:
@@ -237,10 +290,21 @@ def main() -> int:
             failures.append("final_cmd_not_seen")
         if not nav_cmd_seen:
             failures.append("nav_cmd_not_seen")
+        if node.nav_cmd is not None and node.nav_nonzero_count == 0:
+            failures.append("nav_cmd_zero_only")
+        if node.cmd_vel is not None and node.final_nonzero_count == 0:
+            failures.append("final_cmd_zero_only")
         if not goal_ok:
             failures.append(f"nav2_goal_not_succeeded_status_{status}")
         if distance < args.min_odom_distance:
             failures.append(f"odom_distance_too_small_{distance:.3f}")
+        if args.require_obstacle_clearance:
+            if not math.isfinite(node.min_obstacle_distance):
+                failures.append("obstacle_clearance_not_measured")
+            elif node.min_obstacle_distance < args.min_obstacle_distance:
+                failures.append(f"obstacle_clearance_too_small_{node.min_obstacle_distance:.3f}")
+        if args.min_lateral_deviation > 0.0 and node.max_abs_y < args.min_lateral_deviation:
+            failures.append(f"lateral_deviation_too_small_{node.max_abs_y:.3f}")
 
         if failures:
             print("RESULT=FAIL " + ",".join(failures))

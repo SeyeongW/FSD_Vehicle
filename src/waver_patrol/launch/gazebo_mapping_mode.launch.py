@@ -35,7 +35,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("robot_sdf_file", default_value=default_robot),
             DeclareLaunchArgument("source_map_yaml", default_value=default_map),
             DeclareLaunchArgument("reveal_duration_sec", default_value="12.0"),
-            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws2/FSD_Vehicle/maps"),
+            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws3/FSD_Vehicle/maps"),
             DeclareLaunchArgument("save_basename", default_value="waver_latest_map"),
             DeclareLaunchArgument("demo_script", default_value=""),
             DeclareLaunchArgument("demo_close_on_finish", default_value="false"),

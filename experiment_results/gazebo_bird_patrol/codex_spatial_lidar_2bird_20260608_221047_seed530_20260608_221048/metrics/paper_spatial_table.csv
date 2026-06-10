@@ -1,9 +1,0 @@
-metric,value,unit,meaning
-target_goal_to_bird_xy_first_m,10.55257422772529,m,First target-inspection nav goal to bird XY distance
-target_goal_to_bird_xy_mean_m,5.550843943095097,m,Mean target-inspection goal to bird XY distance
-target_goal_to_lidar_target_xy_mean_m,3.0289995722369634,m,Mean target-inspection goal to LiDAR target XY distance
-target_goal_standoff_error_to_bird_mean_abs_m,3.5508439430950967,m,Mean absolute target-goal standoff error to bird
-target_goal_standoff_error_to_lidar_target_mean_abs_m,1.0289995722369636,m,Mean absolute target-goal standoff error to LiDAR target
-robot_to_bird_xy_min_m,2.792414207484319,m,Minimum Waver to bird XY distance
-lidar_target_to_bird_xy_mean_m,4.042330481955003,m,Mean LiDAR target to bird GT XY distance
-bird_speed_xy_mean_mps,,m/s,Mean bird XY speed

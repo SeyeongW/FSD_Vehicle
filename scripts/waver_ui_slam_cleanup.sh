@@ -5,12 +5,30 @@ ROOT="${WAVER_WS3_ROOT:-$HOME/ros2_ws3/FSD_Vehicle}"
 
 term_pattern() {
   local pattern="$1"
-  pkill -TERM -f "$pattern" 2>/dev/null || true
+  local pids
+  pids="$(pgrep -f "$pattern" 2>/dev/null || true)"
+  [ -z "$pids" ] && return 0
+  while read -r pid; do
+    [ -z "$pid" ] && continue
+    [ "$pid" = "$$" ] && continue
+    [ "$pid" = "${BASHPID:-$$}" ] && continue
+    [ "$pid" = "$PPID" ] && continue
+    kill -TERM "$pid" 2>/dev/null || true
+  done <<< "$pids"
 }
 
 kill_pattern() {
   local pattern="$1"
-  pkill -KILL -f "$pattern" 2>/dev/null || true
+  local pids
+  pids="$(pgrep -f "$pattern" 2>/dev/null || true)"
+  [ -z "$pids" ] && return 0
+  while read -r pid; do
+    [ -z "$pid" ] && continue
+    [ "$pid" = "$$" ] && continue
+    [ "$pid" = "${BASHPID:-$$}" ] && continue
+    [ "$pid" = "$PPID" ] && continue
+    kill -KILL "$pid" 2>/dev/null || true
+  done <<< "$pids"
 }
 
 cleanup_once() {
@@ -29,6 +47,8 @@ cleanup_once() {
   "$matcher" "$ROOT/install/waver_patrol/lib/waver_patrol/scan_republisher_node"
   "$matcher" "$ROOT/install/waver_patrol/lib/waver_patrol/mapping_workflow_manager_node"
   "$matcher" "$ROOT/install/waver_patrol/lib/waver_patrol/mapping_backend_manager_node"
+  "$matcher" "$ROOT/install/waver_patrol/lib/waver_patrol/static_map_state_publisher_node"
+  "$matcher" "$ROOT/install/waver_patrol/lib/waver_patrol/laser_scan_occupancy_mapper_node"
   "$matcher" "$ROOT/install/waver_patrol/lib/waver_patrol/mission_patrol_manager_node"
   "$matcher" "$ROOT/install/waver_patrol/lib/waver_patrol/safety_cmd_mux_node"
   "$matcher" "$ROOT/install/waver_patrol/lib/waver_patrol/simple_nav2_cmd_sim_node"
