@@ -137,6 +137,8 @@ class ClusterNode(Node):
         self.tilt_pub = self.create_publisher(JointTrajectory, '/set_joint_trajectory', 10)
         self.target_pub = self.create_publisher(PointStamped, '/bird_target', 10)
         self.bird_detected_pub = self.create_publisher(Bool, '/bird_detected', 10)
+        # 새 위치·거리·방위각 (x=수평거리m, y=방위각deg, z=고도m)
+        self.bird_range_pub = self.create_publisher(Vector3Stamped, '/bird_range_bearing', 10)
 
         # patrol_node가 퍼블리시. True일 때만 cmd_vel 출력 허용
         self.tracking_active = False
@@ -162,9 +164,9 @@ class ClusterNode(Node):
         self.self_y = (-0.6, 0.6)
         self.self_z = (-0.3, 0.8)
 
-        self.dbscan_eps = 0.5
-        self.dbscan_min_samples = 4
-        self.min_cluster_points = 5
+        self.dbscan_eps = 0.6
+        self.dbscan_min_samples = 3
+        self.min_cluster_points = 3
 
         self.trackable_max_size_x = 2.0
         self.trackable_max_size_y = 2.0
@@ -172,13 +174,13 @@ class ClusterNode(Node):
         self.trackable_min_centroid_z = 2.0
 
         self.track_match_dist = 3.0
-        self.move_threshold = 0.10
+        self.move_threshold = 0.05
         self.max_motion_dist = 3.0
-        self.min_motion_frames = 5
-        self.max_missed_frames = 40
+        self.min_motion_frames = 3
+        self.max_missed_frames = 60
 
         self.lock_lost_frames = 50  # LiDAR 블라인드 구간에서 잠금 유지
-        self.lock_keep_missed = 10  # KF 예측으로 추적 유지할 프레임 수
+        self.lock_keep_missed = 20  # KF 예측으로 추적 유지할 프레임 수
         self.lock_switch_cooldown = 20
         self.lock_age = 0
 
@@ -633,33 +635,44 @@ class ClusterNode(Node):
 
     def track_target(self, cx: float, cy: float, cz: float):
         """
-        LiDAR bbox x,y 기반 추적 제어.
-        cx, cy: 로봇 로컬 프레임 (KF 예측 또는 sensor 프레임 위치)
-        로봇을 새 방향으로 회전 후, 정렬 시 전방 추적(chase) 기동.
-        tracking_active가 False면 cmd_vel을 출력하지 않음 (Nav2가 제어 중).
-        전방 LaserScan으로 미지 장애물 감지 → 감속/정지.
-        EMA 스무딩으로 급격한 cmd_vel 변화 억제.
+        Pure Pursuit 기반 추적 제어.
+        전진 중: kappa = 2*cy/dist^2 곡률로 회전+전진 동시 수행.
+        목표 거리 도달 후: P 제어 제자리 회전으로 방향 유지.
         """
         if not self.tracking_active:
             return
-        target_angle_rad = math.atan2(cy, cx)
+
         dist_2d = math.sqrt(cx * cx + cy * cy)
+        target_angle = math.atan2(cy, cx)
 
-        # ── 목표 angular ──
-        if abs(target_angle_rad) > self.angle_deadband:
-            cmd = self.angular_gain * target_angle_rad
-            desired_angular = max(min(cmd, self.max_angular_speed), -self.max_angular_speed)
-        else:
-            desired_angular = 0.0
-
-        # ── 목표 linear ──
-        if abs(target_angle_rad) < self.chase_align_threshold and dist_2d > self.chase_target_dist:
+        # ── 선속도: 목표 거리까지 비례 제어 ──
+        if dist_2d > self.chase_target_dist:
             desired_linear = min(
                 self.linear_gain * (dist_2d - self.chase_target_dist),
                 self.max_linear_speed,
             )
         else:
             desired_linear = 0.0
+
+        # ── 각속도: Pure Pursuit + P 제어 최솟값 보장 ──
+        if dist_2d > 0.1:
+            if desired_linear > 0.01:
+                # Pure Pursuit 곡률 기반 각속도
+                kappa = 2.0 * cy / (dist_2d ** 2)
+                pp_angular = desired_linear * kappa
+                # 원거리에서 kappa가 약해지는 문제 보완: P 제어로 최솟값 보장
+                p_angular = self.angular_gain * target_angle
+                desired_angular = p_angular if abs(p_angular) > abs(pp_angular) else pp_angular
+            else:
+                # 목표 거리 도달: P 제어 제자리 회전
+                if abs(target_angle) > self.angle_deadband:
+                    desired_angular = self.angular_gain * target_angle
+                else:
+                    desired_angular = 0.0
+        else:
+            desired_angular = 0.0
+
+        desired_angular = max(min(desired_angular, self.max_angular_speed), -self.max_angular_speed)
 
         # ── 전방 장애물 체크 → 전진 제한 ──
         obs_dist = self._forward_obstacle_dist()
@@ -679,7 +692,6 @@ class ClusterNode(Node):
         self.last_cmd_linear_x  = twist.linear.x
         self.cmd_pub.publish(twist)
 
-        # 카메라 틸트: 새의 고도각에 맞춰 상하 추적
         if dist_2d > 0.1:
             self.control_camera_tilt_lidar(cz, dist_2d)
 
@@ -837,6 +849,14 @@ class ClusterNode(Node):
             f'| dist={dist_2d:.2f}m bearing={bearing_deg:+.1f}deg '
             f'| id={self.locked_target_id}'
         )
+
+        range_msg = Vector3Stamped()
+        range_msg.header.stamp = self.get_clock().now().to_msg()
+        range_msg.header.frame_id = self.target_frame
+        range_msg.vector.x = dist_2d          # 수평 거리 (m)
+        range_msg.vector.y = bearing_deg       # 방위각 (+좌/-우, deg)
+        range_msg.vector.z = float(pos[2])     # 새 고도 (m, odom 기준)
+        self.bird_range_pub.publish(range_msg)
 
     # =========================================================
     # TF / 포인트 유틸리티

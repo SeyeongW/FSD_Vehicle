@@ -229,76 +229,7 @@
     </collision>
   </link>
  
-  <link name='3d_camera_link'>
-  <pose relative_to='3d_camera_link_joint'>0 0 0 0 -0 0</pose>
-    <inertial>
-      <pose>0 0 0 0 -0 0</pose>
-      <mass>0.043316</mass>
-      <inertia>
-        <ixx>3.27216283333333E-05</ixx>
-        <ixy>1.12259284465067E-22</ixy>
-        <ixz>-1.19114008207636E-22</ixz>
-        <iyy>3.87317233333333E-06</iyy>
-        <iyz>-2.37303626261453E-22</iyz>
-        <izz>3.09348433333333E-05</izz>
-       </inertia>
-    </inertial>
-    <visual name='3d_camera_link_visual'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/3d_camera_link.stl</uri>
-          </mesh>
-      </geometry>
-    </visual>
-    <collision name='3d_camera_link_collision'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/3d_camera_link.stl</uri>
-          </mesh>
-      </geometry>
-    </collision>
-
-      <sensor name="camera" type="depth">
-        <pose>0 0 0 0 -0 0</pose>
-        <always_on>true</always_on>
-        <visualize>true</visualize>
-        <update_rate>30</update_rate>
-        <camera name="intel_realsense_r200">
-          <horizontal_fov>1.02974</horizontal_fov>
-          <image>
-            <width>640</width>
-            <height>480</height>
-            <format>R8G8B8</format>
-          </image>
-          <clip>
-            <near>0.02</near>
-            <far>300</far>
-          </clip>
-          <noise>
-            <type>gaussian</type>
-            <!-- Noise is sampled independently per pixel on each frame.
-                  That pixel's noise value is added to each of its color
-                  channels, which at that point lie in the range [0,1]. -->
-            <mean>0.0</mean>
-            <stddev>0.007</stddev>
-          </noise>
-        </camera>
-          <plugin name="camera_driver" filename="libgazebo_ros_camera.so">
-            <ros>
-              <!-- <namespace>test_cam</namespace> -->
-              <!-- <remapping>image_raw:=image_demo</remapping> -->
-              <!-- <remapping>camera_info:=camera_info_demo</remapping> -->
-            </ros>
-            <!-- camera_name>omit so it defaults to sensor name</camera_name-->
-            <!-- frame_name>omit so it defaults to link name</frameName-->
-            <!-- <hack_baseline>0.07</hack_baseline> -->
-          </plugin>
-      </sensor>
-  </link>
+  <!-- 3d_camera_link 제거: LiDAR 미탐지 구역 방지를 위해 카메라 위치로 LiDAR 이동 -->
   
     <link name='livox'>
       <pose relative_to='livox_joint'>0 0 0 0 -0 0</pose>
@@ -378,24 +309,7 @@
         <izz>4.86101329827052E-05</izz> 
        </inertia>
     </inertial>
-    <visual name='pt_base_link_visual'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_base_link.stl</uri>
-          </mesh>
-      </geometry>
-    </visual>
-    <collision name='pt_base_link_collision'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_base_link.stl</uri>
-          </mesh>
-      </geometry>
-    </collision>
+    <!-- visual/collision 제거: 카메라 마운트 외형 숨김 -->
   </link>
   
   <link name='pt_link1'>      
@@ -412,24 +326,7 @@
         <izz>2.60402792588347E-06</izz>  
       </inertia>
     </inertial>
-    <visual name='pt_link1_visual'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_link1.stl</uri>
-          </mesh>
-      </geometry>
-    </visual>
-    <collision name='pt_link1_collision'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_link1.stl</uri>
-          </mesh>
-      </geometry>
-    </collision>
+    <!-- visual/collision 제거: 카메라 마운트 외형 숨김 -->
   </link>
   
   <link name='pt_link2'>
@@ -447,96 +344,10 @@
             <izz>5.67494e-05</izz>
           </inertia>
         </inertial>
-    <visual name='pt_link2_visual'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_link2.stl</uri>
-          </mesh>
-      </geometry>
-    </visual>
-    <collision name='pt_link2_collision'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_link2.stl</uri>
-          </mesh>
-      </geometry>
-    </collision>
+    <!-- visual/collision 제거: 카메라 마운트 외형 숨김 -->
   </link>
   
-  <link name='pt_camera_link'>
-  <pose relative_to='pt_link2_to_pt_camera_link'>0 0 0 0 -0 0</pose>
-    <gravity>false</gravity>
-    <inertial>
-      <pose>0 0 0 0 -0 0</pose>
-      <mass>0.00623651844028495</mass>
-      <inertia>
-        <ixx>5.11295942352593E-07</ixx>
-        <ixy>3.46495200123478E-22</ixy>
-        <ixz>-4.00917493406375E-08</ixz>
-        <iyy>3.99078324787848E-07</iyy>
-        <iyz>1.31404415819798E-22</iyz>
-        <izz>4.02518684222241E-07</izz> 
-      </inertia>
-    </inertial>
-    <visual name='pt_camera_link_visual'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_camera_link.stl</uri>
-          </mesh>
-      </geometry>
-    </visual>
-    <collision name='pt_camera_link_collision'>
-      <pose>0 0 0 0 -0 0</pose>
-      <geometry>
-          <mesh>
-            <scale>1 1 1</scale>
-            <uri>model://ugv_description/meshes/ugv_rover/pt_camera_link.stl</uri>
-          </mesh>
-      </geometry>
-    </collision>
-    <sensor name="pt_camera" type="camera">
-        <pose>0 0 0 0 -0 0</pose>
-        <always_on>true</always_on>
-        <visualize>true</visualize>
-        <update_rate>30</update_rate>
-        <camera name="intel_realsense_r200">
-          <horizontal_fov>1.02974</horizontal_fov>
-          <image>
-            <width>640</width>
-            <height>480</height>
-            <format>R8G8B8</format>
-          </image>
-          <clip>
-            <near>0.02</near>
-            <far>300</far>
-          </clip>
-          <noise>
-            <type>gaussian</type>
-            <!-- Noise is sampled independently per pixel on each frame.
-                  That pixel's noise value is added to each of its color
-                  channels, which at that point lie in the range [0,1]. -->
-            <mean>0.0</mean>
-            <stddev>0.007</stddev>
-          </noise>
-        </camera>
-          <plugin name="pt_camera_driver" filename="libgazebo_ros_camera.so">
-            <ros>
-              <!-- <namespace>test_cam</namespace> -->
-              <!-- <remapping>image_raw:=image_demo</remapping> -->
-              <!-- <remapping>camera_info:=camera_info_demo</remapping> -->
-            </ros>
-            <!-- camera_name>omit so it defaults to sensor name</camera_name-->
-            <!-- frame_name>omit so it defaults to link name</frameName-->
-            <!-- <hack_baseline>0.07</hack_baseline> -->
-          </plugin>
-      </sensor>
-  </link>
+  <!-- pt_camera_link 제거 -->
   
   <joint name='base_joint' type='fixed'>
     <pose relative_to='base_footprint'>0.00046 0 0.08 0 -0 0</pose>
@@ -586,20 +397,14 @@
       </axis>
   </joint>
   
+  <!-- LiDAR 위치: base_link 기준 (0.065, 0, 0.08) = footprint 기준 (0.066, 0, 0.16) -->
   <joint name='livox_joint' type='fixed'>
-    <pose relative_to='base_link'>-0.05 0 0.08 0 -0 0</pose>
+    <pose relative_to='base_link'>0.065 0 0.08 0 0 0</pose>
     <parent>base_link</parent>
     <child>livox</child>
   </joint>
 
-  <joint name='3d_camera_link_joint' type='fixed'>
-      <pose relative_to='base_footprint'>0.06577 0 0.101953 0 -0 0</pose>
-      <parent>base_footprint</parent>
-      <child>3d_camera_link</child>
-       <axis>
-        <xyz>0 0 1</xyz>
-      </axis>
-  </joint>
+  <!-- 3d_camera_link_joint 제거 -->
   
   
   <joint name='pt_base_link_joint' type='fixed'>
@@ -643,14 +448,7 @@
       </axis>
   </joint>
   
-  <joint name='pt_link2_to_pt_camera_link' type='fixed'>
-    <pose relative_to='pt_link2'>0.047686 -0.000569 0.02 -1.5708 0 0</pose>
-      <parent>pt_link2</parent>
-    <child>pt_camera_link</child>
-       <axis>
-        <xyz>0 0 1</xyz>
-      </axis>
-  </joint>
+  <!-- pt_link2_to_pt_camera_link 제거 -->
   
      <static>0</static>
     
