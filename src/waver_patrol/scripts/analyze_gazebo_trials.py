@@ -46,8 +46,8 @@ def write_csv(path: Path, fields: list[str], rows: list[dict[str, object]]) -> N
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Analyze Waver Gazebo moving-object trial CSV output")
-    parser.add_argument("--input_dir", default="~/ugv_ws/FSD_Vehicle/experiments_result")
-    parser.add_argument("--output_dir", default="~/ugv_ws/FSD_Vehicle/experiments_result/results")
+    parser.add_argument("--input_dir", default="~/ros2_ws5/FSD_Vehicle/experiments_result")
+    parser.add_argument("--output_dir", default="~/ros2_ws5/FSD_Vehicle/experiments_result/results")
     args = parser.parse_args()
     input_dir = Path(os.path.expanduser(args.input_dir))
     output_dir = Path(os.path.expanduser(args.output_dir))

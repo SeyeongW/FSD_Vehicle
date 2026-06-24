@@ -50,7 +50,7 @@ ROS_DOMAIN_ID=0
 
 이렇게 하면 새로운 하드웨어 모델을 추가하거나 시리얼 포트가 바뀌더라도 `.env` 파일 한 줄만 수정하면 된다. Launch 파일이나 소스코드를 직접 수정할 필요가 없다.
 
-**로컬 실행 지원**: Docker 없이 직접 ROS2를 실행하는 경우를 위해 `setup_local_env.sh`를 별도로 작성했다. 이 스크립트는 자신의 위치를 기반으로 `UGV_WS_PATH`를 자동 감지하기 때문에, 팀원마다 워크스페이스 경로가 달라도 문제없이 동작한다.
+**로컬 실행 지원**: Docker 없이 직접 ROS2를 실행하는 경우를 위해 `setup_local_env.sh`를 별도로 작성했다. 이 스크립트는 자신의 위치를 기반으로 `ROS2_WS5_PATH`를 자동 감지하기 때문에, 팀원마다 워크스페이스 경로가 달라도 문제없이 동작한다.
 
 ```bash
 source setup_local_env.sh   # 워크스페이스 루트에서 1회 실행
@@ -196,7 +196,7 @@ services:
       - QT_X11_NO_MITSHM=1
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw   # X11 GUI 지원
-      - .:/ros2_ws/ugv_ws                  # 소스코드 실시간 반영
+      - .:/ros2_ws/ros2_ws5                  # 소스코드 실시간 반영
       - ${HOME}/.gazebo:/root/.gazebo      # Gazebo 모델 캐시
     network_mode: host      # ROS2 DDS 멀티캐스트를 위해 host 네트워크 사용
     privileged: true        # 하드웨어 직접 접근

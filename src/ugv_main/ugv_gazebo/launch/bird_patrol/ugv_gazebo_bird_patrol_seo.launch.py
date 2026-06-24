@@ -36,7 +36,7 @@ def _launch_setup(context, *args, **kwargs):
     gazebo_ros_prefix = _package_prefix("gazebo_ros")
     gazebo_ros_lib = os.path.join(gazebo_ros_prefix, "lib") if gazebo_ros_prefix else ""
 
-    ws_root = os.path.expanduser("~/ugv_ws/FSD_Vehicle")
+    ws_root = os.path.expanduser("~/ros2_ws5/FSD_Vehicle")
     livox_prefix = _package_prefix("ros2_livox_simulation")
     livox_plugin_candidates = [
         os.path.join(livox_prefix, "lib") if livox_prefix else "",
@@ -527,7 +527,7 @@ def generate_launch_description():
             DeclareLaunchArgument("run_id", default_value=""),
             DeclareLaunchArgument("run_dir", default_value=""),
             DeclareLaunchArgument("experiment_id", default_value="waver_gazebo_bird_patrol"),
-            DeclareLaunchArgument("output_root", default_value=os.path.expanduser("~/ugv_ws/FSD_Vehicle/experiment_results/gazebo_bird_patrol")),
+            DeclareLaunchArgument("output_root", default_value=os.path.expanduser("~/ros2_ws5/FSD_Vehicle/experiment_results/gazebo_bird_patrol")),
             DeclareLaunchArgument("save_images", default_value="true"),
             DeclareLaunchArgument("save_every_nth_image", default_value="5"),
             DeclareLaunchArgument("write_coco", default_value="true"),

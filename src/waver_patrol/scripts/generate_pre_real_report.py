@@ -13,8 +13,8 @@ def truth(value: object) -> bool:
 def main() -> int:
     # 역할: CSV summary를 읽어 실차 전 PASS/FAIL Markdown 판정서를 만든다.
     parser = argparse.ArgumentParser(description="Generate Waver pre-real validation Markdown report")
-    parser.add_argument("--results_dir", default="~/ugv_ws/FSD_Vehicle/experiments_result/results")
-    parser.add_argument("--output", default="~/ugv_ws/FSD_Vehicle/experiments_result/results/final_pass_fail_report.md")
+    parser.add_argument("--results_dir", default="~/ros2_ws5/FSD_Vehicle/experiments_result/results")
+    parser.add_argument("--output", default="~/ros2_ws5/FSD_Vehicle/experiments_result/results/final_pass_fail_report.md")
     args = parser.parse_args()
     results_dir = Path(args.results_dir).expanduser()
     output = Path(args.output).expanduser()

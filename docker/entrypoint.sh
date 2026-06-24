@@ -8,9 +8,9 @@ set -e
 source /opt/ros/humble/setup.bash
 
 # ── 워크스페이스 소싱 (빌드되어 있으면) ─────────────────
-if [ -f /ros2_ws/ugv_ws/install/setup.bash ]; then
-    source /ros2_ws/ugv_ws/install/setup.bash
-    echo "[UGV] Workspace sourced: /ros2_ws/ugv_ws/install/setup.bash"
+if [ -f /ros2_ws/ros2_ws5/install/setup.bash ]; then
+    source /ros2_ws/ros2_ws5/install/setup.bash
+    echo "[UGV] Workspace sourced: /ros2_ws/ros2_ws5/install/setup.bash"
 else
     echo "[UGV] Workspace not built yet. Run build scripts inside container."
 fi

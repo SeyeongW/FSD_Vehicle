@@ -33,7 +33,7 @@ checks. Never replay a bag while real serial or sound output is enabled.
 ## Record
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 bag record -o ~/waver_bags/<test_id> \

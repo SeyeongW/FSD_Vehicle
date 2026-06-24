@@ -9,7 +9,7 @@ set -eo pipefail
 #     다음 trial로 넘어간다.
 #   - 실차 주행용이 아니며, require_scan=false와 sim goal arrival을 쓰는 Gazebo 검증 전용이다.
 
-WS="${WAVER_WS:-$HOME/ugv_ws/FSD_Vehicle}"
+WS="${WAVER_WS:-$HOME/ros2_ws5/FSD_Vehicle}"
 TRIALS="${TRIALS:-1 2 3}"
 MAX_WAIT_SEC="${MAX_WAIT_SEC:-150}"
 USE_GUI="${USE_GUI:-false}"

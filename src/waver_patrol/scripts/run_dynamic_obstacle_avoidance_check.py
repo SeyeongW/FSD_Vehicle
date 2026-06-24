@@ -147,7 +147,7 @@ class DynamicObstacleAvoidanceCheck(Node):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate Gazebo dynamic obstacle detour smoke test")
-    parser.add_argument("--output-root", default="~/ugv_ws/FSD_Vehicle/experiments_result")
+    parser.add_argument("--output-root", default="~/ros2_ws5/FSD_Vehicle/experiments_result")
     parser.add_argument("--experiment-name", default="")
     parser.add_argument("--duration-sec", type=float, default=18.0)
     parser.add_argument("--start-after-sec", type=float, default=2.0)

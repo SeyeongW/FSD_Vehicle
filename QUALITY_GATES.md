@@ -8,7 +8,7 @@ serial port, publish motor commands to hardware, or start sound/GPIO outputs.
 ## Primary Gate
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 bash scripts/waver_quality_gate.sh --no-hardware \
   --report-dir reports/quality_gate/latest
 ```

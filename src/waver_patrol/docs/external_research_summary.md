@@ -78,7 +78,7 @@ simulation-based pipeline evidence only.
 
 ## Gap Against Current Workspace
 
-- Active tree does not contain `pcd_cluster_pkg`; the archive copy has it under `~/ugv_ws/FSD_Vehicle`. Active real-robot path is therefore `waver_patrol/perception/pointcloud_lidar_objects_node.py`.
+- Active tree does not contain `pcd_cluster_pkg`; the archive copy has it under `~/ros2_ws5/FSD_Vehicle`. Active real-robot path is therefore `waver_patrol/perception/pointcloud_lidar_objects_node.py`.
 - Gazebo validation can prove the height/dynamic logic with PoseArray data, but real deployment still needs a live 3D PointCloud2/depth/custom z source.
 - H4/H5/H6 ego-rotation and z-unknown trials are recommended stress tests; H1/H2/H3 are the current hard gate.
 - The latest 10-run Gazebo/UI mapping validation is simulation-based evidence. It supports pre-deployment readiness, but wheel-on PASS still requires real_vehicle_precheck, rosbag replay, wheel-off HIL, hardware E-STOP, and supervised low-speed closed-area trials.

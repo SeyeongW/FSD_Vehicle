@@ -17,7 +17,7 @@ fi
 JETSON_HOST="${JETSON_HOST:-10.139.225.150}"
 JETSON_USER="${JETSON_USER:-sw}"
 JETSON_PASS="${JETSON_PASS:-}"
-JETSON_WS="${JETSON_WS:-/home/sw/ugv_ws/FSD_Vehicle}"
+JETSON_WS="${JETSON_WS:-/home/sw/ros2_ws5/FSD_Vehicle}"
 JETSON_HOST_AUTO="${JETSON_HOST_AUTO:-true}"
 JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST} 10.139.225.150 10.63.240.150 10.139.225.126}"
 CONTAINER="${CONTAINER:-fsd_dev_jetson}"
@@ -126,15 +126,15 @@ if ! docker ps --format '{{.Names}}' | grep -qx "${CONTAINER}"; then
 fi
 
 echo "[JETSON] copying official Livox sources into Docker workspace"
-docker exec "${CONTAINER}" mkdir -p /ros2_ws/ugv_ws/src
-docker exec "${CONTAINER}" rm -rf /ros2_ws/ugv_ws/src/Livox-SDK2 /ros2_ws/ugv_ws/src/livox_ros_driver2
-docker cp "${JETSON_WS}/src/Livox-SDK2" "${CONTAINER}:/ros2_ws/ugv_ws/src/" >/dev/null
-docker cp "${JETSON_WS}/src/livox_ros_driver2" "${CONTAINER}:/ros2_ws/ugv_ws/src/" >/dev/null
+docker exec "${CONTAINER}" mkdir -p /ros2_ws/ros2_ws5/src
+docker exec "${CONTAINER}" rm -rf /ros2_ws/ros2_ws5/src/Livox-SDK2 /ros2_ws/ros2_ws5/src/livox_ros_driver2
+docker cp "${JETSON_WS}/src/Livox-SDK2" "${CONTAINER}:/ros2_ws/ros2_ws5/src/" >/dev/null
+docker cp "${JETSON_WS}/src/livox_ros_driver2" "${CONTAINER}:/ros2_ws/ros2_ws5/src/" >/dev/null
 
 echo "[JETSON] normalizing livox_ros_driver2 ROS 2 package files"
 docker exec "${CONTAINER}" bash -lc '
 set -euo pipefail
-cd /ros2_ws/ugv_ws/src/livox_ros_driver2
+cd /ros2_ws/ros2_ws5/src/livox_ros_driver2
 if [ -f package_ROS2.xml ]; then
   cp package_ROS2.xml package.xml
 fi
@@ -188,7 +188,7 @@ fi
 docker exec "${CONTAINER}" bash -lc "
 env -i HOME=/root USER=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin LD_LIBRARY_PATH=/usr/local/lib bash -lc '
 set -eo pipefail
-cd /ros2_ws/ugv_ws
+cd /ros2_ws/ros2_ws5
 source /opt/ros/humble/setup.bash
 colcon --log-base log_docker build \
   --build-base build_docker \
@@ -201,7 +201,7 @@ colcon --log-base log_docker build \
 echo "[JETSON] verifying Livox ROS package and message interface"
 docker exec "${CONTAINER}" bash -lc '
 set -eo pipefail
-cd /ros2_ws/ugv_ws
+cd /ros2_ws/ros2_ws5
 source /opt/ros/humble/install/setup.bash
 source /opt/ros/humble/setup.bash
 source install_docker/setup.bash
@@ -219,5 +219,5 @@ REMOTE
 
 echo "[LOCAL] LIVOX_MID360_DOCKER_READY=YES"
 echo "[LOCAL] Real LiDAR/Nav2 backend command:"
-echo "  cd ~/ugv_ws/FSD_Vehicle"
+echo "  cd ~/ros2_ws5/FSD_Vehicle"
 echo "  START_LIVOX_DRIVER=true bash scripts/waver_field_lidar_nav_backend_start.sh"

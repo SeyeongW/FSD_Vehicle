@@ -32,7 +32,7 @@ explicitly asks for field-control work.
 ## 1. Bench Preflight
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 bash scripts/waver_quality_gate.sh --no-hardware --skip-build --skip-colcon-test

@@ -43,7 +43,7 @@ def _launch_setup(context, *args, **kwargs):
     ugv_description_parent = os.path.dirname(get_package_share_directory("ugv_description"))
     gazebo_ros_prefix = _package_prefix("gazebo_ros")
     gazebo_ros_lib = os.path.join(gazebo_ros_prefix, "lib") if gazebo_ros_prefix else ""
-    ws_root = os.path.expanduser("~/ugv_ws/FSD_Vehicle")
+    ws_root = os.path.expanduser("~/ros2_ws5/FSD_Vehicle")
 
     gazebo_model_path = ":".join(
         p
@@ -365,12 +365,12 @@ def generate_launch_description():
             DeclareLaunchArgument("demo_close_on_finish", default_value="false"),
             DeclareLaunchArgument(
                 "map",
-                default_value=os.path.expanduser("~/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml"),
+                default_value=os.path.expanduser("~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml"),
             ),
             DeclareLaunchArgument(
                 "nav2_params_file",
                 default_value=os.path.expanduser(
-                    "~/ugv_ws/FSD_Vehicle/src/ugv_main/ugv_gazebo/param/amcl_dwa.yaml"
+                    "~/ros2_ws5/FSD_Vehicle/src/ugv_main/ugv_gazebo/param/amcl_dwa.yaml"
                 ),
             ),
             DeclareLaunchArgument("nav2_log_level", default_value="warn"),

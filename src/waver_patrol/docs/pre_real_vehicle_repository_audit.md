@@ -1,6 +1,6 @@
 # Waver Pre-Real Repository Audit
 
-Workspace: `~/ugv_ws/FSD_Vehicle`
+Workspace: `~/ros2_ws5/FSD_Vehicle`
 Repository branch checked during this audit: `jo`
 
 ## Build-Visible Packages
@@ -14,7 +14,7 @@ Repository branch checked during this audit: `jo`
 | `ugv_tools` | `src/ugv_main/ugv_tools` | Keyboard tools, visual remote panel | `waver_operator_panel.launch.py` | `waver_remote_panel` | `/map`, `/plan`, `/odom`, mission state | `/waver/manual_cmd_vel`, `/waver/mode`, E-stop topics | launch params | Built in focused pass | Operator panel must not publish final `/cmd_vel` by default |
 | `ugv_vision` | `src/ugv_main/ugv_vision` | Camera/detection integration placeholder | vision launch files if present | camera/vision nodes | camera images | detection/classification topics | package config | Not rebuilt in focused Gazebo pass | Real detector is still external/stubbed |
 | `waver_patrol` | `src/waver_patrol` | Waver mission, safety, target, logging, Gazebo validation | mission/Gazebo/pre-real launch files | mission manager, safety mux, target transform/filter, loggers | `/waver/lidar_objects`, `/odom`, `/scan`, `/waver/mode` | `/cmd_vel`, `/waver/*` mission/log topics | `config/*.yaml`, `waypoints/*.yaml` | Built in focused pass | Real robot gate requires live scan, TF, localization |
-| `pcd_cluster_pkg` | Not found in active tree; archive copy exists under `~/ugv_ws/FSD_Vehicle` | Legacy/alternate PointCloud cluster package | N/A in active build | archive `cluster_node.py` | PointCloud2 | cluster centers | package config | Not active | Active tree uses `pointcloud_lidar_objects_node.py`; do not let any cluster node publish `/cmd_vel` |
+| `pcd_cluster_pkg` | Not found in active tree; archive copy exists under `~/ros2_ws5/FSD_Vehicle` | Legacy/alternate PointCloud cluster package | N/A in active build | archive `cluster_node.py` | PointCloud2 | cluster centers | package config | Not active | Active tree uses `pointcloud_lidar_objects_node.py`; do not let any cluster node publish `/cmd_vel` |
 
 ## Important File Locations
 
@@ -41,4 +41,4 @@ Full workspace builds may expose unrelated third-party package conflicts in `ugv
 
 ## Cluster Package Note
 
-`pcd_cluster_pkg/cluster_node.py` was requested, but no `pcd_cluster_pkg` or `cluster_node.py` exists in the active local `jo` tree. An archive copy exists at `~/ugv_ws/FSD_Vehicle/src/ugv_main/pcd_cluster_pkg`. The active real-robot path is `waver_patrol/perception/pointcloud_lidar_objects_node.py`, which converts `sensor_msgs/msg/PointCloud2` into `/waver/lidar_objects` and never publishes `/cmd_vel`. If `pcd_cluster_pkg` is restored later, it must publish perception topics only and must not publish `/cmd_vel`.
+`pcd_cluster_pkg/cluster_node.py` was requested, but no `pcd_cluster_pkg` or `cluster_node.py` exists in the active local `jo` tree. An archive copy exists at `~/ros2_ws5/FSD_Vehicle/src/ugv_main/pcd_cluster_pkg`. The active real-robot path is `waver_patrol/perception/pointcloud_lidar_objects_node.py`, which converts `sensor_msgs/msg/PointCloud2` into `/waver/lidar_objects` and never publishes `/cmd_vel`. If `pcd_cluster_pkg` is restored later, it must publish perception topics only and must not publish `/cmd_vel`.

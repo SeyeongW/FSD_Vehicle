@@ -12,10 +12,10 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all,compute,video
       - SERIAL_PORT=${SERIAL_PORT_JETSON}
-      - UGV_WS_PATH=/ros2_ws/ugv_ws
+      - ROS2_WS5_PATH=/ros2_ws/ros2_ws5
     volumes:
       # 전체 워크스페이스 마운트
-      - .:/ros2_ws/ugv_ws
+      - .:/ros2_ws/ros2_ws5
       # 실제 센서 접근 (Livox 라이다, 카메라 등)
       - /dev:/dev
       # udev 규칙 지원 (장치 핫플러그 감지)
@@ -29,4 +29,4 @@ services:
     privileged: true
     stdin_open: true
     tty: true
-    working_dir: /ros2_ws/ugv_ws
+    working_dir: /ros2_ws/ros2_ws5

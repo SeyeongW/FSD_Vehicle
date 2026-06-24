@@ -29,7 +29,7 @@ class SeoMechanismTrialLoggerNode(Node):
 
     def __init__(self) -> None:
         super().__init__("seo_mechanism_trial_logger_node")
-        self.declare_parameter("output_root", "/home/chotaehyun/ugv_ws/FSD_Vehicle/experiment_results/gazebo_bird_patrol")
+        self.declare_parameter("output_root", "/home/chotaehyun/ros2_ws5/FSD_Vehicle/experiment_results/gazebo_bird_patrol")
         self.declare_parameter("trial_id", "gazebo_seo_bird_patrol")
         self.declare_parameter("run_id", "")
         self.declare_parameter("run_dir", "")

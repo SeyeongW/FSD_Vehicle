@@ -197,7 +197,7 @@ class ServiceHandler(Node):
         return process
         
     def load_map(self, req, res):
-        ws_path = os.environ.get('UGV_WS_PATH', '/ros2_ws/ugv_ws')
+        ws_path = os.environ.get('ROS2_WS5_PATH', '/ros2_ws/ros2_ws5')
         file_path = os.path.join(ws_path, 'src/ugv_main/ugv_nav/maps/map_server_params.yaml')
         topic = req.topic
         try:
@@ -226,7 +226,7 @@ class ServiceHandler(Node):
 
         
     def save_map(self, req, res):
-        ws_path = os.environ.get('UGV_WS_PATH', '/ros2_ws/ugv_ws')
+        ws_path = os.environ.get('ROS2_WS5_PATH', '/ros2_ws/ros2_ws5')
         file_path = os.path.join(ws_path, 'src/ugv_main/ugv_nav/maps/map')
         topic = req.topic
         try:

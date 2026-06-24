@@ -13,7 +13,7 @@ Purpose:
 Commands:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
@@ -46,8 +46,8 @@ Mapping Mode must not trigger target navigation. Elevated target candidates may 
 ## Map Save
 
 ```bash
-mkdir -p ~/ugv_ws/FSD_Vehicle/maps
-ros2 run nav2_map_server map_saver_cli -f ~/ugv_ws/FSD_Vehicle/maps/patrol_map
+mkdir -p ~/ros2_ws5/FSD_Vehicle/maps
+ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws5/FSD_Vehicle/maps/patrol_map
 ```
 
 ## Saved-Map Patrol Mode
@@ -64,7 +64,7 @@ Commands:
 
 ```bash
 ros2 launch waver_patrol waver_localization.launch.py \
-  map:=~/ugv_ws/FSD_Vehicle/maps/patrol_map.yaml \
+  map:=~/ros2_ws5/FSD_Vehicle/maps/patrol_map.yaml \
   use_rviz:=true
 ```
 
@@ -74,7 +74,7 @@ or existing Nav2 wrapper:
 ros2 launch ugv_nav nav.launch.py \
   use_localization:=amcl \
   use_localplan:=teb \
-  map:=~/ugv_ws/FSD_Vehicle/maps/patrol_map.yaml
+  map:=~/ros2_ws5/FSD_Vehicle/maps/patrol_map.yaml
 ```
 
 Operator panel:

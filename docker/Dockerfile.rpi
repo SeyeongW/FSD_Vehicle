@@ -86,14 +86,14 @@ RUN set -eux; \
     rm -rf /tmp/hailo
 
 # ── 6. Workspace ───────────────────────────────────────────
-RUN mkdir -p /ros2_ws/ugv_ws/src
-WORKDIR /ros2_ws/ugv_ws
+RUN mkdir -p /ros2_ws/ros2_ws5/src
+WORKDIR /ros2_ws/ros2_ws5
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc \
-    && echo "if [ -f /ros2_ws/ugv_ws/install/setup.bash ]; then source /ros2_ws/ugv_ws/install/setup.bash; fi" >> /root/.bashrc \
+    && echo "if [ -f /ros2_ws/ros2_ws5/install/setup.bash ]; then source /ros2_ws/ros2_ws5/install/setup.bash; fi" >> /root/.bashrc \
     && echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc
 
 ENTRYPOINT ["/entrypoint.sh"]

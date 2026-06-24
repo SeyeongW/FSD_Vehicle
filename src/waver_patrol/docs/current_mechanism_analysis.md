@@ -62,7 +62,7 @@ The panel defaults to `publish_direct_cmd_vel=false`, so it publishes manual mot
 All new validation scripts default to:
 
 ```text
-~/ugv_ws/FSD_Vehicle/experiments_result
+~/ros2_ws5/FSD_Vehicle/experiments_result
 ```
 
 `waver_experiments*` is treated as a legacy output path and should not be used

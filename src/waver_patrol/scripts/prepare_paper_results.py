@@ -358,8 +358,8 @@ def make_plots(tables_dir: Path, figures_dir: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Prepare paper-ready Waver experiment tables, plots, and report")
-    parser.add_argument("--input-dir", default="~/ugv_ws/FSD_Vehicle/experiments_result")
-    parser.add_argument("--output-root", default="~/ugv_ws/FSD_Vehicle/experiments_result/paper_ready")
+    parser.add_argument("--input-dir", default="~/ros2_ws5/FSD_Vehicle/experiments_result")
+    parser.add_argument("--output-root", default="~/ros2_ws5/FSD_Vehicle/experiments_result/paper_ready")
     parser.add_argument("--name", default="")
     parser.add_argument("--no-latest", action="store_true", help="Do not update paper_ready/latest symlink")
     args = parser.parse_args()

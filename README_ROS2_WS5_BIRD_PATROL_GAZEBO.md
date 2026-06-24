@@ -1,6 +1,6 @@
 # UGV WS Gazebo Bird Patrol Integration
 
-Workspace: `/home/chotaehyun/ugv_ws/FSD_Vehicle`
+Workspace: `/home/chotaehyun/ros2_ws5/FSD_Vehicle`
 
 Branch: `jo`
 
@@ -21,7 +21,7 @@ The implemented Gazebo mechanism is:
 ## Build
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 
 colcon build --symlink-install --packages-select \
@@ -38,7 +38,7 @@ test -f install/ros2_livox_simulation/lib/libros2_livox.so
 Headless smoke run:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 USE_GUI=false ENABLE_RVIZ=false START_REMOTE_PANEL=true SKIP_BUILD=true TIMEOUT_SEC=260 RANDOM_SEED=530 \
   bash scripts/run_gazebo_lidar_spatial_visual_experiment.sh
 ```
@@ -46,7 +46,7 @@ USE_GUI=false ENABLE_RVIZ=false START_REMOTE_PANEL=true SKIP_BUILD=true TIMEOUT_
 Gazebo GUI and RViz:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 USE_GUI=true ENABLE_RVIZ=true START_REMOTE_PANEL=true SKIP_BUILD=true TIMEOUT_SEC=260 RANDOM_SEED=530 \
   bash scripts/run_gazebo_lidar_spatial_visual_experiment.sh
 ```
@@ -94,7 +94,7 @@ simple_nav2_cmd_sim_node or target/body command source
 ## Verification Commands
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 unset ROS_DOMAIN_ID

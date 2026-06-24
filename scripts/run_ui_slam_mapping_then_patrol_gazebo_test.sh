@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "${WAVER_UGV_WS_ROOT:-$HOME/ugv_ws/FSD_Vehicle}"
+cd "${WAVER_ROS2_WS5_ROOT:-$HOME/ros2_ws5/FSD_Vehicle}"
 set +u
 source /opt/ros/humble/setup.bash
 source install/setup.bash
@@ -23,7 +23,7 @@ timeout --foreground "${WAVER_UI_SLAM_PATROL_TIMEOUT:-330}" \
     start_remote_panel:=true \
     remote_panel_demo_script:="${WAVER_REMOTE_PANEL_DEMO:-mapping_full_coverage}" \
     demo_close_on_finish:=true \
-    save_dir:="$HOME/ugv_ws/FSD_Vehicle/maps" \
+    save_dir:="$HOME/ros2_ws5/FSD_Vehicle/maps" \
   2>&1 | tee "log/ui_slam/mapping_then_patrol_$(date +%Y%m%d_%H%M%S).log"
 status=${PIPESTATUS[0]}
 set -e
@@ -32,5 +32,5 @@ if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
 fi
 
 python3 scripts/check_remote_ui_slam_mapping_result.py \
-  --map-yaml "$HOME/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml" \
+  --map-yaml "$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml" \
   --skip-graph

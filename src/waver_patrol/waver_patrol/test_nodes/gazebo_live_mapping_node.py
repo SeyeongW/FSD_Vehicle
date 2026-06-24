@@ -23,7 +23,7 @@ class GazeboLiveMappingNode(Node):
     역할:
       - `ugv_world.world` 기반 Gazebo 검증에서 `/map`이 실제 SLAM처럼 변하는지 UI를 시험한다.
       - 기존 `ugv_gazebo/maps/map.yaml`을 ground-truth map으로 읽고, 시간에 따라 알려진 영역을 늘린다.
-      - `SAVE_MAP` 명령을 받거나 reveal이 끝나면 `~/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml`로 저장한다.
+      - `SAVE_MAP` 명령을 받거나 reveal이 끝나면 `~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml`로 저장한다.
       - 저장 후 같은 `/map`에 full map을 계속 publish하여 리모콘 UI가 즉시 새 map을 보게 한다.
 
     주의:
@@ -47,7 +47,7 @@ class GazeboLiveMappingNode(Node):
         self.declare_parameter("auto_start", True)
         self.declare_parameter("auto_save_on_complete", False)
         self.declare_parameter("auto_apply_on_save", False)
-        self.declare_parameter("save_dir", "~/ugv_ws/FSD_Vehicle/maps")
+        self.declare_parameter("save_dir", "~/ros2_ws5/FSD_Vehicle/maps")
         self.declare_parameter("save_basename", "waver_latest_map")
 
         qos = QoSProfile(

@@ -59,7 +59,7 @@ Required changes:
 
 - publish `SAVE_MAP`;
 - require a live map;
-- save to `~/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml` plus archive copy;
+- save to `~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml` plus archive copy;
 - publish `/waver/map_saved_path`;
 - set `/waver/map_apply_state=MAP_SAVED_NOT_APPLIED`;
 - not apply the map automatically.
@@ -143,7 +143,7 @@ Success criteria:
 - WASD/manual demo publishes `/waver/manual_cmd_vel`.
 - safety mux is the final `/cmd_vel` publisher.
 - live `/map` appears.
-- `SAVE_MAP` creates `~/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml`.
+- `SAVE_MAP` creates `~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml`.
 - `APPLY_FIXED_MAP` republishes fixed `/map` and sets `MAP_FIXED_READY`.
 - The UI remains alive and shows map/pose/path/status.
 

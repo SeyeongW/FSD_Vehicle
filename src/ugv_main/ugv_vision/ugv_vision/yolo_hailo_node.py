@@ -97,7 +97,7 @@ class YoloHailoNode(Node):
 
         self.declare_parameter('image_topic', '/camera/image/compressed')
         self.declare_parameter('detections_topic', '/camera/detections')
-        self.declare_parameter('hef_path', '/ros2_ws/ugv_ws/models/yolov8n.hef')
+        self.declare_parameter('hef_path', '/ros2_ws/ros2_ws5/models/yolov8n.hef')
         self.declare_parameter('cpu_model_path', 'yolov8n.pt')
         self.declare_parameter('conf_thresh', 0.4)
         self.declare_parameter('target_classes', [0])  # COCO id 0 = person

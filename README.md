@@ -3,7 +3,7 @@
 Workspace for this release:
 
 ```bash
-WORKSPACE_ROOT=$HOME/ugv_ws/FSD_Vehicle
+WORKSPACE_ROOT=$HOME/ros2_ws5/FSD_Vehicle
 cd $WORKSPACE_ROOT
 git branch --show-current   # must be jo
 ```
@@ -15,7 +15,7 @@ Real wheel-on is not allowed until strict preflight and wheel-off checks pass.
 ## Build And Static Checks
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 
 bash src/waver_patrol/scripts/waver_duplicate_package_check.sh
@@ -47,7 +47,7 @@ bash src/waver_patrol/scripts/waver_clean_graph_check.sh
 Terminal 1:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -59,13 +59,13 @@ ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
   mapping_backend:=scan_mapper \
   scan_source_slam:=gazebo_laser \
   scan_source_safety:=gazebo_laser \
-  save_dir:=$HOME/ugv_ws/FSD_Vehicle/maps
+  save_dir:=$HOME/ros2_ws5/FSD_Vehicle/maps
 ```
 
 Terminal 2:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -85,7 +85,7 @@ Map quality check:
 
 ```bash
 python3 src/waver_patrol/scripts/waver_map_quality_check.py \
-  ~/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml
+  ~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml
 ```
 
 ## Gazebo Bird Autonomy Simulation
@@ -95,7 +95,7 @@ camera topics, bird models, Gazebo-only classification/sound stubs, and the
 safety mux command chain.
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -133,7 +133,7 @@ Gazebo-only fake/stub publishers are allowed here, but real launch blocks them.
 ## Three-Trial Gazebo Run
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -156,7 +156,7 @@ done
 ```
 
 For paper data, keep raw logs, CSV files, maps, screenshots, and rosbag outputs
-under `~/ugv_ws/FSD_Vehicle/experiments_result`.
+under `~/ros2_ws5/FSD_Vehicle/experiments_result`.
 
 ## Topic Authority Checks
 
@@ -189,7 +189,7 @@ LiDAR dynamic candidate or 3D fusion validity. Sound is blocked until
 ## Real Vehicle Dry-Run
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -202,7 +202,7 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   scan_source_safety:=mid360 \
   scan_source_slam:=mid360 \
   odom_source:=ekf \
-  map:=$HOME/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
+  map:=$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml \
   bird_model_path:=$HOME/models/bird_yolo.pt
 ```
 
@@ -222,7 +222,7 @@ camera-only goal generation is blocked
 Only run with the robot lifted or drive wheels disconnected.
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -235,7 +235,7 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   default_mode:=STANDBY \
   safety_max_linear_speed:=0.05 \
   safety_max_angular_speed:=0.20 \
-  map:=$HOME/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
+  map:=$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml \
   bird_model_path:=$HOME/models/bird_yolo.pt
 ```
 

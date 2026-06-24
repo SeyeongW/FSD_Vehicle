@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WS="${WS:-$HOME/ugv_ws/FSD_Vehicle}"
+WS="${WS:-$HOME/ros2_ws5/FSD_Vehicle}"
 TRIALS="${TRIALS:-10}"
 BASE_DOMAIN="${ROS_DOMAIN_ID:-50}"
 TIMEOUT_SEC="${TIMEOUT_SEC:-420}"

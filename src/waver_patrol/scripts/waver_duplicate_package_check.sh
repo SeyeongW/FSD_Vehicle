@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WS="${1:-${WAVER_WS:-$HOME/ugv_ws/FSD_Vehicle}}"
+WS="${1:-${WAVER_WS:-$HOME/ros2_ws5/FSD_Vehicle}}"
 cd "$WS"
 
 if [ -f /opt/ros/humble/setup.bash ]; then

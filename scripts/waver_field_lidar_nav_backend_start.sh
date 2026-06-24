@@ -19,23 +19,23 @@ fi
 JETSON_HOST="${JETSON_HOST:-10.139.225.150}"
 JETSON_USER="${JETSON_USER:-sw}"
 JETSON_PASS="${JETSON_PASS:-}"
-JETSON_WS="${JETSON_WS:-/home/sw/ugv_ws/FSD_Vehicle}"
+JETSON_WS="${JETSON_WS:-/home/sw/ros2_ws5/FSD_Vehicle}"
 JETSON_HOST_AUTO="${JETSON_HOST_AUTO:-true}"
 JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST} 10.139.225.150 10.63.240.150 10.139.225.126}"
 CONTAINER="${CONTAINER:-fsd_dev_jetson}"
 SERIAL_PORT="${SERIAL_PORT:-auto}"
 FIELD_BUILD_IN_DOCKER="${FIELD_BUILD_IN_DOCKER:-false}"
 
-MAP_PATH="${MAP_PATH:-/ros2_ws/ugv_ws/maps/waver_latest_map.yaml}"
-WAYPOINT_FILE="${WAYPOINT_FILE:-/ros2_ws/ugv_ws/src/waver_patrol/waypoints/waver_real_0p5m_square_patrol.yaml}"
-MISSION_PARAMS_FILE="${MISSION_PARAMS_FILE:-/ros2_ws/ugv_ws/src/waver_patrol/config/waver_nav2_radar_bird_mission_real.yaml}"
-NAV2_PARAMS_FILE="${NAV2_PARAMS_FILE:-/ros2_ws/ugv_ws/src/waver_patrol/config/nav2_params_waver_real.yaml}"
+MAP_PATH="${MAP_PATH:-/ros2_ws/ros2_ws5/maps/waver_latest_map.yaml}"
+WAYPOINT_FILE="${WAYPOINT_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/waypoints/waver_real_0p5m_square_patrol.yaml}"
+MISSION_PARAMS_FILE="${MISSION_PARAMS_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/config/waver_nav2_radar_bird_mission_real.yaml}"
+NAV2_PARAMS_FILE="${NAV2_PARAMS_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/config/nav2_params_waver_real.yaml}"
 ODOM_SOURCE="${ODOM_SOURCE:-base}"
 POINTCLOUD_TOPIC="${POINTCLOUD_TOPIC:-/mid360_PointCloud2}"
 SCAN_TOPIC="${SCAN_TOPIC:-/scan}"
 START_LIVOX_DRIVER="${START_LIVOX_DRIVER:-true}"
 LIVOX_TOPIC="${LIVOX_TOPIC:-${POINTCLOUD_TOPIC}}"
-LIVOX_CONFIG_PATH="${LIVOX_CONFIG_PATH:-/ros2_ws/ugv_ws/install_docker/livox_ros_driver2/share/livox_ros_driver2/config/MID360_config.json}"
+LIVOX_CONFIG_PATH="${LIVOX_CONFIG_PATH:-/ros2_ws/ros2_ws5/install_docker/livox_ros_driver2/share/livox_ros_driver2/config/MID360_config.json}"
 LIVOX_FRAME_ID="${LIVOX_FRAME_ID:-livox_frame}"
 LIVOX_PUBLISH_FREQ="${LIVOX_PUBLISH_FREQ:-10.0}"
 LIVOX_BD_CODE="${LIVOX_BD_CODE:-livox0000000001}"
@@ -172,15 +172,15 @@ if ! docker ps --format '{{.Names}}' | grep -qx "${CONTAINER}"; then
 fi
 
 if [ -d "${JETSON_WS}/maps" ]; then
-  docker exec "${CONTAINER}" mkdir -p /ros2_ws/ugv_ws/maps
-  docker cp "${JETSON_WS}/maps/." "${CONTAINER}:/ros2_ws/ugv_ws/maps/" >/dev/null 2>&1 || true
+  docker exec "${CONTAINER}" mkdir -p /ros2_ws/ros2_ws5/maps
+  docker cp "${JETSON_WS}/maps/." "${CONTAINER}:/ros2_ws/ros2_ws5/maps/" >/dev/null 2>&1 || true
 fi
 
 if [ "${FIELD_BUILD_IN_DOCKER}" = "true" ]; then
   echo "[JETSON] building selected packages inside Docker"
   docker exec "${CONTAINER}" bash -lc '
   set -eo pipefail
-  cd /ros2_ws/ugv_ws
+  cd /ros2_ws/ros2_ws5
   source /opt/ros/humble/setup.bash
   colcon --log-base log_docker build \
     --build-base build_docker \
@@ -192,7 +192,7 @@ fi
 echo "[JETSON] overlaying source launch/config/python into install_docker"
 docker exec "${CONTAINER}" bash -lc '
 set -e
-cd /ros2_ws/ugv_ws
+cd /ros2_ws/ros2_ws5
 if [ -d install_docker/waver_patrol/share/waver_patrol ]; then
   rm -rf install_docker/waver_patrol/share/waver_patrol/launch \
          install_docker/waver_patrol/share/waver_patrol/config \
@@ -232,14 +232,14 @@ fi
 
 if [ "${START_LIVOX_DRIVER}" = "true" ]; then
   echo "[JETSON] checking livox_ros_driver2 inside Docker"
-  if ! docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${LIVOX_DOCKER_SOURCE} && ros2 pkg prefix livox_ros_driver2 >/dev/null"; then
+  if ! docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${LIVOX_DOCKER_SOURCE} && ros2 pkg prefix livox_ros_driver2 >/dev/null"; then
     echo "[JETSON][ERROR] livox_ros_driver2 is not built in Docker install_docker." >&2
     echo "[JETSON][ERROR] Run: bash scripts/waver_setup_livox_mid360_docker.sh" >&2
     exit 30
   fi
   echo "[JETSON] starting Livox Mid-360 driver: livox/lidar -> ${LIVOX_TOPIC}"
   docker exec -d "${CONTAINER}" bash -lc "
-  cd /ros2_ws/ugv_ws
+  cd /ros2_ws/ros2_ws5
   ${LIVOX_DOCKER_SOURCE}
   exec ros2 run livox_ros_driver2 livox_ros_driver2_node --ros-args \
     -p xfer_format:=0 \
@@ -262,7 +262,7 @@ echo "[JETSON] waypoints=${WAYPOINT_FILE}"
 echo "[JETSON] serial=${SERIAL_PORT} odom_source=${ODOM_SOURCE} pointcloud=${POINTCLOUD_TOPIC} scan=${SCAN_TOPIC}"
 
 docker exec -d "${CONTAINER}" bash -lc "
-cd /ros2_ws/ugv_ws
+cd /ros2_ws/ros2_ws5
 ${DOCKER_SOURCE}
 exec ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   use_sim_time:=false \
@@ -306,7 +306,7 @@ exec ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
 
 echo "[JETSON] waiting for backend graph"
 for _ in $(seq 1 25); do
-  nodes="$(docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && ros2 node list 2>/dev/null" || true)"
+  nodes="$(docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && ros2 node list 2>/dev/null" || true)"
   if grep -q "/waver_base_driver_node" <<<"${nodes}" && grep -q "/safety_cmd_mux_node" <<<"${nodes}" && grep -q "/mission_patrol_manager_node" <<<"${nodes}"; then
     break
   fi
@@ -314,33 +314,33 @@ for _ in $(seq 1 25); do
 done
 
 echo "[JETSON] ROS nodes:"
-docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && ros2 node list 2>/dev/null | sort" || true
+docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && ros2 node list 2>/dev/null | sort" || true
 
 echo "[JETSON] /cmd_vel chain:"
-docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && ros2 topic info -v /cmd_vel" || true
+docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && ros2 topic info -v /cmd_vel" || true
 
 if [ "${START_LIVOX_DRIVER}" = "true" ]; then
   echo "[JETSON] Livox Mid-360 package:"
-  docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${LIVOX_DOCKER_SOURCE} && ros2 pkg prefix livox_ros_driver2" || true
+  docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${LIVOX_DOCKER_SOURCE} && ros2 pkg prefix livox_ros_driver2" || true
   echo "[JETSON] ${LIVOX_TOPIC} topic:"
-  docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${LIVOX_DOCKER_SOURCE} && ros2 topic info -v ${LIVOX_TOPIC}" || true
+  docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${LIVOX_DOCKER_SOURCE} && ros2 topic info -v ${LIVOX_TOPIC}" || true
   echo "[JETSON] Livox driver log:"
   docker exec "${CONTAINER}" bash -lc "tail -80 /tmp/waver_livox_mid360_driver.log 2>/dev/null || true" || true
 fi
 
 echo "[JETSON] base driver state:"
-docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && timeout 5 ros2 topic echo --once --full-length /waver/base_driver_state" || true
+docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && timeout 5 ros2 topic echo --once --full-length /waver/base_driver_state" || true
 
 echo "[JETSON] scan sample:"
-docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && timeout 5 ros2 topic echo --once ${SCAN_TOPIC}" >/tmp/waver_lidar_nav_scan_check.log 2>&1 || true
+docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && timeout 5 ros2 topic echo --once ${SCAN_TOPIC}" >/tmp/waver_lidar_nav_scan_check.log 2>&1 || true
 tail -40 /tmp/waver_lidar_nav_scan_check.log || true
 
 echo "[JETSON] odom sample:"
-docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && timeout 5 ros2 topic echo --once /odom" >/tmp/waver_lidar_nav_odom_check.log 2>&1 || true
+docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && timeout 5 ros2 topic echo --once /odom" >/tmp/waver_lidar_nav_odom_check.log 2>&1 || true
 tail -60 /tmp/waver_lidar_nav_odom_check.log || true
 
 echo "[JETSON] mode and safety:"
-docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && timeout 3 ros2 topic echo --once /waver/mode || true && timeout 3 ros2 topic echo --once /waver/safety_state || true" || true
+docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && timeout 3 ros2 topic echo --once /waver/mode || true && timeout 3 ros2 topic echo --once /waver/safety_state || true" || true
 
 echo "[JETSON] serial owner after launch:"
 fuser -v "${SERIAL_PORT}" 2>&1 || true
@@ -350,5 +350,5 @@ REMOTE
 
 echo "[LOCAL] LIDAR_NAV_BACKEND_READY=YES"
 echo "[LOCAL] Open the local UI in another terminal:"
-echo "  cd ~/ugv_ws/FSD_Vehicle"
+echo "  cd ~/ros2_ws5/FSD_Vehicle"
 echo "  JETSON_HOST=${JETSON_HOST} bash scripts/waver_field_local_ui_start.sh"

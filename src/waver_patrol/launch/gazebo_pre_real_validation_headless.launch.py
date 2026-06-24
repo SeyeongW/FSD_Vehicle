@@ -25,7 +25,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_trial_logger", default_value="false"),
             DeclareLaunchArgument("enable_fake_camera_detection", default_value="true"),
             DeclareLaunchArgument("record_bag", default_value="false"),
-            DeclareLaunchArgument("output_root", default_value="~/ugv_ws/FSD_Vehicle/experiments_result"),
+            DeclareLaunchArgument("output_root", default_value="~/ros2_ws5/FSD_Vehicle/experiments_result"),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(pre_real_launch),
                 launch_arguments={

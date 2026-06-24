@@ -21,7 +21,7 @@ def _find_script(filename: str, pkg_share: str) -> str:
     if os.path.isfile(candidate):
         return candidate
 
-    ws_src = os.path.expanduser('~/ugv_ws/src')
+    ws_src = os.path.expanduser('~/ros2_ws5/src')
     matches = _glob.glob(os.path.join(ws_src, '**', filename), recursive=True)
     if matches:
         return matches[0]
@@ -55,7 +55,7 @@ def generate_launch_description():
     spawn_robot = LaunchConfiguration('spawn_robot', default='true')
     enable_bird_manager = LaunchConfiguration('enable_bird_manager', default='true')
     enable_trial_logger = LaunchConfiguration('enable_trial_logger', default='false')
-    trial_log_dir = LaunchConfiguration('trial_log_dir', default='~/ugv_ws/bird_patrol_data')
+    trial_log_dir = LaunchConfiguration('trial_log_dir', default='~/ros2_ws5/bird_patrol_data')
     trial_session_name = LaunchConfiguration('trial_session_name', default='bird_patrol_10m')
 
     gazebo_model_database_uri = SetEnvironmentVariable(
@@ -187,7 +187,7 @@ def generate_launch_description():
     ld.add_action(DeclareLaunchArgument('robot_spawn_z', default_value='0.15'))
     ld.add_action(DeclareLaunchArgument('enable_bird_manager', default_value='true'))
     ld.add_action(DeclareLaunchArgument('enable_trial_logger', default_value='false'))
-    ld.add_action(DeclareLaunchArgument('trial_log_dir', default_value='~/ugv_ws/bird_patrol_data'))
+    ld.add_action(DeclareLaunchArgument('trial_log_dir', default_value='~/ros2_ws5/bird_patrol_data'))
     ld.add_action(DeclareLaunchArgument('trial_session_name', default_value='bird_patrol_10m'))
     ld.add_action(gazebo_model_database_uri)
     ld.add_action(gazebo_model_path)

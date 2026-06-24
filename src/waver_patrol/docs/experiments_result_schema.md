@@ -3,7 +3,7 @@
 All pre-real validation outputs default to:
 
 ```text
-~/ugv_ws/FSD_Vehicle/experiments_result/
+~/ros2_ws5/FSD_Vehicle/experiments_result/
 ```
 
 This directory is ignored by Git because it can contain rosbag databases, plots,
@@ -104,12 +104,12 @@ tables, figures, and report from raw repeated trial folders.
 Use `scripts/record_waver_experiment_bag.sh` or:
 
 ```bash
-mkdir -p ~/ugv_ws/FSD_Vehicle/experiments_result/manual_rosbag
+mkdir -p ~/ros2_ws5/FSD_Vehicle/experiments_result/manual_rosbag
 ros2 bag record /tf /tf_static /map /odom /plan /local_plan /cmd_vel \
   /waver/manual_cmd_vel /waver/cmd_vel_nav2 \
   /waver/lidar_objects /waver/lidar_objects_map /waver/elevated_dynamic_targets \
   /waver/mission_state /waver/safety_state \
-  -o ~/ugv_ws/FSD_Vehicle/experiments_result/manual_rosbag/pre_real_validation
+  -o ~/ros2_ws5/FSD_Vehicle/experiments_result/manual_rosbag/pre_real_validation
 ```
 
 Do not commit `.db3`, `.mcap`, or `rosbag/` directories.
@@ -119,9 +119,9 @@ Do not commit `.db3`, `.mcap`, or `rosbag/` directories.
 After running H1/H2/H3 and UI checks, generate the cleaned paper package:
 
 ```bash
-python3 ~/ugv_ws/FSD_Vehicle/src/waver_patrol/scripts/prepare_paper_results.py \
-  --input-dir ~/ugv_ws/FSD_Vehicle/experiments_result \
-  --output-root ~/ugv_ws/FSD_Vehicle/experiments_result/paper_ready
+python3 ~/ros2_ws5/FSD_Vehicle/src/waver_patrol/scripts/prepare_paper_results.py \
+  --input-dir ~/ros2_ws5/FSD_Vehicle/experiments_result \
+  --output-root ~/ros2_ws5/FSD_Vehicle/experiments_result/paper_ready
 ```
 
 The script keeps all raw trials local, selects the latest row for each scenario

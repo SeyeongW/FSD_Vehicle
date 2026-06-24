@@ -42,7 +42,7 @@ export ROS_LOCALHOST_ONLY=0
 이 구성이 현재 Waver 조류탐지 순찰 실증용 기본 구조다.
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=27
@@ -96,7 +96,7 @@ Jetson 하드웨어 경로는 둘 중 하나만 고른다.
 ### 권장 A: 기존 ugv_bringup 사용
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=27
@@ -106,7 +106,7 @@ ros2 launch ugv_tools waver_robot_backend.launch.py \
   use_existing_ugv_bringup:=true \
   existing_ugv_serial_port:=/dev/ttyTHS1 \
   start_serial_bridge:=false \
-  control_config_file:=/home/chotaehyun/ugv_ws/FSD_Vehicle/install/ugv_tools/share/ugv_tools/config/waver_4wd_control.yaml \
+  control_config_file:=/home/chotaehyun/ros2_ws5/FSD_Vehicle/install/ugv_tools/share/ugv_tools/config/waver_4wd_control.yaml \
   require_scan:=true \
   min_valid_scan_points:=40
 ```
@@ -118,7 +118,7 @@ ros2 launch ugv_tools waver_robot_backend.launch.py \
 기존 `ugv_driver` 또는 Waveshare `app.py`가 같은 serial을 사용 중이면 먼저 중지한다.
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=27
@@ -142,15 +142,15 @@ AUTO 버튼은 별도 자율주행 프로세스를 새로 띄우지 않고 `/wav
 따라서 Jetson에서 `waver_patrol waver_nav2_radar_bird_mission.launch.py`가 먼저 실행 중이어야 한다.
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=27
 export ROS_LOCALHOST_ONLY=0
 
 ros2 launch ugv_tools waver_operator_panel.launch.py \
-  control_config_file:=/home/chotaehyun/ugv_ws/FSD_Vehicle/install/ugv_tools/share/ugv_tools/config/waver_4wd_control.yaml \
-  waypoint_file:=/home/chotaehyun/ugv_ws/FSD_Vehicle/install/ugv_tools/share/ugv_tools/waypoints/waver_3m_patrol.yaml \
+  control_config_file:=/home/chotaehyun/ros2_ws5/FSD_Vehicle/install/ugv_tools/share/ugv_tools/config/waver_4wd_control.yaml \
+  waypoint_file:=/home/chotaehyun/ros2_ws5/FSD_Vehicle/install/ugv_tools/share/ugv_tools/waypoints/waver_3m_patrol.yaml \
   require_scan:=true \
   min_valid_scan_points:=40 \
   max_patrol_radius_m:=3.0 \
@@ -169,8 +169,8 @@ Nav2 mission 통합 실증에서는 이 launch 대신 `waver_patrol` backend와 
 ros2 launch ugv_tools waver_real_control.launch.py \
   start_serial_bridge:=true \
   serial_port:=/dev/ttyTHS0 \
-  control_config_file:=/home/chotaehyun/ugv_ws/FSD_Vehicle/install/ugv_tools/share/ugv_tools/config/waver_4wd_control.yaml \
-  waypoint_file:=/home/chotaehyun/ugv_ws/FSD_Vehicle/install/ugv_tools/share/ugv_tools/waypoints/waver_3m_patrol.yaml \
+  control_config_file:=/home/chotaehyun/ros2_ws5/FSD_Vehicle/install/ugv_tools/share/ugv_tools/config/waver_4wd_control.yaml \
+  waypoint_file:=/home/chotaehyun/ros2_ws5/FSD_Vehicle/install/ugv_tools/share/ugv_tools/waypoints/waver_3m_patrol.yaml \
   require_scan:=true \
   min_valid_scan_points:=40 \
   max_patrol_radius_m:=3.0
@@ -208,8 +208,8 @@ ros2 launch ugv_tools waver_gazebo_test.launch.py \
   use_minimal_model:=true \
   gui:=true \
   start_remote_panel:=true \
-  control_config_file:=/home/chotaehyun/ugv_ws/FSD_Vehicle/install/ugv_tools/share/ugv_tools/config/waver_4wd_control.yaml \
-  waypoint_file:=/home/chotaehyun/ugv_ws/FSD_Vehicle/install/ugv_tools/share/ugv_tools/waypoints/waver_3m_patrol.yaml \
+  control_config_file:=/home/chotaehyun/ros2_ws5/FSD_Vehicle/install/ugv_tools/share/ugv_tools/config/waver_4wd_control.yaml \
+  waypoint_file:=/home/chotaehyun/ros2_ws5/FSD_Vehicle/install/ugv_tools/share/ugv_tools/waypoints/waver_3m_patrol.yaml \
   require_scan:=true \
   min_valid_scan_points:=0 \
   max_patrol_radius_m:=3.0

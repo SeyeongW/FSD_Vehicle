@@ -73,7 +73,7 @@ class WaverSpatialResponseLoggerNode(Node):
         super().__init__("waver_spatial_response_logger_node")
         self.declare_parameter(
             "output_root",
-            str(Path.home() / "ugv_ws/FSD_Vehicle/experiment_results/gazebo_bird_patrol"),
+            str(Path.home() / "ros2_ws5/FSD_Vehicle/experiment_results/gazebo_bird_patrol"),
         )
         self.declare_parameter("trial_id", "spatial_response")
         self.declare_parameter("run_id", "")

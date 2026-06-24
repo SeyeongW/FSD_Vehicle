@@ -64,7 +64,7 @@ Gazebo may use fake 3D PoseArray/model-state data for pre-real validation.
 Build first:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 colcon build --packages-select waver_patrol ugv_tools ugv_gazebo --symlink-install
 source install/setup.bash
@@ -78,7 +78,7 @@ ros2 launch waver_patrol gazebo_moving_object_trial.launch.py \
   target_min_height_m:=3.0 \
   min_dynamic_motion_m:=0.2 \
   target_z:=3.2 \
-  world_file:=~/ugv_ws/FSD_Vehicle/install/ugv_gazebo/share/ugv_gazebo/worlds/ugv_world.world \
+  world_file:=~/ros2_ws5/FSD_Vehicle/install/ugv_gazebo/share/ugv_gazebo/worlds/ugv_world.world \
   use_gui:=true \
   enable_cluster_node:=true \
   enable_experiment_logger:=true \
@@ -105,7 +105,7 @@ limits remain in `config/waver_nav2_radar_bird_mission.yaml` and should start at
 Run the 3-trial headless sequence:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 bash src/FSD_Vehicle/src/waver_patrol/scripts/run_gazebo_mission_trials.sh
@@ -148,7 +148,7 @@ Do not commit `experiments_result/rosbag`, `build`, `install`, or `log`.
 Each trial creates:
 
 ```text
-~/ugv_ws/FSD_Vehicle/experiments_result/gazebo_trial_<id>_<timestamp>/
+~/ros2_ws5/FSD_Vehicle/experiments_result/gazebo_trial_<id>_<timestamp>/
   mission_events.csv
   lidar_clusters.csv
   moving_object_tracks.csv
@@ -181,16 +181,16 @@ Analyze all trials:
 
 ```bash
 python3 src/FSD_Vehicle/src/waver_patrol/scripts/analyze_gazebo_trials.py \
-  --input_dir ~/ugv_ws/FSD_Vehicle/experiments_result \
-  --output_dir ~/ugv_ws/FSD_Vehicle/experiments_result/results
+  --input_dir ~/ros2_ws5/FSD_Vehicle/experiments_result \
+  --output_dir ~/ros2_ws5/FSD_Vehicle/experiments_result/results
 ```
 
 Optional plots:
 
 ```bash
 python3 src/FSD_Vehicle/src/waver_patrol/scripts/plot_gazebo_trial_results.py \
-  --input_dir ~/ugv_ws/FSD_Vehicle/experiments_result/results \
-  --output_dir ~/ugv_ws/FSD_Vehicle/experiments_result/results
+  --input_dir ~/ros2_ws5/FSD_Vehicle/experiments_result/results \
+  --output_dir ~/ros2_ws5/FSD_Vehicle/experiments_result/results
 ```
 
 ## Real Robot Gate

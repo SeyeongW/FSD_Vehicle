@@ -30,7 +30,7 @@ class MappingWorkflowManagerNode(Node):
         self.declare_parameter("mapping_command_topic", "/waver/mapping_command")
         self.declare_parameter("mission_command_topic", "/waver/mission_command")
         self.declare_parameter("operator_command_topic", "/waver/operator_command")
-        self.declare_parameter("save_dir", "~/ugv_ws/FSD_Vehicle/maps")
+        self.declare_parameter("save_dir", "~/ros2_ws5/FSD_Vehicle/maps")
         self.declare_parameter("save_basename", "waver_latest_map")
         self.declare_parameter("map_saver_timeout_sec", 30.0)
         self.declare_parameter("use_internal_map_writer", True)

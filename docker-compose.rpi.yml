@@ -10,10 +10,10 @@ services:
       - .env
     environment:
       - SERIAL_PORT=${SERIAL_PORT_RPI}
-      - UGV_WS_PATH=/ros2_ws/ugv_ws
+      - ROS2_WS5_PATH=/ros2_ws/ros2_ws5
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
     volumes:
-      - .:/ros2_ws/ugv_ws
+      - .:/ros2_ws/ros2_ws5
       - /dev:/dev
       - /run/udev:/run/udev:ro
       # Hailo PCIe driver state from host (driver itself stays on the host)
@@ -28,4 +28,4 @@ services:
     privileged: true
     stdin_open: true
     tty: true
-    working_dir: /ros2_ws/ugv_ws
+    working_dir: /ros2_ws/ros2_ws5

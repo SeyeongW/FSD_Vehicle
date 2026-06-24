@@ -3,7 +3,7 @@
 Run this before any wheel-on autonomous test:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 bash src/FSD_Vehicle/src/waver_patrol/scripts/waver_real_preflight_check.sh

@@ -23,7 +23,7 @@ For real wheel-off/wheel-on tests, prefer `enable_waver_base_driver:=true`. It o
 ## Build
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 rosdep install --from-paths FSD_Vehicle/src --ignore-src -r -y
 bash FSD_Vehicle/src/waver_patrol/scripts/waver_duplicate_package_check.sh
@@ -35,7 +35,7 @@ source install/setup.bash
 ## Dry Run, No Serial
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
@@ -46,7 +46,7 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   safety_max_linear_speed:=0.05 \
   scan_source:=mid360 \
   odom_source:=ekf \
-  map:=$HOME/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
+  map:=$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml \
   bird_model_path:=$HOME/models/bird_yolov8n.pt
 ```
 
@@ -89,7 +89,7 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   safety_max_angular_speed:=0.20 \
   scan_source:=mid360 \
   odom_source:=ekf \
-  map:=$HOME/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
+  map:=$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml \
   bird_model_path:=$HOME/models/bird_yolov8n.pt
 ```
 
@@ -109,7 +109,7 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   safety_max_angular_speed:=0.20 \
   scan_source:=mid360 \
   odom_source:=ekf \
-  map:=$HOME/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml \
+  map:=$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml \
   bird_model_path:=$HOME/models/bird_yolov8n.pt
 ```
 

@@ -15,7 +15,7 @@ def _find_script(filename: str, pkg_share: str) -> str:
     if os.path.isfile(candidate):
         return candidate
 
-    ws_src = os.path.expanduser('~/ugv_ws/src')
+    ws_src = os.path.expanduser('~/ros2_ws5/src')
     matches = _glob.glob(os.path.join(ws_src, '**', filename), recursive=True)
     if matches:
         return matches[0]

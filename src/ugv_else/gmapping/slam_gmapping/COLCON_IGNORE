@@ -1,2 +1,2 @@
 This wrapper depends on the excluded bundled openslam_gmapping source.
-Use Waver scan_mapper/slam_toolbox launch paths for ugv_ws mapping.
+Use Waver scan_mapper/slam_toolbox launch paths for ros2_ws5 mapping.

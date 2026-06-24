@@ -14,14 +14,14 @@ fi
 JETSON_HOST="${JETSON_HOST:-10.139.225.150}"
 JETSON_USER="${JETSON_USER:-sw}"
 JETSON_PASS="${JETSON_PASS:-}"
-JETSON_WS="${JETSON_WS:-/home/sw/ugv_ws/FSD_Vehicle}"
+JETSON_WS="${JETSON_WS:-/home/sw/ros2_ws5/FSD_Vehicle}"
 JETSON_HOST_AUTO="${JETSON_HOST_AUTO:-true}"
 JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST} 10.139.225.150 10.63.240.150 10.139.225.126}"
 CONTAINER="${CONTAINER:-fsd_dev_jetson}"
 SERIAL_PORT="${SERIAL_PORT:-auto}"
 FIELD_BUILD_IN_DOCKER="${FIELD_BUILD_IN_DOCKER:-false}"
 PATROL_ALLOW_OPEN_LOOP="${PATROL_ALLOW_OPEN_LOOP:-true}"
-PATROL_WAYPOINT_FILE="${PATROL_WAYPOINT_FILE:-/ros2_ws/ugv_ws/src/ugv_main/ugv_tools/waypoints/waver_0p2m_patrol.yaml}"
+PATROL_WAYPOINT_FILE="${PATROL_WAYPOINT_FILE:-/ros2_ws/ros2_ws5/src/ugv_main/ugv_tools/waypoints/waver_0p2m_patrol.yaml}"
 PATROL_STEP_DISTANCE_M="${PATROL_STEP_DISTANCE_M:-0.2}"
 PATROL_FORWARD_DURATION_S="${PATROL_FORWARD_DURATION_S:-0.65}"
 PATROL_TURN_DURATION_S="${PATROL_TURN_DURATION_S:-2.4}"
@@ -154,7 +154,7 @@ if [ "${FIELD_BUILD_IN_DOCKER}" = "true" ]; then
   echo "[JETSON] building jo packages inside Docker"
   docker exec "${CONTAINER}" bash -lc '
   set -eo pipefail
-  cd /ros2_ws/ugv_ws
+  cd /ros2_ws/ros2_ws5
   source /opt/ros/humble/setup.bash
   colcon --log-base log_docker build \
     --build-base build_docker \
@@ -168,7 +168,7 @@ fi
 echo "[JETSON] overlaying field Python sources into install_docker"
 docker exec "${CONTAINER}" bash -lc '
 set -e
-cd /ros2_ws/ugv_ws
+cd /ros2_ws/ros2_ws5
 cp src/waver_patrol/waver_patrol/bridges/waver_base_driver_node.py \
   install_docker/waver_patrol/lib/python3.10/site-packages/waver_patrol/bridges/waver_base_driver_node.py
 cp src/waver_patrol/waver_patrol/safety/safety_cmd_mux_node.py \
@@ -178,7 +178,7 @@ cp src/ugv_main/ugv_tools/ugv_tools/waver_gazebo_patrol.py \
 '
 
 echo "[JETSON] ensuring 0.2m waypoint file inside Docker workspace"
-docker exec "${CONTAINER}" bash -lc "mkdir -p /ros2_ws/ugv_ws/src/ugv_main/ugv_tools/waypoints && cat > /ros2_ws/ugv_ws/src/ugv_main/ugv_tools/waypoints/waver_0p2m_patrol.yaml <<'YAML'
+docker exec "${CONTAINER}" bash -lc "mkdir -p /ros2_ws/ros2_ws5/src/ugv_main/ugv_tools/waypoints && cat > /ros2_ws/ros2_ws5/src/ugv_main/ugv_tools/waypoints/waver_0p2m_patrol.yaml <<'YAML'
 frame_id: odom
 home:
   name: home
@@ -231,7 +231,7 @@ start_node() {
   local name="$1"
   shift
   echo "[JETSON] starting ${name}"
-  docker exec -d "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && exec $* >/tmp/${name}.log 2>&1"
+  docker exec -d "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && exec $* >/tmp/${name}.log 2>&1"
 }
 
 echo "[JETSON] starting Docker backend on ${SERIAL_PORT}"
@@ -335,7 +335,7 @@ required_nodes=(
 
 nodes=""
 for _ in $(seq 1 12); do
-  nodes="$(docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && ros2 node list 2>/dev/null" || true)"
+  nodes="$(docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && ros2 node list 2>/dev/null" || true)"
   missing=0
   for node in "${required_nodes[@]}"; do
     if ! grep -qx "${node}" <<<"${nodes}"; then
@@ -368,16 +368,16 @@ if [ "${#missing_nodes[@]}" -ne 0 ]; then
 fi
 
 echo "[JETSON] /cmd_vel chain:"
-docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && ros2 topic info -v /cmd_vel"
+docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && ros2 topic info -v /cmd_vel"
 
 echo "[JETSON] /waver/manual_cmd_vel:"
-docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && ros2 topic info -v /waver/manual_cmd_vel || true"
+docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && ros2 topic info -v /waver/manual_cmd_vel || true"
 
 echo "[JETSON] base driver state:"
-docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && timeout 4 ros2 topic echo --once --full-length /waver/base_driver_state || true"
+docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && timeout 4 ros2 topic echo --once --full-length /waver/base_driver_state || true"
 
 echo "[JETSON] odom sample:"
-if docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && timeout 4 ros2 topic echo --once /odom" >/tmp/waver_backend_odom_check.log 2>&1; then
+if docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && timeout 4 ros2 topic echo --once /odom" >/tmp/waver_backend_odom_check.log 2>&1; then
   cat /tmp/waver_backend_odom_check.log
   echo "[JETSON] ODOM_READY=YES"
 else
@@ -390,16 +390,16 @@ else
 fi
 
 echo "[JETSON] safety state:"
-docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && timeout 4 ros2 topic echo --once /waver/safety_state || true"
+docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && timeout 4 ros2 topic echo --once /waver/safety_state || true"
 
 echo "[JETSON] mode:"
-docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ugv_ws && ${DOCKER_SOURCE} && timeout 4 ros2 topic echo --once /waver/mode || true"
+docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && timeout 4 ros2 topic echo --once /waver/mode || true"
 
 echo "[JETSON] serial owner after backend:"
 fuser -v "${SERIAL_PORT}" 2>&1 || true
 
 echo "[JETSON] BACKEND_READY=YES"
 echo "[JETSON] Now run local UI in another local PC terminal:"
-echo "  cd ~/ugv_ws/FSD_Vehicle"
+echo "  cd ~/ros2_ws5/FSD_Vehicle"
 echo "  bash scripts/waver_field_local_ui_start.sh"
 REMOTE

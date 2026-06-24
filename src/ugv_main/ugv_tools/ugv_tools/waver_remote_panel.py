@@ -257,10 +257,10 @@ class WaverRemoteNode(Node):
             ParameterDescriptor(dynamic_typing=True),
         )
         self.declare_parameter("remote_bridge_key_filename", "")
-        self.declare_parameter("remote_bridge_workspace", "/home/sw/ugv_ws/FSD_Vehicle")
+        self.declare_parameter("remote_bridge_workspace", "/home/sw/ros2_ws5/FSD_Vehicle")
         self.declare_parameter("remote_bridge_use_docker", True)
         self.declare_parameter("remote_bridge_container", "fsd_dev_jetson")
-        self.declare_parameter("remote_bridge_container_workspace", "/ros2_ws/ugv_ws")
+        self.declare_parameter("remote_bridge_container_workspace", "/ros2_ws/ros2_ws5")
         self.declare_parameter("remote_bridge_setup_script", "install_docker/setup.bash")
         self.declare_parameter("remote_bridge_ros_domain_id", 30)
         self.declare_parameter("remote_bridge_rmw", "rmw_cyclonedds_cpp")

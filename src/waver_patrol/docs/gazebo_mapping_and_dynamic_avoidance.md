@@ -8,7 +8,7 @@ operator UI and navigation mechanism.
 Launch:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=122
@@ -27,8 +27,8 @@ and applies the saved map back to `/map` for the operator panel.
 Validation:
 
 ```bash
-python3 ~/ugv_ws/FSD_Vehicle/src/waver_patrol/scripts/run_mapping_mode_check.py \
-  --output-root ~/ugv_ws/FSD_Vehicle/experiments_result \
+python3 ~/ros2_ws5/FSD_Vehicle/src/waver_patrol/scripts/run_mapping_mode_check.py \
+  --output-root ~/ros2_ws5/FSD_Vehicle/experiments_result \
   --experiment-name mapping_mode_manual \
   --duration-sec 14 \
   --save-after-sec 9
@@ -38,7 +38,7 @@ Expected outputs:
 
 - `/map` known ratio increases while mapping is active.
 - `/waver/map_apply_state` reports `MAP_SAVED` and `MAP_APPLIED`.
-- `~/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml` is created.
+- `~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml` is created.
 - The operator UI shows `SLAM_LIVE` while mapping and `MAP_FIXED` after apply.
 
 Important: this mapping preview is simulation-only. Real mapping still uses
@@ -49,7 +49,7 @@ Important: this mapping preview is simulation-only. Real mapping still uses
 Launch:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=124
@@ -67,8 +67,8 @@ simulation through the safety mux.
 Validation:
 
 ```bash
-python3 ~/ugv_ws/FSD_Vehicle/src/waver_patrol/scripts/run_dynamic_obstacle_avoidance_check.py \
-  --output-root ~/ugv_ws/FSD_Vehicle/experiments_result \
+python3 ~/ros2_ws5/FSD_Vehicle/src/waver_patrol/scripts/run_dynamic_obstacle_avoidance_check.py \
+  --output-root ~/ros2_ws5/FSD_Vehicle/experiments_result \
   --experiment-name dynamic_obstacle_avoidance_manual \
   --duration-sec 22
 ```

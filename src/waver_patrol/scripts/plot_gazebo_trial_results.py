@@ -9,7 +9,7 @@ from pathlib import Path
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create simple paper-ready plots from Waver Gazebo trial summaries")
-    parser.add_argument("--results_dir", default="~/ugv_ws/FSD_Vehicle/experiments_result/results")
+    parser.add_argument("--results_dir", default="~/ros2_ws5/FSD_Vehicle/experiments_result/results")
     args = parser.parse_args()
     results_dir = Path(os.path.expanduser(args.results_dir))
     summary = results_dir / "gazebo_trial_summary.csv"

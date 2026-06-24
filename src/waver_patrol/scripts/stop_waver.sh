@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "${WAVER_WS:-$HOME/ugv_ws/FSD_Vehicle}"
+cd "${WAVER_WS:-$HOME/ros2_ws5/FSD_Vehicle}"
 source /opt/ros/humble/setup.bash 2>/dev/null || true
 source install/setup.bash 2>/dev/null || true
 ros2 run waver_patrol stop_robot "$@"

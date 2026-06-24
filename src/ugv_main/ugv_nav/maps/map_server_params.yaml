@@ -4,7 +4,7 @@ map_server:
         topic_name: map
         use_sim_time: true
         # 로컬 실행 시 자신의 워크스페이스 경로로 수정하세요
-        # Docker 환경: /ros2_ws/ugv_ws/src/ugv_main/ugv_nav/maps/map.yaml
-        # 로컬 예시: /home/{username}/ugv_ws/FSD_Vehicle/src/ugv_main/ugv_nav/maps/map.yaml
-        yaml_filename: /ros2_ws/ugv_ws/src/ugv_main/ugv_nav/maps/map.yaml
+        # Docker 환경: /ros2_ws/ros2_ws5/src/ugv_main/ugv_nav/maps/map.yaml
+        # 로컬 예시: /home/{username}/ros2_ws5/FSD_Vehicle/src/ugv_main/ugv_nav/maps/map.yaml
+        yaml_filename: /ros2_ws/ros2_ws5/src/ugv_main/ugv_nav/maps/map.yaml
 

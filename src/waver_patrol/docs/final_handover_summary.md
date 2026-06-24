@@ -1,12 +1,12 @@
 # Final Handover Summary
 
-Active workspace: `~/ugv_ws/FSD_Vehicle`
-Active repository: `~/ugv_ws/FSD_Vehicle`
+Active workspace: `~/ros2_ws5/FSD_Vehicle`
+Active repository: `~/ros2_ws5/FSD_Vehicle`
 Branch: `jo`
 Reference commit during validation: `a6bf8af`
 
 This handover is limited to the `jo` branch. Do not use
-`~/ugv_ws/FSD_Vehicle` for the current release workflow.
+`~/ros2_ws5/FSD_Vehicle` for the current release workflow.
 
 ## What This Version Provides
 
@@ -26,7 +26,7 @@ Gazebo ugv_world + ugv_rover
   -> LiDAR-only SLAM backend
   -> live /map shown as SLAM_LIVE
   -> SAVE MAP
-  -> ~/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml/.pgm
+  -> ~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml/.pgm
   -> APPLY FIXED MAP
   -> fixed /map shown in operator UI
   -> START PATROL / STOP / E-STOP checks
@@ -71,7 +71,7 @@ height unknown and do not trigger a mission.
 Latest clean 10-run output:
 
 ```text
-~/ugv_ws/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs/
+~/ros2_ws5/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs/
 ```
 
 Summary:
@@ -96,7 +96,7 @@ Additional SLAM quality fix validation after adding LiDAR-visible airport curbs
 and tuning the LiDAR-only gmapping range:
 
 ```text
-~/ugv_ws/FSD_Vehicle/experiments_result/paper_ready/slam_fix_full_coverage/
+~/ros2_ws5/FSD_Vehicle/experiments_result/paper_ready/slam_fix_full_coverage/
 ```
 
 - trials: 1
@@ -122,7 +122,7 @@ driver or another verified 3D source.
 Verified commands:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 python3 -m compileall -q src/waver_patrol src/ugv_main/ugv_tools
 colcon build --packages-select \
@@ -137,7 +137,7 @@ Result: compileall passed and six focused packages built successfully.
 Gazebo only:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -153,7 +153,7 @@ ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
 Operator UI only:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -171,14 +171,14 @@ ros2 launch ugv_tools waver_operator_panel.launch.py \
 Paper-ready 10-run Gazebo/UI validation:
 
 ```bash
-cd ~/ugv_ws/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
 
 RUNS=10 \
 TRIAL_TIMEOUT_SEC=220 \
-OUTPUT_ROOT=$HOME/ugv_ws/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs \
+OUTPUT_ROOT=$HOME/ros2_ws5/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs \
 bash src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
 ```
 

@@ -32,7 +32,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_fake_sound", default_value="true"),
             DeclareLaunchArgument("enable_experiment_logger", default_value="true"),
             DeclareLaunchArgument("record_bag", default_value="false"),
-            DeclareLaunchArgument("output_root", default_value="~/ugv_ws/FSD_Vehicle/experiments_result"),
+            DeclareLaunchArgument("output_root", default_value="~/ros2_ws5/FSD_Vehicle/experiments_result"),
             DeclareLaunchArgument("world_file", default_value=default_world),
             DeclareLaunchArgument("robot_sdf_file", default_value=default_robot),
             LogInfo(

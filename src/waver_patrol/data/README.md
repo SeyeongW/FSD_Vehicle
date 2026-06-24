@@ -1,7 +1,7 @@
 # Waver Experiment Data
 
 `experiment_data_logger_node` creates one run folder per experiment under
-`~/ugv_ws/FSD_Vehicle/experiments_result/<timestamp>_<experiment_name>/`.
+`~/ros2_ws5/FSD_Vehicle/experiments_result/<timestamp>_<experiment_name>/`.
 
 Each run contains:
 

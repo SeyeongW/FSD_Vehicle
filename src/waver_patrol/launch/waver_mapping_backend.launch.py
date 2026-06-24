@@ -25,7 +25,7 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="scan_mapper",
                 description=(
                     "scan_mapper, cartographer, or gazebo_live. "
-                    "The bundled gmapping source is excluded in ugv_ws because it is incomplete."
+                    "The bundled gmapping source is excluded in ros2_ws5 because it is incomplete."
                 ),
             ),
             DeclareLaunchArgument("source_map_yaml", default_value=default_source_map),
@@ -36,7 +36,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("reveal_duration_sec", default_value="12.0"),
-            DeclareLaunchArgument("save_dir", default_value="~/ugv_ws/FSD_Vehicle/maps"),
+            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws5/FSD_Vehicle/maps"),
             DeclareLaunchArgument("save_basename", default_value="waver_latest_map"),
             LogInfo(
                 msg=(
@@ -115,7 +115,7 @@ def generate_launch_description() -> LaunchDescription:
             ),
             LogInfo(
                 msg=(
-                    "backend:=gmapping is disabled in ugv_ws; use backend:=scan_mapper "
+                    "backend:=gmapping is disabled in ros2_ws5; use backend:=scan_mapper "
                     "or backend:=cartographer."
                 ),
                 condition=LaunchConfigurationEquals("backend", "gmapping"),

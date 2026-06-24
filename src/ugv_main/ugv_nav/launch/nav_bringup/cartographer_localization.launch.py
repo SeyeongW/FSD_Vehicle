@@ -21,7 +21,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time", default="false")
     resolution = LaunchConfiguration("resolution", default="0.05")
     publish_period_sec = LaunchConfiguration("publish_period_sec", default="1.0")
-    ws_path = os.environ.get("UGV_WS_PATH", os.path.expanduser("~/ugv_ws/FSD_Vehicle"))
+    ws_path = os.environ.get("ROS2_WS5_PATH", os.path.expanduser("~/ros2_ws5/FSD_Vehicle"))
     pbstream_path = LaunchConfiguration(
         "pbstream_path",
         default=os.path.join(ws_path, "src/ugv_main/ugv_gazebo/maps/map.pbstream"),
