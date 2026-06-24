@@ -1,6 +1,6 @@
 # UGV WS Gazebo Bird Patrol Integration
 
-Workspace: `/home/chotaehyun/ros2_ws5/FSD_Vehicle`
+Workspace: `~/ros2_ws5/FSD_Vehicle`
 
 Branch: `jo`
 

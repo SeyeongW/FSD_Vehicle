@@ -1,0 +1,312 @@
+#!/usr/bin/env bash
+# Shared environment loader for Waver clone-to-run field scripts.
+#
+# Source this file from scripts instead of sourcing ~/.waver_field_env directly.
+# It intentionally never prints secret values.
+
+if [ -n "${WAVER_FIELD_ENV_LOADED_ONCE:-}" ]; then
+  return 0 2>/dev/null || exit 0
+fi
+WAVER_FIELD_ENV_LOADED_ONCE=1
+
+waver_repo_root() {
+  local src="${BASH_SOURCE[0]}"
+  local dir
+  dir="$(cd "$(dirname "${src}")/.." && pwd)"
+  if git -C "${dir}" rev-parse --show-toplevel >/dev/null 2>&1; then
+    git -C "${dir}" rev-parse --show-toplevel
+  else
+    printf '%s\n' "${dir}"
+  fi
+}
+
+_waver_source_env_file() {
+  local file="$1"
+  local required="${2:-false}"
+  if [ -f "${file}" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "${file}"
+    set +a
+    WAVER_FIELD_ENV_SOURCES="${WAVER_FIELD_ENV_SOURCES:-}${file}"$'\n'
+    return 0
+  fi
+  if [ "${required}" = "true" ]; then
+    echo "[WAVER_ENV][ERROR] required env file missing: ${file}" >&2
+    return 1
+  fi
+  return 0
+}
+
+waver_field_env_load() {
+  WAVER_REPO_ROOT="${WAVER_REPO_ROOT:-$(waver_repo_root)}"
+  export WAVER_REPO_ROOT
+  WAVER_FIELD_ENV_SOURCES=""
+
+  _waver_source_env_file "${WAVER_REPO_ROOT}/.env" false
+  _waver_source_env_file "${WAVER_REPO_ROOT}/config/waver_field_env" true
+  _waver_source_env_file "${WAVER_REPO_ROOT}/config/waver_field_env.local" false
+  _waver_source_env_file "${HOME}/.waver_field_env" false
+
+  if [ -n "${WAVER_FIELD_ENV_FILE:-}" ]; then
+    _waver_source_env_file "${WAVER_FIELD_ENV_FILE}" true
+  fi
+
+  if [ -z "${CONTAINER:-}" ] && [ -n "${CONTAINER_NAME:-}" ]; then
+    CONTAINER="${CONTAINER_NAME}_jetson"
+  fi
+
+  : "${JETSON_PORT:=22}"
+  : "${ROS_DOMAIN_ID:=30}"
+  : "${ROS_DISTRO:=humble}"
+  : "${RMW_IMPLEMENTATION:=rmw_cyclonedds_cpp}"
+  : "${FIELD_BUILD_IN_DOCKER:=auto}"
+  : "${JETSON_HOST_AUTO:=false}"
+  : "${SERIAL_PORT:=auto}"
+  : "${SERIAL_PORT_REQUIRED_BY_ID:=true}"
+  : "${SERIAL_PORT_ALLOW_TTYUSB_FALLBACK:=false}"
+  : "${SERIAL_PORT_ALLOW_TTYTHS_FALLBACK:=false}"
+  : "${SERIAL_PORT_BY_ID_PATTERN:=/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_*}"
+  : "${WAVER_SSH_CONTROLMASTER:=true}"
+
+  export JETSON_HOST JETSON_USER JETSON_PORT JETSON_WS CONTAINER ROS_DOMAIN_ID
+  export ROS_DISTRO RMW_IMPLEMENTATION FIELD_BUILD_IN_DOCKER SERIAL_PORT
+}
+
+_waver_is_placeholder() {
+  case "${1:-}" in
+    ""|"<"*">"|*"<"*">"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+waver_field_env_require() {
+  local missing=()
+  local name value
+  for name in JETSON_HOST JETSON_USER JETSON_WS CONTAINER ROS_DOMAIN_ID SERIAL_PORT; do
+    value="${!name:-}"
+    if _waver_is_placeholder "${value}"; then
+      missing+=("${name}")
+    fi
+  done
+  if [ "${#missing[@]}" -gt 0 ]; then
+    echo "[WAVER_ENV][ERROR] missing or placeholder field env values:" >&2
+    printf '  - %s\n' "${missing[@]}" >&2
+    echo "[WAVER_ENV][ERROR] edit config/waver_field_env or create config/waver_field_env.local" >&2
+    return 1
+  fi
+}
+
+waver_field_env_print_sources() {
+  echo "[WAVER_ENV] loaded env sources:"
+  if [ -n "${WAVER_FIELD_ENV_SOURCES:-}" ]; then
+    printf '%s' "${WAVER_FIELD_ENV_SOURCES}" | sed '/^$/d; s/^/[WAVER_ENV]   /'
+  else
+    echo "[WAVER_ENV]   <none>"
+  fi
+}
+
+waver_field_env_masked_summary() {
+  echo "JETSON_HOST=${JETSON_HOST:-}"
+  echo "JETSON_USER=${JETSON_USER:-}"
+  echo "JETSON_PORT=${JETSON_PORT:-22}"
+  echo "JETSON_WS=${JETSON_WS:-}"
+  echo "CONTAINER=${CONTAINER:-}"
+  echo "ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-}"
+  echo "SERIAL_PORT=${SERIAL_PORT:-}"
+  echo "LIVOX_SENSOR_IP=${LIVOX_SENSOR_IP:-}"
+  if [ -n "${JETSON_PASS:-}" ]; then
+    echo "JETSON_PASS=<set, masked>"
+  else
+    echo "JETSON_PASS=<unset>"
+  fi
+}
+
+waver_ssh_cmd() {
+  local opts=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout="${SSH_CONNECT_TIMEOUT:-8}" -p "${JETSON_PORT:-22}")
+  if [ "${WAVER_SSH_CONTROLMASTER:-true}" = "true" ]; then
+    mkdir -p "${TMPDIR:-/tmp}/waver_ssh_mux"
+    opts+=(
+      -o ControlMaster=auto
+      -o ControlPersist="${WAVER_SSH_CONTROL_PERSIST:-120s}"
+      -o ControlPath="${TMPDIR:-/tmp}/waver_ssh_mux/%r_%h_%p"
+    )
+  fi
+  if [ -n "${JETSON_KEY_FILENAME:-}" ]; then
+    opts+=(-i "${JETSON_KEY_FILENAME}")
+  fi
+  if [ -n "${JETSON_PASS:-}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-0}" = "1" ]; then
+    if ! command -v sshpass >/dev/null 2>&1; then
+      echo "[WAVER_ENV][ERROR] sshpass is required for password SSH. Prefer SSH keys, or install sshpass." >&2
+      return 1
+    fi
+    WAVER_SSH_CMD=(sshpass -p "${JETSON_PASS}" ssh "${opts[@]}")
+  else
+    if [ -n "${JETSON_PASS:-}" ]; then
+      echo "[WAVER_ENV][WARN] JETSON_PASS is set but ignored because WAVER_ALLOW_PASSWORD_SSH!=1" >&2
+    fi
+    WAVER_SSH_CMD=(ssh "${opts[@]}")
+  fi
+}
+
+waver_scp_cmd() {
+  local opts=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout="${SSH_CONNECT_TIMEOUT:-8}" -P "${JETSON_PORT:-22}")
+  if [ "${WAVER_SSH_CONTROLMASTER:-true}" = "true" ]; then
+    mkdir -p "${TMPDIR:-/tmp}/waver_ssh_mux"
+    opts+=(
+      -o ControlMaster=auto
+      -o ControlPersist="${WAVER_SSH_CONTROL_PERSIST:-120s}"
+      -o ControlPath="${TMPDIR:-/tmp}/waver_ssh_mux/%r_%h_%p"
+    )
+  fi
+  if [ -n "${JETSON_KEY_FILENAME:-}" ]; then
+    opts+=(-i "${JETSON_KEY_FILENAME}")
+  fi
+  if [ -n "${JETSON_PASS:-}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-0}" = "1" ]; then
+    if ! command -v sshpass >/dev/null 2>&1; then
+      echo "[WAVER_ENV][ERROR] sshpass is required for password SCP." >&2
+      return 1
+    fi
+    WAVER_SCP_CMD=(sshpass -p "${JETSON_PASS}" scp "${opts[@]}")
+  else
+    WAVER_SCP_CMD=(scp "${opts[@]}")
+  fi
+}
+
+waver_rsync_cmd() {
+  local ssh_parts=(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout="${SSH_CONNECT_TIMEOUT:-8}" -p "${JETSON_PORT:-22}")
+  if [ "${WAVER_SSH_CONTROLMASTER:-true}" = "true" ]; then
+    mkdir -p "${TMPDIR:-/tmp}/waver_ssh_mux"
+    ssh_parts+=(
+      -o ControlMaster=auto
+      -o ControlPersist="${WAVER_SSH_CONTROL_PERSIST:-120s}"
+      -o ControlPath="${TMPDIR:-/tmp}/waver_ssh_mux/%r_%h_%p"
+    )
+  fi
+  if [ -n "${JETSON_KEY_FILENAME:-}" ]; then
+    ssh_parts+=(-i "${JETSON_KEY_FILENAME}")
+  fi
+  if [ -n "${JETSON_PASS:-}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-0}" = "1" ]; then
+    if ! command -v sshpass >/dev/null 2>&1; then
+      echo "[WAVER_ENV][ERROR] sshpass is required for password rsync." >&2
+      return 1
+    fi
+    WAVER_RSYNC_CMD=(sshpass -p "${JETSON_PASS}" rsync -az --delete -e "${ssh_parts[*]}")
+  else
+    WAVER_RSYNC_CMD=(rsync -az --delete -e "${ssh_parts[*]}")
+  fi
+}
+
+waver_resolve_serial_port() {
+  local requested="${1:-${SERIAL_PORT:-auto}}"
+  if [ "${requested}" != "auto" ]; then
+    printf '%s\n' "${requested}"
+    return 0
+  fi
+
+  local pattern="${SERIAL_PORT_BY_ID_PATTERN:-/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_*}"
+  local candidates=()
+  shopt -s nullglob
+  candidates=(${pattern})
+  shopt -u nullglob
+  if [ "${#candidates[@]}" -eq 1 ]; then
+    echo "[WAVER_SERIAL] selected by-id serial: ${candidates[0]}" >&2
+    printf '%s\n' "${candidates[0]}"
+    return 0
+  fi
+  if [ "${#candidates[@]}" -gt 1 ]; then
+    echo "[WAVER_SERIAL][ERROR] multiple by-id serial candidates:" >&2
+    printf '  - %s\n' "${candidates[@]}" >&2
+    return 1
+  fi
+
+  local usb=()
+  shopt -s nullglob
+  usb=(/dev/ttyUSB*)
+  shopt -u nullglob
+  if [ "${#usb[@]}" -eq 1 ] && [ "${SERIAL_PORT_ALLOW_TTYUSB_FALLBACK:-false}" = "true" ]; then
+    echo "[WAVER_SERIAL][WARN] falling back to ${usb[0]}" >&2
+    printf '%s\n' "${usb[0]}"
+    return 0
+  fi
+  if [ "${#usb[@]}" -gt 1 ]; then
+    echo "[WAVER_SERIAL][ERROR] multiple /dev/ttyUSB* candidates; set SERIAL_PORT explicitly." >&2
+    printf '  - %s\n' "${usb[@]}" >&2
+    return 1
+  fi
+
+  if [ "${SERIAL_PORT_ALLOW_TTYTHS_FALLBACK:-false}" = "true" ] && [ -e /dev/ttyTHS1 ]; then
+    echo "[WAVER_SERIAL][WARN] falling back to /dev/ttyTHS1" >&2
+    printf '%s\n' /dev/ttyTHS1
+    return 0
+  fi
+
+  echo "[WAVER_SERIAL][ERROR] no Waver serial port found. Set SERIAL_PORT=/dev/serial/by-id/..." >&2
+  return 1
+}
+
+waver_source_ros2_snippet() {
+  cat <<'EOF'
+if [ -f /opt/ros/humble/install/setup.bash ]; then
+  source /opt/ros/humble/install/setup.bash
+fi
+source /opt/ros/humble/setup.bash
+if [ -f install_docker/setup.bash ]; then
+  source install_docker/setup.bash
+elif [ -f install/setup.bash ]; then
+  source install/setup.bash
+fi
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-30}"
+if [ -n "${RMW_IMPLEMENTATION:-}" ]; then
+  export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION}"
+fi
+EOF
+}
+
+waver_build_install_docker_if_needed() {
+  local container="${1:-${CONTAINER:-fsd_dev_jetson}}"
+  local policy="${2:-${FIELD_BUILD_IN_DOCKER:-auto}}"
+  local packages="${3:-ugv_description ugv_tools ugv_nav waver_patrol waver_seo_tracking waver_experiment_logger}"
+  if [ "${policy}" = "false" ]; then
+    return 0
+  fi
+  if [ "${policy}" = "auto" ]; then
+    if docker exec "${container}" bash -lc 'cd /ros2_ws/ros2_ws5 && test -f install_docker/setup.bash' >/dev/null 2>&1; then
+      echo "[WAVER_DOCKER] install_docker/setup.bash exists; skipping auto build"
+      return 0
+    fi
+  fi
+  echo "[WAVER_DOCKER] building selected packages in ${container}: ${packages}"
+  docker exec "${container}" bash -lc "
+set -euo pipefail
+cd /ros2_ws/ros2_ws5
+source /opt/ros/humble/setup.bash
+colcon --log-base log_docker build \
+  --build-base build_docker \
+  --install-base install_docker \
+  --packages-select ${packages}
+"
+}
+
+waver_secret_scan_file() {
+  local file="$1"
+  [ -f "${file}" ] || return 0
+  local failed=0
+  while IFS= read -r line; do
+    case "${line}" in
+      ''|'#'*) continue ;;
+    esac
+    if printf '%s\n' "${line}" | grep -Eiq '(^|_)(PASSWORD|PASS|TOKEN|API_KEY|SECRET|PRIVATE_KEY|SSH_KEY|JETSON_PASS|OPENAI_API_KEY|GITHUB_TOKEN)='; then
+      local value="${line#*=}"
+      value="${value%%#*}"
+      value="$(printf '%s' "${value}" | tr -d '[:space:]' | tr -d '"' | tr -d "'")"
+      case "${value}" in
+        ""|0|false|FALSE|"<"*">") ;;
+        *) echo "[WAVER_SECRET][ERROR] secret-like value in ${file}: ${line%%=*}=<masked>" >&2; failed=1 ;;
+      esac
+    fi
+  done < "${file}"
+  return "${failed}"
+}
+
+waver_field_env_load

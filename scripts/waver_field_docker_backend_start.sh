@@ -1,25 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FIELD_ENV_FILE="${WAVER_FIELD_ENV_FILE:-$HOME/.waver_field_env}"
-if [ -f "${FIELD_ENV_FILE}" ]; then
-  # Local-only field settings: Jetson IP/user/password/workspace. This file is
-  # intentionally outside the repository so the field password is not committed.
-  set -a
-  # shellcheck disable=SC1090
-  source "${FIELD_ENV_FILE}"
-  set +a
-fi
+LOCAL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/waver_field_env_load.sh
+source "${LOCAL_ROOT}/scripts/waver_field_env_load.sh"
+waver_field_env_require
+waver_ssh_cmd
+waver_scp_cmd
+SSH_CMD=("${WAVER_SSH_CMD[@]}")
+SCP_CMD=("${WAVER_SCP_CMD[@]}")
 
-JETSON_HOST="${JETSON_HOST:-10.139.225.150}"
-JETSON_USER="${JETSON_USER:-sw}"
-JETSON_PASS="${JETSON_PASS:-}"
-JETSON_WS="${JETSON_WS:-/home/sw/ros2_ws5/FSD_Vehicle}"
-JETSON_HOST_AUTO="${JETSON_HOST_AUTO:-true}"
-JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST} 10.139.225.150 10.63.240.150 10.139.225.126}"
-CONTAINER="${CONTAINER:-fsd_dev_jetson}"
-SERIAL_PORT="${SERIAL_PORT:-auto}"
-FIELD_BUILD_IN_DOCKER="${FIELD_BUILD_IN_DOCKER:-false}"
+JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST}}"
 PATROL_ALLOW_OPEN_LOOP="${PATROL_ALLOW_OPEN_LOOP:-true}"
 PATROL_WAYPOINT_FILE="${PATROL_WAYPOINT_FILE:-/ros2_ws/ros2_ws5/src/ugv_main/ugv_tools/waypoints/waver_0p2m_patrol.yaml}"
 PATROL_STEP_DISTANCE_M="${PATROL_STEP_DISTANCE_M:-0.2}"
@@ -29,19 +20,6 @@ PATROL_FORWARD_SPEED="${PATROL_FORWARD_SPEED:-0.085}"
 PATROL_TURN_SPEED="${PATROL_TURN_SPEED:-0.075}"
 PATROL_TURN_WHEEL_RATIO="${PATROL_TURN_WHEEL_RATIO:-0.46}"
 PATROL_TURN_MODE="${PATROL_TURN_MODE:-pivot}"
-
-SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=8)
-if [ -n "${JETSON_PASS}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-}" = "1" ] && command -v sshpass >/dev/null 2>&1; then
-  SSH_CMD=(sshpass -p "${JETSON_PASS}" ssh "${SSH_OPTS[@]}")
-  SCP_CMD=(sshpass -p "${JETSON_PASS}" scp "${SSH_OPTS[@]}")
-else
-  if [ -n "${JETSON_PASS}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-}" != "1" ]; then
-    echo "[LOCAL][WARN] JETSON_PASS is set but ignored. Set WAVER_ALLOW_PASSWORD_SSH=1 only for temporary password auth." >&2
-  fi
-  echo "[LOCAL] using SSH key/agent or interactive SSH auth." >&2
-  SSH_CMD=(ssh "${SSH_OPTS[@]}")
-  SCP_CMD=(scp "${SSH_OPTS[@]}")
-fi
 
 select_jetson_host() {
   if [ "${JETSON_HOST_AUTO}" != "true" ]; then
@@ -71,8 +49,12 @@ select_jetson_host() {
   exit 12
 }
 
-LOCAL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SYNC_FILES=(
+  ".env"
+  "docker-compose.jetson.yml"
+  "docker/run.sh"
+  "config/waver_field_env"
+  "scripts/waver_field_env_load.sh"
   "src/waver_patrol/waver_patrol/bridges/waver_base_driver_node.py"
   "src/waver_patrol/waver_patrol/safety/safety_cmd_mux_node.py"
   "src/ugv_main/ugv_tools/ugv_tools/waver_gazebo_patrol.py"
@@ -85,6 +67,11 @@ if [ -f "${HOME}/.waver_jetson_host" ] && [ -z "${JETSON_HOST:-}" ]; then
   JETSON_HOST="$(head -n 1 "${HOME}/.waver_jetson_host")"
 fi
 select_jetson_host
+
+if ! "${SSH_CMD[@]}" "${JETSON_USER}@${JETSON_HOST}" "test -f '${JETSON_WS}/docker/run.sh' && test -f '${JETSON_WS}/docker-compose.jetson.yml'" >/tmp/waver_backend_ws_probe.log 2>&1; then
+  echo "[LOCAL] Jetson workspace is missing or incomplete; running bootstrap first"
+  bash "${LOCAL_ROOT}/scripts/waver_field_bootstrap_jetson.sh"
+fi
 
 echo "[LOCAL] target Jetson: ${JETSON_USER}@${JETSON_HOST} ws=${JETSON_WS}"
 echo "[LOCAL] syncing field-control source files to Jetson"
@@ -100,7 +87,8 @@ done
   "${FIELD_BUILD_IN_DOCKER}" "${PATROL_ALLOW_OPEN_LOOP}" "${PATROL_WAYPOINT_FILE}" \
   "${PATROL_FORWARD_DURATION_S}" "${PATROL_TURN_DURATION_S}" \
   "${PATROL_FORWARD_SPEED}" "${PATROL_TURN_SPEED}" "${PATROL_STEP_DISTANCE_M}" \
-  "${PATROL_TURN_WHEEL_RATIO}" "${PATROL_TURN_MODE}" <<'REMOTE'
+  "${PATROL_TURN_WHEEL_RATIO}" "${PATROL_TURN_MODE}" \
+  "${SERIAL_PORT_BY_ID_PATTERN}" "${SERIAL_PORT_ALLOW_TTYUSB_FALLBACK}" "${SERIAL_PORT_ALLOW_TTYTHS_FALLBACK}" <<'REMOTE'
 set -euo pipefail
 
 JETSON_WS="$1"
@@ -116,18 +104,38 @@ PATROL_TURN_SPEED="${10}"
 PATROL_STEP_DISTANCE_M="${11}"
 PATROL_TURN_WHEEL_RATIO="${12}"
 PATROL_TURN_MODE="${13}"
+SERIAL_PORT_BY_ID_PATTERN="${14}"
+SERIAL_PORT_ALLOW_TTYUSB_FALLBACK="${15}"
+SERIAL_PORT_ALLOW_TTYTHS_FALLBACK="${16}"
 
 cd "${JETSON_WS}"
 echo "[JETSON] repo=$(pwd) branch=$(git branch --show-current 2>/dev/null || echo unknown) head=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 SERIAL_PORT="${SERIAL_REQUEST}"
 if [ "${SERIAL_PORT}" = "auto" ]; then
-  SERIAL_PORT="$(ls /dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_* 2>/dev/null | head -n 1 || true)"
-  if [ -z "${SERIAL_PORT}" ]; then
-    SERIAL_PORT="$(ls /dev/ttyUSB* 2>/dev/null | head -n 1 || true)"
-  fi
-  if [ -z "${SERIAL_PORT}" ]; then
+  shopt -s nullglob
+  by_id_candidates=(${SERIAL_PORT_BY_ID_PATTERN})
+  ttyusb_candidates=(/dev/ttyUSB*)
+  shopt -u nullglob
+  if [ "${#by_id_candidates[@]}" -eq 1 ]; then
+    SERIAL_PORT="${by_id_candidates[0]}"
+  elif [ "${#by_id_candidates[@]}" -gt 1 ]; then
+    echo "[JETSON][ERROR] multiple Waver by-id serial candidates:" >&2
+    printf '  - %s\n' "${by_id_candidates[@]}" >&2
+    exit 19
+  elif [ "${#ttyusb_candidates[@]}" -eq 1 ] && [ "${SERIAL_PORT_ALLOW_TTYUSB_FALLBACK}" = "true" ]; then
+    SERIAL_PORT="${ttyusb_candidates[0]}"
+    echo "[JETSON][WARN] falling back to ${SERIAL_PORT}" >&2
+  elif [ "${#ttyusb_candidates[@]}" -gt 1 ]; then
+    echo "[JETSON][ERROR] multiple /dev/ttyUSB* candidates; set SERIAL_PORT explicitly." >&2
+    printf '  - %s\n' "${ttyusb_candidates[@]}" >&2
+    exit 19
+  elif [ "${SERIAL_PORT_ALLOW_TTYTHS_FALLBACK}" = "true" ] && [ -e /dev/ttyTHS1 ]; then
     SERIAL_PORT="/dev/ttyTHS1"
+    echo "[JETSON][WARN] falling back to /dev/ttyTHS1" >&2
+  else
+    echo "[JETSON][ERROR] no Waver serial port found. Set SERIAL_PORT=/dev/serial/by-id/..." >&2
+    exit 19
   fi
 fi
 echo "[JETSON] selected serial port: ${SERIAL_PORT}"
@@ -136,9 +144,9 @@ echo "[JETSON] patrol open-loop fallback: ${PATROL_ALLOW_OPEN_LOOP}"
 echo "[JETSON] field patrol calibration: step_distance=${PATROL_STEP_DISTANCE_M}m forward_duration=${PATROL_FORWARD_DURATION_S}s turn_duration=${PATROL_TURN_DURATION_S}s forward_speed=${PATROL_FORWARD_SPEED} turn_speed=${PATROL_TURN_SPEED} turn_wheel_ratio=${PATROL_TURN_WHEEL_RATIO} turn_mode=${PATROL_TURN_MODE}"
 
 if ! docker ps --format '{{.Names}}' | grep -qx "${CONTAINER}"; then
-  echo "[JETSON] starting Docker container via main_s-style runner"
-  bash docker/run.sh jetson >/tmp/waver_docker_run.log 2>&1 || {
-    echo "[JETSON][ERROR] docker/run.sh jetson failed. See /tmp/waver_docker_run.log"
+  echo "[JETSON] starting Docker container via headless-safe runner"
+  bash docker/run.sh jetson-up >/tmp/waver_docker_run.log 2>&1 || {
+    echo "[JETSON][ERROR] docker/run.sh jetson-up failed. See /tmp/waver_docker_run.log"
     tail -80 /tmp/waver_docker_run.log || true
     exit 20
   }
@@ -148,6 +156,10 @@ if ! docker ps --format '{{.Names}}' | grep -qx "${CONTAINER}"; then
   echo "[JETSON][ERROR] Docker container ${CONTAINER} is not running"
   docker ps -a --format 'table {{.Names}}\t{{.Status}}'
   exit 21
+fi
+
+if [ "${FIELD_BUILD_IN_DOCKER}" = "auto" ] && ! docker exec "${CONTAINER}" bash -lc 'cd /ros2_ws/ros2_ws5 && test -f install_docker/setup.bash' >/dev/null 2>&1; then
+  FIELD_BUILD_IN_DOCKER=true
 fi
 
 if [ "${FIELD_BUILD_IN_DOCKER}" = "true" ]; then
@@ -162,7 +174,7 @@ if [ "${FIELD_BUILD_IN_DOCKER}" = "true" ]; then
     --packages-select ugv_description ugv_tools waver_patrol
   '
 else
-  echo "[JETSON] FIELD_BUILD_IN_DOCKER=false; using existing install_docker entry points"
+  echo "[JETSON] FIELD_BUILD_IN_DOCKER=${FIELD_BUILD_IN_DOCKER}; using existing install_docker entry points"
 fi
 
 echo "[JETSON] overlaying field Python sources into install_docker"
@@ -225,7 +237,7 @@ sleep 1
 echo "[JETSON] serial owner before backend:"
 fuser -v "${SERIAL_PORT}" 2>&1 || true
 
-DOCKER_SOURCE='source /opt/ros/humble/install/setup.bash && source /opt/ros/humble/setup.bash && source install_docker/setup.bash && export ROS_DOMAIN_ID=30 && export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp'
+DOCKER_SOURCE='if [ -f /opt/ros/humble/install/setup.bash ]; then source /opt/ros/humble/install/setup.bash; fi; source /opt/ros/humble/setup.bash; if [ -f install_docker/setup.bash ]; then source install_docker/setup.bash; elif [ -f install/setup.bash ]; then source install/setup.bash; fi; export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-30}"; export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"'
 
 start_node() {
   local name="$1"

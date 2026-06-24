@@ -247,8 +247,8 @@ class WaverRemoteNode(Node):
         self.declare_parameter("demo_close_on_finish", False)
         self.declare_parameter("stop_backend_on_close", False)
         self.declare_parameter("remote_bridge_enabled", False)
-        self.declare_parameter("remote_bridge_host", "10.139.225.150")
-        self.declare_parameter("remote_bridge_user", "sw")
+        self.declare_parameter("remote_bridge_host", "192.168.0.23")
+        self.declare_parameter("remote_bridge_user", "jetson")
         # ROS CLI parses unquoted numeric-looking values as integers. Allow dynamic
         # typing for operator-supplied passwords, but keep the default empty.
         self.declare_parameter(
@@ -257,7 +257,7 @@ class WaverRemoteNode(Node):
             ParameterDescriptor(dynamic_typing=True),
         )
         self.declare_parameter("remote_bridge_key_filename", "")
-        self.declare_parameter("remote_bridge_workspace", "/home/sw/ros2_ws5/FSD_Vehicle")
+        self.declare_parameter("remote_bridge_workspace", "/home/jetson/ros2_ws5/FSD_Vehicle")
         self.declare_parameter("remote_bridge_use_docker", True)
         self.declare_parameter("remote_bridge_container", "fsd_dev_jetson")
         self.declare_parameter("remote_bridge_container_workspace", "/ros2_ws/ros2_ws5")

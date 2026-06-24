@@ -77,5 +77,15 @@ reports/agent_iterations/*
 **/images/
 **/screenshots/
 
-# Local env
-.env
+# Local/private env overrides. The repository intentionally tracks non-secret
+# defaults in .env and config/waver_field_env for clone-to-run operation.
+.env.local
+*.env.local
+.env.private
+*.private
+config/waver_field_env.local
+.waver_field_env.local
+id_rsa
+id_ed25519
+*.pem
+*.key

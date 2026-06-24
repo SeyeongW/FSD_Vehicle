@@ -20,10 +20,6 @@ services:
       - /dev:/dev
       # udev 규칙 지원 (장치 핫플러그 감지)
       - /run/udev:/run/udev:ro
-    devices:
-      - ${SERIAL_PORT_JETSON}:${SERIAL_PORT_JETSON}
-      - ${VIDEO_DEVICE}:${VIDEO_DEVICE}
-      - /dev/snd:/dev/snd
     runtime: nvidia
     network_mode: host
     privileged: true

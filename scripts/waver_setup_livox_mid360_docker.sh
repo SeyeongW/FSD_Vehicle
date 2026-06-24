@@ -6,37 +6,18 @@ set -euo pipefail
 # does not change the validated local-PC -> SSH -> Jetson -> Docker -> Waver
 # USB serial control path; it only makes the Mid-360 ROS driver available.
 
-FIELD_ENV_FILE="${WAVER_FIELD_ENV_FILE:-$HOME/.waver_field_env}"
-if [ -f "${FIELD_ENV_FILE}" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "${FIELD_ENV_FILE}"
-  set +a
-fi
-
-JETSON_HOST="${JETSON_HOST:-10.139.225.150}"
-JETSON_USER="${JETSON_USER:-sw}"
-JETSON_PASS="${JETSON_PASS:-}"
-JETSON_WS="${JETSON_WS:-/home/sw/ros2_ws5/FSD_Vehicle}"
-JETSON_HOST_AUTO="${JETSON_HOST_AUTO:-true}"
-JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST} 10.139.225.150 10.63.240.150 10.139.225.126}"
-CONTAINER="${CONTAINER:-fsd_dev_jetson}"
+LOCAL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/waver_field_env_load.sh
+source "${LOCAL_ROOT}/scripts/waver_field_env_load.sh"
+waver_field_env_require
+waver_ssh_cmd
+waver_scp_cmd
+SSH_CMD=("${WAVER_SSH_CMD[@]}")
+SCP_CMD=("${WAVER_SCP_CMD[@]}")
+JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST}}"
 LIVOX_SDK2_URL="${LIVOX_SDK2_URL:-https://github.com/Livox-SDK/Livox-SDK2.git}"
 LIVOX_DRIVER2_URL="${LIVOX_DRIVER2_URL:-https://github.com/Livox-SDK/livox_ros_driver2.git}"
 BUILD_LIVOX_SDK2="${BUILD_LIVOX_SDK2:-true}"
-
-SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=8)
-if [ -n "${JETSON_PASS}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-}" = "1" ] && command -v sshpass >/dev/null 2>&1; then
-  SSH_CMD=(sshpass -p "${JETSON_PASS}" ssh "${SSH_OPTS[@]}")
-  SCP_CMD=(sshpass -p "${JETSON_PASS}" scp "${SSH_OPTS[@]}")
-else
-  if [ -n "${JETSON_PASS}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-}" != "1" ]; then
-    echo "[LOCAL][WARN] JETSON_PASS is set but ignored. Set WAVER_ALLOW_PASSWORD_SSH=1 for temporary password auth." >&2
-  fi
-  echo "[LOCAL] using SSH key/agent or interactive SSH auth." >&2
-  SSH_CMD=(ssh "${SSH_OPTS[@]}")
-  SCP_CMD=(scp "${SSH_OPTS[@]}")
-fi
 
 select_jetson_host() {
   if [ "${JETSON_HOST_AUTO}" != "true" ]; then
@@ -63,7 +44,6 @@ select_jetson_host() {
   exit 12
 }
 
-LOCAL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [ -f "${HOME}/.waver_jetson_host" ] && [ "${JETSON_HOST_AUTO}" = "true" ]; then
   cached_host="$(head -n 1 "${HOME}/.waver_jetson_host" | tr -d '[:space:]')"
   if [ -n "${cached_host}" ]; then
@@ -111,9 +91,9 @@ cd "${JETSON_WS}"
 echo "[JETSON] repo=$(pwd)"
 
 if ! docker ps --format '{{.Names}}' | grep -qx "${CONTAINER}"; then
-  echo "[JETSON] starting Docker container via docker/run.sh jetson"
-  bash docker/run.sh jetson >/tmp/waver_livox_docker_run.log 2>&1 || {
-    echo "[JETSON][ERROR] docker/run.sh jetson failed. See /tmp/waver_livox_docker_run.log" >&2
+  echo "[JETSON] starting Docker container via docker/run.sh jetson-up"
+  bash docker/run.sh jetson-up >/tmp/waver_livox_docker_run.log 2>&1 || {
+    echo "[JETSON][ERROR] docker/run.sh jetson-up failed. See /tmp/waver_livox_docker_run.log" >&2
     tail -80 /tmp/waver_livox_docker_run.log || true
     exit 20
   }
@@ -202,7 +182,9 @@ echo "[JETSON] verifying Livox ROS package and message interface"
 docker exec "${CONTAINER}" bash -lc '
 set -eo pipefail
 cd /ros2_ws/ros2_ws5
-source /opt/ros/humble/install/setup.bash
+if [ -f /opt/ros/humble/install/setup.bash ]; then
+  source /opt/ros/humble/install/setup.bash
+fi
 source /opt/ros/humble/setup.bash
 source install_docker/setup.bash
 ros2 pkg prefix livox_ros_driver2

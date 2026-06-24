@@ -1,0 +1,15 @@
+# Copy this file to config/waver_field_env.local and edit for your robot.
+# This local file must not be committed.
+JETSON_HOST=10.139.225.150
+JETSON_USER=sw
+JETSON_PORT=22
+JETSON_WS=/home/sw/ros2_ws5/FSD_Vehicle
+CONTAINER=fsd_dev_jetson
+ROS_DOMAIN_ID=30
+SERIAL_PORT=auto
+LIVOX_SENSOR_IP=192.168.1.12
+LIVOX_BD_CODE=livox0000000001
+# Prefer SSH keys. If password SSH is unavoidable, copy this file to
+# config/waver_field_env.local, uncomment the two lines below, and keep it local.
+# WAVER_ALLOW_PASSWORD_SSH=1
+# JETSON_PASS=replace_me

@@ -42,7 +42,7 @@ state, and does not throw `NotImplementedError` inside a ROS callback.
 ## Desk Test
 
 ```bash
-cd /home/chotaehyun/ros2_ws5/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch waver_patrol waver_bird_autonomy.launch.py \
@@ -59,7 +59,7 @@ ros2 launch waver_patrol waver_bird_autonomy.launch.py \
 Run Gazebo with the same safety ownership used on the real robot:
 
 ```bash
-cd /home/chotaehyun/ros2_ws5/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch waver_patrol waver_gazebo_bird_autonomy.launch.py \

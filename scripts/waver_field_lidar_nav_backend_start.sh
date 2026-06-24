@@ -6,25 +6,15 @@ set -euo pipefail
 # field topology, but starts the real localization/Nav2 mission stack instead of
 # the supervised open-loop micro-patrol helper.
 
-FIELD_ENV_FILE="${WAVER_FIELD_ENV_FILE:-$HOME/.waver_field_env}"
-if [ -f "${FIELD_ENV_FILE}" ]; then
-  # Local-only field settings: Jetson IP/user/password/workspace. This file is
-  # intentionally outside the repository so the field password is not committed.
-  set -a
-  # shellcheck disable=SC1090
-  source "${FIELD_ENV_FILE}"
-  set +a
-fi
-
-JETSON_HOST="${JETSON_HOST:-10.139.225.150}"
-JETSON_USER="${JETSON_USER:-sw}"
-JETSON_PASS="${JETSON_PASS:-}"
-JETSON_WS="${JETSON_WS:-/home/sw/ros2_ws5/FSD_Vehicle}"
-JETSON_HOST_AUTO="${JETSON_HOST_AUTO:-true}"
-JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST} 10.139.225.150 10.63.240.150 10.139.225.126}"
-CONTAINER="${CONTAINER:-fsd_dev_jetson}"
-SERIAL_PORT="${SERIAL_PORT:-auto}"
-FIELD_BUILD_IN_DOCKER="${FIELD_BUILD_IN_DOCKER:-false}"
+LOCAL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/waver_field_env_load.sh
+source "${LOCAL_ROOT}/scripts/waver_field_env_load.sh"
+waver_field_env_require
+waver_ssh_cmd
+waver_scp_cmd
+SSH_CMD=("${WAVER_SSH_CMD[@]}")
+SCP_CMD=("${WAVER_SCP_CMD[@]}")
+JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST}}"
 
 MAP_PATH="${MAP_PATH:-/ros2_ws/ros2_ws5/maps/waver_latest_map.yaml}"
 WAYPOINT_FILE="${WAYPOINT_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/waypoints/waver_real_0p5m_square_patrol.yaml}"
@@ -43,19 +33,6 @@ SAFETY_MAX_LINEAR_SPEED="${SAFETY_MAX_LINEAR_SPEED:-0.05}"
 SAFETY_MAX_ANGULAR_SPEED="${SAFETY_MAX_ANGULAR_SPEED:-0.20}"
 ENABLE_BIRD_STACK="${ENABLE_BIRD_STACK:-false}"
 ENABLE_SOUND_STACK="${ENABLE_SOUND_STACK:-false}"
-
-SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=8)
-if [ -n "${JETSON_PASS}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-}" = "1" ] && command -v sshpass >/dev/null 2>&1; then
-  SSH_CMD=(sshpass -p "${JETSON_PASS}" ssh "${SSH_OPTS[@]}")
-  SCP_CMD=(sshpass -p "${JETSON_PASS}" scp "${SSH_OPTS[@]}")
-else
-  if [ -n "${JETSON_PASS}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-}" != "1" ]; then
-    echo "[LOCAL][WARN] JETSON_PASS is set but ignored. Set WAVER_ALLOW_PASSWORD_SSH=1 only for temporary password auth." >&2
-  fi
-  echo "[LOCAL] using SSH key/agent or interactive SSH auth." >&2
-  SSH_CMD=(ssh "${SSH_OPTS[@]}")
-  SCP_CMD=(scp "${SSH_OPTS[@]}")
-fi
 
 select_jetson_host() {
   if [ "${JETSON_HOST_AUTO}" != "true" ]; then
@@ -83,7 +60,6 @@ select_jetson_host() {
   exit 12
 }
 
-LOCAL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [ -f "${HOME}/.waver_jetson_host" ] && [ "${JETSON_HOST_AUTO}" = "true" ]; then
   cached_host="$(head -n 1 "${HOME}/.waver_jetson_host" | tr -d '[:space:]')"
   if [ -n "${cached_host}" ]; then
@@ -158,8 +134,8 @@ fi
 
 if ! docker ps --format '{{.Names}}' | grep -qx "${CONTAINER}"; then
   echo "[JETSON] starting Docker container via docker/run.sh jetson"
-  bash docker/run.sh jetson >/tmp/waver_lidar_nav_docker_run.log 2>&1 || {
-    echo "[JETSON][ERROR] docker/run.sh jetson failed. See /tmp/waver_lidar_nav_docker_run.log"
+  bash docker/run.sh jetson-up >/tmp/waver_lidar_nav_docker_run.log 2>&1 || {
+    echo "[JETSON][ERROR] docker/run.sh jetson-up failed. See /tmp/waver_lidar_nav_docker_run.log"
     tail -80 /tmp/waver_lidar_nav_docker_run.log || true
     exit 21
   }
@@ -174,6 +150,10 @@ fi
 if [ -d "${JETSON_WS}/maps" ]; then
   docker exec "${CONTAINER}" mkdir -p /ros2_ws/ros2_ws5/maps
   docker cp "${JETSON_WS}/maps/." "${CONTAINER}:/ros2_ws/ros2_ws5/maps/" >/dev/null 2>&1 || true
+fi
+
+if [ "${FIELD_BUILD_IN_DOCKER}" = "auto" ] && ! docker exec "${CONTAINER}" bash -lc 'cd /ros2_ws/ros2_ws5 && test -f install_docker/setup.bash' >/dev/null 2>&1; then
+  FIELD_BUILD_IN_DOCKER=true
 fi
 
 if [ "${FIELD_BUILD_IN_DOCKER}" = "true" ]; then
@@ -223,8 +203,8 @@ sleep 1
 echo "[JETSON] serial owner before launch:"
 fuser -v "${SERIAL_PORT}" 2>&1 || true
 
-DOCKER_SOURCE='source /opt/ros/humble/install/setup.bash && source /opt/ros/humble/setup.bash && source install_docker/setup.bash && export ROS_DOMAIN_ID=30 && export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp'
-LIVOX_DOCKER_SOURCE='source /opt/ros/humble/install/setup.bash && source /opt/ros/humble/setup.bash && source install_docker/setup.bash && export ROS_DOMAIN_ID=30 && export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp'
+DOCKER_SOURCE='if [ -f /opt/ros/humble/install/setup.bash ]; then source /opt/ros/humble/install/setup.bash; fi; source /opt/ros/humble/setup.bash; if [ -f install_docker/setup.bash ]; then source install_docker/setup.bash; elif [ -f install/setup.bash ]; then source install/setup.bash; fi; export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-30}"; export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"'
+LIVOX_DOCKER_SOURCE="${DOCKER_SOURCE}"
 ENABLE_RL="false"
 if [ "${ODOM_SOURCE}" = "ekf" ]; then
   ENABLE_RL="true"

@@ -12,6 +12,30 @@ This tree is configured for Gazebo Classic mapping debug, Gazebo bird-autonomy
 simulation, real-vehicle dry-run, wheel-off, and first low-speed wheel-on checks.
 Real wheel-on is not allowed until strict preflight and wheel-off checks pass.
 
+## Clone-To-Field Waver Control
+
+For the local-PC -> SSH -> Jetson -> Docker -> Waver USB serial workflow, start
+with:
+
+```bash
+cd ~/ros2_ws5/FSD_Vehicle
+bash scripts/waver_doctor.sh
+bash scripts/waver_field_bootstrap_jetson.sh
+```
+
+Normal field operation after bootstrap is:
+
+```bash
+cd ~/ros2_ws5/FSD_Vehicle
+bash scripts/waver_field_docker_backend_start.sh
+
+# second local PC terminal
+cd ~/ros2_ws5/FSD_Vehicle
+bash scripts/waver_field_local_ui_start.sh
+```
+
+Detailed fresh-clone instructions are in [docs/CLONE_TO_FIELD.md](docs/CLONE_TO_FIELD.md).
+
 ## Build And Static Checks
 
 ```bash

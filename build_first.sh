@@ -76,7 +76,7 @@ colcon build --packages-select \
     ugv_bringup ugv_chat_ai ugv_description ugv_gazebo \
     ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app ugv_lidar_detection \
     pcd_cluster_pkg waver_patrol \
-    livox_ros_driver2 livox_laser_simulation_RO2 \
+    livox_ros_driver2 ros2_livox_simulation \
     --symlink-install
 
 # 3. 환경 설정 (.bashrc에 추가)

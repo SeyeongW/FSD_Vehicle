@@ -46,7 +46,7 @@ If this zip restored `waver_patrol` only under the archived folder, recover it i
 colcon source space first:
 
 ```bash
-cd /home/chotaehyun/ros2_ws5/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 mkdir -p src
 rsync -a _waver_archived_non_ugv_tools_20260519/src/waver_patrol/ src/FSD_Vehicle/src/waver_patrol/
 ```
@@ -55,7 +55,7 @@ Do not move or symlink the `FSD_Vehicle` trees while doing this; duplicate packa
 `colcon`. Build `waver_patrol` alone first.
 
 ```bash
-cd /home/chotaehyun/ros2_ws5/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 rosdep install -i --from-paths src/FSD_Vehicle/src/waver_patrol --rosdistro humble -y
 colcon build --packages-select waver_patrol --symlink-install
@@ -167,7 +167,7 @@ Never run `ugv_driver` and `serial_cmd_vel_bridge` on the same serial port. If e
 Desk test, with fake odom and fake targets only:
 
 ```bash
-cd /home/chotaehyun/ros2_ws5/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch waver_patrol waver_bird_autonomy.launch.py \
@@ -613,7 +613,7 @@ Use Waver's Gazebo launch to keep the same command path as the real robot: Waver
 commands go through `auto_behavior_mux_node`, then `safety_cmd_mux_node`, and only then `/cmd_vel`.
 
 ```bash
-cd /home/chotaehyun/ros2_ws5/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 colcon build --paths src/FSD_Vehicle/src/waver_patrol src/FSD_Vehicle/src/ugv_main/ugv_gazebo \
   --packages-select waver_patrol ugv_gazebo --symlink-install
@@ -785,9 +785,9 @@ Additional handover and UI documentation:
 ## Tests
 
 ```bash
-cd /home/chotaehyun/ros2_ws5/FSD_Vehicle/src/waver_patrol
+cd ~/ros2_ws5/FSD_Vehicle/src/waver_patrol
 pytest -q
-cd /home/chotaehyun/ros2_ws5/FSD_Vehicle
+cd ~/ros2_ws5/FSD_Vehicle
 colcon test --packages-select waver_patrol
 ```
 

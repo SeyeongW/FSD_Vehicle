@@ -1,0 +1,61 @@
+# Waver field operation default environment
+# This file is included in the repository for clone-to-run field operation.
+# It contains non-secret operational defaults only.
+#
+# Do not put passwords, SSH private keys, API tokens, or private credentials here.
+
+# Jetson SSH target.
+# These are non-secret field defaults for the current Waver test rig.
+# Change them here or override them in config/waver_field_env.local.
+JETSON_HOST=10.139.225.150
+JETSON_USER=sw
+JETSON_PORT=22
+
+# Workspace path on Jetson host
+JETSON_WS=/home/sw/ros2_ws5/FSD_Vehicle
+
+# Docker
+CONTAINER=fsd_dev_jetson
+DOCKER_COMPOSE_FILE=docker-compose.jetson.yml
+
+# ROS 2
+ROS_DISTRO=humble
+ROS_DOMAIN_ID=30
+RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# Waver base serial
+SERIAL_PORT=auto
+SERIAL_PORT_REQUIRED_BY_ID=true
+SERIAL_PORT_BY_ID_PATTERN=/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_*
+SERIAL_PORT_ALLOW_TTYUSB_FALLBACK=false
+SERIAL_PORT_ALLOW_TTYTHS_FALLBACK=false
+
+# Livox MID-360
+LIVOX_POINTCLOUD_TOPIC=/livox/lidar
+LIVOX_IMU_TOPIC=/livox/imu
+LIVOX_FRAME_ID=livox_frame
+LIVOX_HOST_IP=192.168.1.5
+LIVOX_SENSOR_IP=192.168.1.12
+LIVOX_BD_CODE=livox0000000001
+
+# Runtime profile
+WAVER_PROFILE=real
+WAVER_REQUIRE_SCAN=true
+WAVER_START_SERIAL_BRIDGE=true
+
+# Build policy inside Docker
+# auto: build if install_docker/setup.bash is missing
+# true: always build before start
+# false: never build automatically
+FIELD_BUILD_IN_DOCKER=auto
+
+# Optional Jetson host auto-detection
+JETSON_HOST_AUTO=false
+JETSON_HOST_CANDIDATES="10.139.225.150 10.63.240.150 192.168.0.23 10.42.0.1"
+
+# SSH password mode is disabled by default. Prefer SSH key authentication.
+WAVER_ALLOW_PASSWORD_SSH=0
+
+# Do not commit real secrets.
+# JETSON_PASS=
+# JETSON_KEY_FILENAME=
