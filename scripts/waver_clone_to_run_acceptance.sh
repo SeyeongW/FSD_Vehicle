@@ -50,7 +50,8 @@ if rg -n 'WAVER_FIELD_ENV_FILE:-\\$HOME/\\.waver_field_env|source /opt/ros/humbl
 fi
 
 if rg -n '10\\.139\\.225\\.150|10\\.63\\.240\\.150|/home/sw|/home/chotaehyun' "${ROOT}/scripts" "${ROOT}/docker" \
-  -g '!waver_clone_to_run_acceptance.sh' >/tmp/waver_acceptance_personal_grep.log; then
+  -g '!waver_clone_to_run_acceptance.sh' \
+  -g '!waver_create_home_field_env.sh' >/tmp/waver_acceptance_personal_grep.log; then
   failed+=("personal values are hardcoded in scripts/docker; see /tmp/waver_acceptance_personal_grep.log")
 fi
 

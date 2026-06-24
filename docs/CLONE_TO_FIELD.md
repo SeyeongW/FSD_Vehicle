@@ -38,14 +38,31 @@ cp config/waver_field_env.local.example config/waver_field_env.local
 nano config/waver_field_env.local
 ```
 
-Passwords and private keys must stay out of git. Prefer SSH keys:
+Passwords and private keys stay out of git. On first field start, the scripts
+will ask for the Jetson SSH password once and save it to the ignored local file
+`config/waver_field_env.local`. After that, the two normal run commands are
+enough.
+
+If you prefer one home-level file that can be handed to a new operator outside
+the repository, use:
+
+```bash
+cd ~/ros2_ws5/FSD_Vehicle
+bash scripts/waver_create_home_field_env.sh 10.139.225.150 sw /home/sw/ros2_ws5/FSD_Vehicle
+```
+
+This writes `~/.waver_field_env` with file mode `600`. The package always reads
+this file as a legacy/local override after the repository defaults.
+
+SSH keys are still preferred when available:
 
 ```bash
 ssh-copy-id sw@10.139.225.150
 ```
 
-If password SSH is unavoidable, put `WAVER_ALLOW_PASSWORD_SSH=1` and
-`JETSON_PASS=...` only in `config/waver_field_env.local`.
+If password SSH is unavoidable and you do not want the first-run prompt, put
+`WAVER_ALLOW_PASSWORD_SSH=1` and `JETSON_PASS=...` only in
+`config/waver_field_env.local`.
 
 ## Jetson Bootstrap
 
@@ -80,6 +97,9 @@ Open a second local PC terminal:
 cd ~/ros2_ws5/FSD_Vehicle
 bash scripts/waver_field_local_ui_start.sh
 ```
+
+If the Jetson workspace has not been bootstrapped yet, the backend script now
+runs bootstrap automatically before starting Docker backend nodes.
 
 Equivalent wrapper names are also available:
 
@@ -119,4 +139,3 @@ ros2 topic echo --once /waver/base_driver_state
 ```
 
 `/cmd_vel` must have exactly one publisher: `safety_cmd_mux_node`.
-

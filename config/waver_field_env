@@ -53,8 +53,11 @@ FIELD_BUILD_IN_DOCKER=auto
 JETSON_HOST_AUTO=false
 JETSON_HOST_CANDIDATES="10.139.225.150 10.63.240.150 192.168.0.23 10.42.0.1"
 
-# SSH password mode is disabled by default. Prefer SSH key authentication.
+# SSH password bootstrap.
+# First field script run can create ignored config/waver_field_env.local
+# automatically, so a fresh clone still uses the two normal run commands.
 WAVER_ALLOW_PASSWORD_SSH=0
+WAVER_PASSWORD_BOOTSTRAP=true
 
 # Do not commit real secrets.
 # JETSON_PASS=

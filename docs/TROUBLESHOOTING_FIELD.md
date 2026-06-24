@@ -33,6 +33,10 @@ sudo apt install -y sshpass
 ssh-copy-id sw@10.139.225.150
 ```
 
+The field scripts can also create `config/waver_field_env.local` on first run by
+prompting once for the Jetson SSH password. That file is intentionally ignored
+by git.
+
 ## Docker Container Missing
 
 On Jetson:
@@ -72,4 +76,3 @@ Wheel-on rules:
 - serial owner count <= 1
 - scan and odom live for autonomous operation
 ```
-

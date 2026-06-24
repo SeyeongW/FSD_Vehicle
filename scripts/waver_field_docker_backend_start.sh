@@ -5,6 +5,7 @@ LOCAL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/waver_field_env_load.sh
 source "${LOCAL_ROOT}/scripts/waver_field_env_load.sh"
 waver_field_env_require
+waver_field_env_ensure_password
 waver_ssh_cmd
 waver_scp_cmd
 SSH_CMD=("${WAVER_SSH_CMD[@]}")

@@ -23,7 +23,18 @@ bash scripts/waver_doctor.sh
 bash scripts/waver_field_bootstrap_jetson.sh
 ```
 
-Normal field operation after bootstrap is:
+Normal field operation after bootstrap is below. On first password-based SSH
+use, the script asks for the Jetson password once and stores it in ignored local
+file `config/waver_field_env.local`; after that, these same two commands run
+directly.
+
+For a new operator who receives the Jetson password separately, create one
+home-level env file once:
+
+```bash
+cd ~/ros2_ws5/FSD_Vehicle
+bash scripts/waver_create_home_field_env.sh 10.139.225.150 sw /home/sw/ros2_ws5/FSD_Vehicle
+```
 
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle

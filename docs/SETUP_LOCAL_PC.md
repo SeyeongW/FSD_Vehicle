@@ -26,7 +26,8 @@ ssh-copy-id sw@10.139.225.150
 ssh sw@10.139.225.150
 ```
 
-If you cannot use SSH keys, create an ignored local override:
+If you cannot use SSH keys, the first backend/UI start will prompt once and
+create the ignored local override automatically. To create it manually:
 
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
@@ -36,10 +37,19 @@ nano config/waver_field_env.local
 
 Only `config/waver_field_env.local` may contain `JETSON_PASS`. Do not commit it.
 
+Alternative home-file handoff:
+
+```bash
+cd ~/ros2_ws5/FSD_Vehicle
+bash scripts/waver_create_home_field_env.sh 10.139.225.150 sw /home/sw/ros2_ws5/FSD_Vehicle
+```
+
+This creates `~/.waver_field_env`, which is read automatically by all field
+scripts and can contain the Jetson password.
+
 Before field operation:
 
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
 bash scripts/waver_doctor.sh
 ```
-

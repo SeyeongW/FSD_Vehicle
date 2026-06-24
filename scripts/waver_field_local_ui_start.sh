@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 # shellcheck source=scripts/waver_field_env_load.sh
 source scripts/waver_field_env_load.sh
 waver_field_env_require
+waver_field_env_ensure_password
 
 source /opt/ros/humble/setup.bash
 WAVER_LOCAL_UI_BUILD_IF_MISSING="${WAVER_LOCAL_UI_BUILD_IF_MISSING:-auto}"
