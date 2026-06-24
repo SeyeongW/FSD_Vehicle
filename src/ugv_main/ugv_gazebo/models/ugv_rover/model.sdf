@@ -358,8 +358,8 @@
           </ray>
           <visualize>false</visualize>
           <samples>40000</samples>
-          <downsample>1</downsample>
-          <csv_file_name>/home/chotaehyun/ros2_ws3/FSD_Vehicle/src/livox_laser_simulation_RO2/scan_mode/mid360.csv</csv_file_name>
+          <downsample>4</downsample>
+          <csv_file_name>/home/chotaehyun/ros2_ws5/FSD_Vehicle/src/livox_laser_simulation_RO2/scan_mode/mid360.csv</csv_file_name>
           <topic>mid360</topic>
         </plugin>
       </sensor>

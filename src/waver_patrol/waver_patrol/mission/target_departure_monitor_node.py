@@ -15,7 +15,18 @@ ACTION_DONE_STATES = {
     "SOUND_TASK_BLOCKED_BY_CLASS",
     "SOUND_TASK_TIMEOUT",
     "TARGET_NOT_BIRD",
+    "TARGET_CLASSIFIED_DRONE",
+    "TARGET_CLASSIFIED_UNKNOWN",
+    "TARGET_CLASSIFIED_IRRELEVANT",
+    "CAMERA_ALIGN_FAILED",
 }
+
+WAIT_STATES = {"WAIT_TARGET_DEPARTURE"}
+
+
+def normalize_mission_state(text: str) -> str:
+    stripped = (text or "").strip()
+    return stripped.split()[0].upper() if stripped else "UNKNOWN"
 
 
 class TargetDepartureMonitorNode(Node):
@@ -50,11 +61,11 @@ class TargetDepartureMonitorNode(Node):
         self.create_timer(0.2, self.tick)
 
     def mission_state_callback(self, msg: String) -> None:
-        state = msg.data.strip().upper()
+        state = normalize_mission_state(msg.data)
         self.mission_state = state
         if state in ACTION_DONE_STATES:
             self.action_done_time = self._now()
-        elif state not in {"WAIT_TARGET_DEPARTURE", *ACTION_DONE_STATES}:
+        elif state not in WAIT_STATES:
             self.action_done_time = 0.0
 
     def aerial_target_callback(self, msg: PointStamped) -> None:

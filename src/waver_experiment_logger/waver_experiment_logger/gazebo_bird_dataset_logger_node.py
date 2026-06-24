@@ -84,7 +84,7 @@ class GazeboBirdDatasetLoggerNode(Node):
 
     def __init__(self) -> None:
         super().__init__("gazebo_bird_dataset_logger_node")
-        self.declare_parameter("output_root", str(Path.home() / "ros2_ws3/FSD_Vehicle/experiment_results/gazebo_bird_patrol"))
+        self.declare_parameter("output_root", str(Path.home() / "ros2_ws5/FSD_Vehicle/experiment_results/gazebo_bird_patrol"))
         self.declare_parameter("trial_id", "gazebo_bird_patrol")
         self.declare_parameter("experiment_id", "waver_gazebo_bird_patrol")
         self.declare_parameter("run_id", "")
@@ -701,6 +701,7 @@ class GazeboBirdDatasetLoggerNode(Node):
             "lidar_detection_count_latest": len(self.lidar_poses),
             "removed_bird_count": self.removed_bird_count,
             "two_bird_removal_success": self.removed_bird_count >= 2,
+            "five_bird_removal_success": self.removed_bird_count >= 5,
             "gt_used_for_decision": str(self.gt_used_for_decision).lower(),
             "detector_mode": self.detector_mode,
         }

@@ -130,6 +130,7 @@ class BirdManager(Node):
         self.declare_parameter('min_xy_radius_m', 0.0)
         self.declare_parameter('random_seed', int(os.environ.get('BIRD_MANAGER_RANDOM_SEED', '0')))
         self.declare_parameter('sequential_release_birds', True)
+        self.declare_parameter('release_interval_sec', 0.0)
         self.declare_parameter('enable_remove_after_detection', True)
         self.declare_parameter('remove_after_detected_sec', 5.0)
         self.declare_parameter('detection_hold_grace_sec', 3.0)
@@ -152,6 +153,7 @@ class BirdManager(Node):
         self.declare_parameter('hidden_y_m', 50.0)
         self.declare_parameter('hidden_z_m', 3.2)
         self.declare_parameter('stable_demo_spawn', True)
+        self.declare_parameter('random_spawn_inside_lidar_area', True)
         self.declare_parameter('removal_state_topic', '/waver/gazebo_bird_removal_state')
         seed = int(self.get_parameter('random_seed').value)
         if seed:
@@ -177,6 +179,7 @@ class BirdManager(Node):
             self.z_min, self.z_max = self.z_max, self.z_min
         self.min_xy_radius = max(0.0, float(self.get_parameter('min_xy_radius_m').value))
         self.sequential_release_birds = bool(self.get_parameter('sequential_release_birds').value)
+        self.release_interval_sec = max(0.0, float(self.get_parameter('release_interval_sec').value))
         self.enable_remove_after_detection = bool(self.get_parameter('enable_remove_after_detection').value)
         self.remove_after_detected_sec = max(
             0.0,
@@ -199,6 +202,7 @@ class BirdManager(Node):
         self.hidden_y_m = float(self.get_parameter('hidden_y_m').value)
         self.hidden_z_m = float(self.get_parameter('hidden_z_m').value)
         self.stable_demo_spawn = bool(self.get_parameter('stable_demo_spawn').value)
+        self.random_spawn_inside_lidar_area = bool(self.get_parameter('random_spawn_inside_lidar_area').value)
 
         self.dt = 0.08
         self.busy = False
@@ -240,6 +244,7 @@ class BirdManager(Node):
         self.detection_start_wall = None
         self.detection_last_seen_wall = None
         self.removed_birds = []
+        self.next_release_due_wall = 0.0
         self.robot_x = 0.0
         self.robot_y = 0.0
         self.robot_pose_seen = False
@@ -319,6 +324,7 @@ class BirdManager(Node):
             f'speed_range={min_speed:.2f}-{max_speed:.2f}m/s '
             f'active_birds={[bird.name for bird in self.birds]} '
             f'sequential_release={self.sequential_release_birds} '
+            f'release_interval={self.release_interval_sec:.1f}s '
             f'stable_demo_spawn={self.stable_demo_spawn} '
             f'sound_flee={self.enable_flee_after_sound} flee_distance={self.flee_distance_m:.1f}m '
             f'lidar_allowed=({self.allowed_lidar_x_min:.1f},{self.allowed_lidar_y_min:.1f})'
@@ -426,9 +432,18 @@ class BirdManager(Node):
         )
 
     def pick_random_target(self):
+        if self.random_spawn_inside_lidar_area:
+            margin = 0.35
+            x_min = min(self.allowed_lidar_x_min + margin, self.allowed_lidar_x_max)
+            x_max = max(self.allowed_lidar_x_max - margin, self.allowed_lidar_x_min)
+            y_min = min(self.allowed_lidar_y_min + margin, self.allowed_lidar_y_max)
+            y_max = max(self.allowed_lidar_y_max - margin, self.allowed_lidar_y_min)
+        else:
+            x_min, x_max = self.x_min, self.x_max
+            y_min, y_max = self.y_min, self.y_max
         for _ in range(40):
-            x = random.uniform(self.x_min, self.x_max)
-            y = random.uniform(self.y_min, self.y_max)
+            x = random.uniform(x_min, x_max)
+            y = random.uniform(y_min, y_max)
             if horizontal_len(x, y) >= self.min_xy_radius:
                 return (x, y, random.uniform(self.z_min, self.z_max))
         angle = random.uniform(-math.pi, math.pi)
@@ -488,16 +503,6 @@ class BirdManager(Node):
     def fallback_spawn_point(self, index):
         if self.stable_demo_spawn:
             return self.stable_demo_spawn_point(index)
-
-        z = 0.5 * (self.z_min + self.z_max)
-        preset = [
-            (4.5, 0.0, z),
-            (-4.5, 0.0, z),
-            (0.0, 4.5, z),
-            (0.0, -4.5, z),
-        ]
-        if index < len(preset):
-            return preset[index]
         return self.pick_random_target()
 
     def is_valid_active_pose(self, state):
@@ -614,6 +619,30 @@ class BirdManager(Node):
         rt.hidden_applied = True
         self.set_entity_state(hidden_state)
 
+    def schedule_next_release(self):
+        if not self.sequential_release_birds:
+            return
+        if self.max_removed_birds > 0 and len(self.removed_birds) >= self.max_removed_birds:
+            return
+        if not any((not self.runtime[bird.name].removed) and (not self.runtime[bird.name].released) for bird in self.birds):
+            return
+        self.next_release_due_wall = max(
+            self.next_release_due_wall,
+            time.monotonic() + self.release_interval_sec,
+        )
+        self.publish_removal_state(
+            f'RELEASE_SCHEDULED due_in_sec={self.release_interval_sec:.2f} '
+            f'removed_count={len(self.removed_birds)} goal={self.max_removed_birds}'
+        )
+
+    def maybe_release_scheduled_bird(self):
+        if not self.sequential_release_birds or self.next_release_due_wall <= 0.0:
+            return
+        if time.monotonic() < self.next_release_due_wall:
+            return
+        self.next_release_due_wall = 0.0
+        self.release_next_bird()
+
     def release_next_bird(self):
         for bird in self.birds:
             rt = self.runtime[bird.name]
@@ -671,7 +700,7 @@ class BirdManager(Node):
         self.detection_start_wall = None
         self.sound_done_seen_for_detection = False
         if len(self.removed_birds) < self.max_removed_birds:
-            self.release_next_bird()
+            self.schedule_next_release()
         elif self.max_removed_birds > 0:
             self.publish_removal_state(
                 f'REMOVAL_GOAL_REACHED removed_count={len(self.removed_birds)} '
@@ -872,6 +901,7 @@ class BirdManager(Node):
             self.busy = False
             return
 
+        self.maybe_release_scheduled_bird()
         self.enforce_active_spawn_safety()
         world_info = self.build_world_info()
 

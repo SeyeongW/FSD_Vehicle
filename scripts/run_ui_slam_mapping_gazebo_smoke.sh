@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "${WAVER_WS3_ROOT:-$HOME/ros2_ws3/FSD_Vehicle}"
+cd "${WAVER_WS5_ROOT:-$HOME/ros2_ws5/FSD_Vehicle}"
 set +u
 source /opt/ros/humble/setup.bash
 source install/setup.bash
@@ -73,7 +73,7 @@ timeout --foreground "${WAVER_UI_SLAM_TIMEOUT:-180}" \
     start_remote_panel:=true \
     remote_panel_demo_script:="${WAVER_REMOTE_PANEL_DEMO:-mapping_workflow_smoke}" \
     demo_close_on_finish:=true \
-    save_dir:="$HOME/ros2_ws3/FSD_Vehicle/maps" \
+    save_dir:="$HOME/ros2_ws5/FSD_Vehicle/maps" \
   2>&1 | tee "log/ui_slam/mapping_smoke_$(date +%Y%m%d_%H%M%S).log"
 status=${PIPESTATUS[0]}
 set -e
@@ -82,7 +82,7 @@ if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
 fi
 
 CHECK_ARGS=(
-  --map-yaml "$HOME/ros2_ws3/FSD_Vehicle/maps/waver_latest_map.yaml"
+  --map-yaml "$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml"
   --skip-graph
 )
 if [ "${WAVER_SPAWN_TEST_OBSTACLE:-false}" = "true" ]; then

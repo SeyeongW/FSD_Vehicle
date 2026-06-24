@@ -39,9 +39,15 @@ def generate_launch_description() -> LaunchDescription:
     feedback_serial_port = LaunchConfiguration("feedback_serial_port")
     feedback_baudrate = LaunchConfiguration("feedback_baudrate")
     base_node_executable = LaunchConfiguration("base_node_executable")
+    enable_legacy_ugv_base_odometry_node = LaunchConfiguration("enable_legacy_ugv_base_odometry_node")
     pub_odom_tf = LaunchConfiguration("pub_odom_tf")
     enable_ldlidar = LaunchConfiguration("enable_ldlidar")
     enable_rf2o = LaunchConfiguration("enable_rf2o")
+    enable_auto_behavior_mux = LaunchConfiguration("enable_auto_behavior_mux")
+    cmd_vel_auto_topic = LaunchConfiguration("cmd_vel_auto_topic")
+    cmd_vel_target_track_topic = LaunchConfiguration("cmd_vel_target_track_topic")
+    cmd_vel_return_home_topic = LaunchConfiguration("cmd_vel_return_home_topic")
+    auto_behavior_target_active_topic = LaunchConfiguration("auto_behavior_target_active_topic")
 
     common = [config_file, {"use_sim_time": ParameterValue(use_sim_time, value_type=bool)}]
     serial_condition = IfCondition(
@@ -77,6 +83,7 @@ def generate_launch_description() -> LaunchDescription:
                     "feedback_serial_port": feedback_serial_port,
                     "feedback_baudrate": feedback_baudrate,
                     "base_node_executable": base_node_executable,
+                    "enable_legacy_ugv_base_odometry_node": enable_legacy_ugv_base_odometry_node,
                     "enable_ldlidar": enable_ldlidar,
                     "enable_rf2o": enable_rf2o,
                 }.items(),
@@ -106,9 +113,11 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_sound_stub", default_value="false"),
             DeclareLaunchArgument("enable_sound_deterrent", default_value="true"),
             DeclareLaunchArgument("enable_camera_gimbal_controller", default_value="true"),
+            DeclareLaunchArgument("enable_target_departure_monitor", default_value="true"),
+            DeclareLaunchArgument("enable_auto_behavior_mux", default_value="true"),
             DeclareLaunchArgument("enable_experiment_logger", default_value="true"),
             DeclareLaunchArgument("experiment_name", default_value="waver_lidar_first_bird_deterrence"),
-            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ros2_ws3/FSD_Vehicle/experiment_results"),
+            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ros2_ws5/FSD_Vehicle/experiment_results"),
             DeclareLaunchArgument("enable_keyboard_teleop", default_value="false"),
             DeclareLaunchArgument("enable_test_publishers", default_value="false"),
             DeclareLaunchArgument("start_serial_bridge", default_value="false"),
@@ -139,6 +148,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("feedback_serial_port", default_value=""),
             DeclareLaunchArgument("feedback_baudrate", default_value="115200"),
             DeclareLaunchArgument("base_node_executable", default_value="base_node"),
+            DeclareLaunchArgument("enable_legacy_ugv_base_odometry_node", default_value="true"),
             DeclareLaunchArgument("pub_odom_tf", default_value="true"),
             DeclareLaunchArgument("enable_ldlidar", default_value="false"),
             DeclareLaunchArgument("enable_rf2o", default_value="false"),
@@ -152,6 +162,10 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("velocity_smoother_input_topic", default_value="/waver/cmd_vel_nav2_raw"),
             DeclareLaunchArgument("velocity_smoother_output_topic", default_value="/waver/cmd_vel_nav2_smooth"),
             DeclareLaunchArgument("safety_nav2_cmd_topic", default_value="/waver/cmd_vel_nav2"),
+            DeclareLaunchArgument("cmd_vel_auto_topic", default_value="/waver/cmd_vel_auto"),
+            DeclareLaunchArgument("cmd_vel_target_track_topic", default_value="/waver/cmd_vel_target_track"),
+            DeclareLaunchArgument("cmd_vel_return_home_topic", default_value="/waver/cmd_vel_return_home"),
+            DeclareLaunchArgument("auto_behavior_target_active_topic", default_value="/waver/inspection_target_active"),
             DeclareLaunchArgument("moving_object_input_topic", default_value="/waver/lidar_objects"),
             DeclareLaunchArgument("moving_object_input_type", default_value="pose_array"),
             DeclareLaunchArgument("moving_object_output_topic", default_value="/waver/lidar_objects_map"),
@@ -390,6 +404,14 @@ def generate_launch_description() -> LaunchDescription:
             ),
             Node(
                 package="waver_patrol",
+                executable="target_departure_monitor_node",
+                name="target_departure_monitor_node",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_target_departure_monitor")),
+                parameters=common,
+            ),
+            Node(
+                package="waver_patrol",
                 executable="battery_return_manager_node",
                 name="battery_return_manager_node",
                 output="screen",
@@ -458,6 +480,25 @@ def generate_launch_description() -> LaunchDescription:
             ),
             Node(
                 package="waver_patrol",
+                executable="auto_behavior_mux_node",
+                name="auto_behavior_mux_node",
+                output="screen",
+                condition=IfCondition(enable_auto_behavior_mux),
+                parameters=[
+                    *common,
+                    {
+                        "cmd_vel_patrol_topic": safety_nav2_cmd_topic,
+                        "cmd_vel_target_track_topic": cmd_vel_target_track_topic,
+                        "cmd_vel_return_home_topic": cmd_vel_return_home_topic,
+                        "cmd_vel_auto_topic": cmd_vel_auto_topic,
+                        "aerial_target_active_topic": auto_behavior_target_active_topic,
+                        "mode_topic": "/waver/mode",
+                        "default_mode": default_mode,
+                    },
+                ],
+            ),
+            Node(
+                package="waver_patrol",
                 executable="safety_cmd_mux_node",
                 name="safety_cmd_mux_node",
                 output="screen",
@@ -474,7 +515,9 @@ def generate_launch_description() -> LaunchDescription:
                         "max_angular_speed": ParameterValue(LaunchConfiguration("safety_max_angular_speed"), value_type=float),
                         "mode_default": default_mode,
                         "nav2_cmd_topic": safety_nav2_cmd_topic,
-                        "cmd_vel_auto_topic": "",
+                        "cmd_vel_auto_topic": PythonExpression(
+                            ["'", cmd_vel_auto_topic, "' if '", enable_auto_behavior_mux, "' == 'true' else ''"]
+                        ),
                         "scan_topic": scan_topic,
                     },
                 ],

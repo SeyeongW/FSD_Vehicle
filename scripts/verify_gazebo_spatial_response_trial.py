@@ -63,9 +63,11 @@ def main() -> int:
     parser.add_argument("--max-gt-leakage", type=int, default=0)
     parser.add_argument("--require-odom-motion", action="store_true", default=True)
     parser.add_argument("--require-return-resume", action="store_true", default=False)
+    parser.add_argument("--require-mid-patrol-preempt", action="store_true", default=False)
     args = parser.parse_args()
     if args.mode == "full":
         args.require_return_resume = True
+        args.require_mid_patrol_preempt = True
 
     run_dir = args.run_dir.expanduser().resolve()
     metrics_path = run_dir / "metrics" / "spatial_response_metrics.json"
@@ -100,6 +102,26 @@ def main() -> int:
     require(truth(metrics.get("mechanism.has_nonzero_cmd_vel_after_target_goal")), "has_target_cmd_vel", failures)
     if args.mode == "full":
         require(truth(metrics.get("mechanism.has_patrol_preempt_to_target_goal")), "patrol_preempt_to_target_goal", failures)
+    if args.require_mid_patrol_preempt:
+        require(
+            truth(metrics.get("mechanism.mid_patrol_preempt_success")),
+            "mid_patrol_preempt_success",
+            failures,
+            (
+                f"patrol_goal_to_preempt_ms={metrics.get('latency.patrol_goal_to_target_preempt_ms', '')} "
+                f"preempt_to_target_cmd_ms={metrics.get('latency.target_preempt_to_target_cmd_vel_ms', '')}"
+            ),
+        )
+        require(
+            truth(metrics.get("mechanism.preempt_before_first_patrol_dwell")),
+            "preempt_before_first_patrol_dwell",
+            failures,
+        )
+        require(
+            truth(metrics.get("mechanism.preempt_before_first_patrol_success")),
+            "preempt_before_first_patrol_success",
+            failures,
+        )
     if args.require_odom_motion:
         require(truth(metrics.get("mechanism.has_odom_motion_after_target_goal")), "has_odom_motion_after_target_goal", failures)
     if args.require_return_resume:

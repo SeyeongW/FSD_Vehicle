@@ -642,7 +642,7 @@ def generate_launch_description():
         DeclareLaunchArgument("remote_demo_script", default_value=""),
         DeclareLaunchArgument("remote_demo_close_on_finish", default_value="false"),
         DeclareLaunchArgument("remote_publish_direct_cmd_vel", default_value="true"),
-        DeclareLaunchArgument("data_log_dir", default_value="~/ros2_ws2/bird_patrol_data"),
+        DeclareLaunchArgument("data_log_dir", default_value="~/ros2_ws5/bird_patrol_data"),
         DeclareLaunchArgument("data_session_name", default_value="bird_patrol_10m"),
     ]
 

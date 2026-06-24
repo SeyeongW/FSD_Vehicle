@@ -24,6 +24,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("feedback_serial_port", default_value=""),
             DeclareLaunchArgument("feedback_baudrate", default_value="115200"),
             DeclareLaunchArgument("base_node_executable", default_value="base_node"),
+            DeclareLaunchArgument("enable_legacy_ugv_base_odometry_node", default_value="true"),
             DeclareLaunchArgument("enable_ldlidar", default_value="false"),
             DeclareLaunchArgument("enable_rf2o", default_value="false"),
             LogInfo(
@@ -44,6 +45,7 @@ def generate_launch_description() -> LaunchDescription:
                     "feedback_serial_port": LaunchConfiguration("feedback_serial_port"),
                     "feedback_baudrate": LaunchConfiguration("feedback_baudrate"),
                     "base_node_executable": LaunchConfiguration("base_node_executable"),
+                    "enable_legacy_ugv_base_odometry_node": LaunchConfiguration("enable_legacy_ugv_base_odometry_node"),
                     "enable_ldlidar": LaunchConfiguration("enable_ldlidar"),
                     "enable_rf2o": LaunchConfiguration("enable_rf2o"),
                 }.items(),

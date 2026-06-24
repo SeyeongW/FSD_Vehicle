@@ -186,7 +186,7 @@ class WaverKeyboard(Node):
         self.declare_parameter("hard_stop_distance_m", 0.45)
         self.declare_parameter("slow_down_distance_m", 1.2)
         self.declare_parameter("min_valid_scan_points", 40)
-        self.declare_parameter("mode_topic", "/waver/mode")
+        self.declare_parameter("mode_topic", "/waver/mode_cmd")
 
         # 역할: ROS 파라미터를 노드 내부 안전 제한값으로 확정한다.
         topic = self.get_parameter("cmd_vel_topic").value
@@ -205,7 +205,8 @@ class WaverKeyboard(Node):
 
         # 역할: Gazebo와 ROS 제어기는 기본적으로 Twist를 받으므로 /cmd_vel 계열로 발행한다.
         self.publisher = self.create_publisher(Twist, topic, 10)
-        # 역할: 터미널 키보드가 수동 우선권을 잡고 있음을 다른 Waver 노드가 볼 수 있게 한다.
+        # 역할: 터미널 키보드는 mode state를 직접 소유하지 않고 mode command만 낸다.
+        # 최종 /waver/mode authority는 mission_patrol_manager_node 하나로 유지한다.
         self.mode_pub = self.create_publisher(
             String,
             str(self.get_parameter("mode_topic").value),

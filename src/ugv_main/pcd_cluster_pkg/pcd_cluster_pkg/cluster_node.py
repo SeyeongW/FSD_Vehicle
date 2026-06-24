@@ -64,9 +64,11 @@ class ClusterNode(Node):
             String, str(self.get_parameter('state_topic').value), 10
         )
         self.declare_parameter('enable_cmd_vel_output', False)
+        self.declare_parameter('cmd_vel_output_topic', '/waver/cmd_vel_target_track')
         self.declare_parameter('lidar_objects_topic', '/waver/lidar_objects')
         self.enable_cmd_vel_output = bool(self.get_parameter('enable_cmd_vel_output').value)
-        self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10) if self.enable_cmd_vel_output else None
+        self.cmd_vel_output_topic = str(self.get_parameter('cmd_vel_output_topic').value)
+        self.cmd_pub = self.create_publisher(Twist, self.cmd_vel_output_topic, 10) if self.enable_cmd_vel_output else None
         self.objects_pub = self.create_publisher(PoseArray, str(self.get_parameter('lidar_objects_topic').value), 10)
 
         # -------------------------
@@ -138,10 +140,13 @@ class ClusterNode(Node):
         self.display_clusters = []
 
         if self.enable_cmd_vel_output:
-            self.get_logger().warn('enable_cmd_vel_output=true: this bypasses Waver safety mux and is not allowed on the real robot.')
+            self.get_logger().warn(
+                f'enable_cmd_vel_output=true: publishing candidate command to {self.cmd_vel_output_topic}. '
+                'Never set this to /cmd_vel on the real robot.'
+            )
         self.get_logger().info(
             f'Lock-stable cluster tracking node started: {pointcloud_topic} -> '
-            f'{self.get_parameter("lidar_objects_topic").value}; /cmd_vel direct output is disabled by default.'
+            f'{self.get_parameter("lidar_objects_topic").value}; direct /cmd_vel output is disabled.'
         )
 
     # =========================================================

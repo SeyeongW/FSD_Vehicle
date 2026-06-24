@@ -250,13 +250,18 @@ class WaverRemoteNode(Node):
         self.declare_parameter("remote_bridge_host", "10.139.225.150")
         self.declare_parameter("remote_bridge_user", "sw")
         # ROS CLI parses unquoted numeric-looking values as integers. Allow dynamic
-        # typing here so `remote_bridge_password:=12341234` does not abort UI startup.
+        # typing for operator-supplied passwords, but keep the default empty.
         self.declare_parameter(
             "remote_bridge_password",
-            "12341234",
+            "",
             ParameterDescriptor(dynamic_typing=True),
         )
-        self.declare_parameter("remote_bridge_workspace", "/home/sw/ros2_ws2/FSD_Vehicle")
+        self.declare_parameter("remote_bridge_key_filename", "")
+        self.declare_parameter("remote_bridge_workspace", "/home/sw/ros2_ws5/FSD_Vehicle")
+        self.declare_parameter("remote_bridge_use_docker", True)
+        self.declare_parameter("remote_bridge_container", "fsd_dev_jetson")
+        self.declare_parameter("remote_bridge_container_workspace", "/ros2_ws/ugv_ws")
+        self.declare_parameter("remote_bridge_setup_script", "install_docker/setup.bash")
         self.declare_parameter("remote_bridge_ros_domain_id", 30)
         self.declare_parameter("remote_bridge_rmw", "rmw_cyclonedds_cpp")
         self.declare_parameter("remote_bridge_command_timeout_s", 0.30)
@@ -818,10 +823,14 @@ finally:
 '''
         encoded = base64.b64encode(remote_code.encode("utf-8")).decode("ascii")
         workspace = str(self.get_parameter("remote_bridge_workspace").value)
+        use_docker = bool(self.get_parameter("remote_bridge_use_docker").value)
+        container = str(self.get_parameter("remote_bridge_container").value).strip()
+        container_workspace = str(self.get_parameter("remote_bridge_container_workspace").value).strip()
+        setup_script = str(self.get_parameter("remote_bridge_setup_script").value).strip()
         domain_id = int(self.get_parameter("remote_bridge_ros_domain_id").value)
         rmw = str(self.get_parameter("remote_bridge_rmw").value)
         bridge_timeout_s = float(self.get_parameter("remote_bridge_command_timeout_s").value)
-        remote_cmd = (
+        inner_cmd = (
             f"cd {shlex.quote(workspace)} && "
             "source /opt/ros/humble/setup.bash && "
             "source install/setup.bash && "
@@ -831,17 +840,45 @@ finally:
             "python3 -u -c "
             + shlex.quote(f"import base64; exec(base64.b64decode('{encoded}').decode('utf-8'))")
         )
+        if use_docker:
+            docker_inner_cmd = (
+                f"cd {shlex.quote(container_workspace)} && "
+                "source /opt/ros/humble/install/setup.bash 2>/dev/null || true && "
+                "source /opt/ros/humble/setup.bash && "
+                f"source {shlex.quote(setup_script)} && "
+                f"export ROS_DOMAIN_ID={domain_id} && "
+                f"export RMW_IMPLEMENTATION={shlex.quote(rmw)} && "
+                f"export WAVER_REMOTE_BRIDGE_TIMEOUT_S={bridge_timeout_s:.3f} && "
+                "python3 -u -c "
+                + shlex.quote(f"import base64; exec(base64.b64decode('{encoded}').decode('utf-8'))")
+            )
+            remote_cmd = f"docker exec -i {shlex.quote(container)} bash -lc {shlex.quote(docker_inner_cmd)}"
+        else:
+            remote_cmd = inner_cmd
         try:
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(
-                str(self.get_parameter("remote_bridge_host").value),
-                username=str(self.get_parameter("remote_bridge_user").value),
-                password=str(self.get_parameter("remote_bridge_password").value),
-                timeout=8,
-                look_for_keys=False,
-                allow_agent=False,
-            )
+            password = str(self.get_parameter("remote_bridge_password").value).strip()
+            key_filename = str(self.get_parameter("remote_bridge_key_filename").value).strip()
+            allow_password = os.environ.get("WAVER_ALLOW_PASSWORD_SSH", "").strip() == "1"
+            if password and not allow_password:
+                self.get_logger().warn(
+                    "remote_bridge_password is set but ignored. Set WAVER_ALLOW_PASSWORD_SSH=1 "
+                    "only for temporary field password auth; SSH key/agent auth is preferred."
+                )
+                password = ""
+            connect_kwargs = {
+                "hostname": str(self.get_parameter("remote_bridge_host").value),
+                "username": str(self.get_parameter("remote_bridge_user").value),
+                "timeout": 8,
+                "look_for_keys": True,
+                "allow_agent": True,
+            }
+            if key_filename:
+                connect_kwargs["key_filename"] = key_filename
+            if password:
+                connect_kwargs["password"] = password
+            client.connect(**connect_kwargs)
             stdin, stdout, stderr = client.exec_command(
                 f"bash -lc {json.dumps(remote_cmd)}",
                 get_pty=False,

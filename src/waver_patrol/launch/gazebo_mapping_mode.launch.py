@@ -21,7 +21,7 @@ def generate_launch_description() -> LaunchDescription:
     default_map = os.path.join(ugv_share, "maps", "map.yaml")
     default_mapping_command = (
         "ros2 launch waver_patrol waver_mapping_backend.launch.py "
-        "backend:=gazebo_live use_sim_time:=true use_rviz:=false "
+        "backend:=scan_mapper use_sim_time:=true use_rviz:=false "
         "start_workflow_manager:=false "
         "start_lidar_bringup:=false start_robot_pose_publisher:=false "
         "scan_topic:=/scan_slam"
@@ -35,7 +35,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("robot_sdf_file", default_value=default_robot),
             DeclareLaunchArgument("source_map_yaml", default_value=default_map),
             DeclareLaunchArgument("reveal_duration_sec", default_value="12.0"),
-            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws3/FSD_Vehicle/maps"),
+            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws5/FSD_Vehicle/maps"),
             DeclareLaunchArgument("save_basename", default_value="waver_latest_map"),
             DeclareLaunchArgument("demo_script", default_value=""),
             DeclareLaunchArgument("demo_close_on_finish", default_value="false"),

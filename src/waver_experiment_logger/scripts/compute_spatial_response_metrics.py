@@ -147,6 +147,44 @@ def first_time_after(table: list[dict[str, str]], predicate, after: float | None
     return None
 
 
+def first_any_time_after(
+    table: list[dict[str, str]],
+    predicate,
+    after: float | None,
+    fields: tuple[str, ...] = ("time_sec", "event_time_sec", "ros_time_sec"),
+) -> float | None:
+    for row in table:
+        if not predicate(row):
+            continue
+        for field in fields:
+            value = safe_float(row.get(field))
+            if math.isfinite(value) and (after is None or value >= after):
+                return value
+    return None
+
+
+def row_text(row: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key, value in row.items():
+        if key is None:
+            if isinstance(value, list):
+                parts.extend(str(v) for v in value)
+            else:
+                parts.append(str(value))
+        else:
+            parts.append(str(value))
+    return " ".join(parts)
+
+
+def first_text_time_after(table: list[dict[str, str]], tokens: tuple[str, ...], after: float | None) -> float | None:
+    upper_tokens = tuple(token.upper() for token in tokens)
+    return first_any_time_after(
+        table,
+        lambda r: all(token in row_text(r).upper() for token in upper_tokens),
+        after,
+    )
+
+
 def delta_ms(a: float | None, b: float | None) -> float | str:
     if a is None or b is None:
         return ""
@@ -195,6 +233,7 @@ def main() -> int:
     cmd = rows(logs / "cmd_vel_response.csv")
     latency = rows(logs / "lidar_waver_latency_events.csv")
     mission_events = rows(logs / "mission_events.csv")
+    mechanism_events = rows(logs / "mechanism_events.csv")
     removal_events = rows(logs / "bird_removal_events.csv")
     cmd_vel_publisher_count, cmd_vel_sole_mux = parse_cmd_vel_authority(logs / "cmd_vel_topic_info.txt")
 
@@ -217,16 +256,35 @@ def main() -> int:
     if latency:
         first_pc = safe_float(latency[-1].get("first_pointcloud_time_sec"))
         first_pc = first_pc if math.isfinite(first_pc) else None
+    # Prefer simulation-time LiDAR rows. During Gazebo startup an initial wall-time
+    # row can be emitted before TF/sim-time is ready; using that row makes latency
+    # metrics look negative even though the mechanism itself is correct.
     first_lidar_ok = first_field_time(
         lidar,
-        lambda r: str(r.get("target_ok", "")).lower() == "true",
+        lambda r: str(r.get("target_ok", "")).lower() == "true"
+        and (truth(r.get("tf_ok")) or math.isfinite(safe_float(r.get("pc_stamp_sec")))),
         "filter_done_time_sec",
     )
+    if first_lidar_ok is None:
+        first_lidar_ok = first_field_time(
+            lidar,
+            lambda r: str(r.get("target_ok", "")).lower() == "true",
+            "filter_done_time_sec",
+        )
     first_lock = first_time_after(
         spatial,
         lambda r: str(r.get("dynamic_lock", "")).lower() == "true",
         first_lidar_ok,
     )
+    first_lock_mechanism = first_any_time_after(
+        mechanism_events,
+        lambda r: str(r.get("event", "")).lower() == "dynamic_lock"
+        and (truth(r.get("detail")) or truth(r.get("dynamic_lock"))),
+        first_lidar_ok,
+        fields=("ros_time_sec", "time_sec", "event_time_sec"),
+    )
+    if first_lock is None or (first_lock_mechanism is not None and first_lock_mechanism < first_lock):
+        first_lock = first_lock_mechanism
     raw_target_goals = [row for row in goals if target_goal_row(row)]
     raw_object_target_goals = [
         row
@@ -321,6 +379,37 @@ def main() -> int:
             break
         if patrol_object_goal_time is not None:
             break
+    first_patrol_goal_time = first_text_time_after(
+        mission_events,
+        ("NAV2_DISABLED_SIMULATED_GOAL", "PATROL"),
+        None,
+    )
+    if first_patrol_goal_time is None:
+        first_patrol_goal_time = first_event_time_after(
+            goals,
+            lambda r: r.get("event_type") == "active_nav_goal"
+            and str(r.get("goal_role", "")).upper() not in {"TARGET_INSPECTION", "RADAR_TARGET"},
+            None,
+        )
+    first_patrol_preempt_time = first_any_time_after(
+        mission_events,
+        lambda r: "TARGET_PREEMPTS_PATROL_IMMEDIATELY" in row_text(r).upper()
+        or "INTERRUPT_PATROL_FOR_LIDAR_TARGET" in row_text(r).upper(),
+        first_patrol_goal_time,
+    )
+    first_patrol_dwell_before_preempt = first_any_time_after(
+        mission_events,
+        lambda r: "PATROL_DWELL" in row_text(r).upper(),
+        first_patrol_goal_time,
+    )
+    first_patrol_success_before_preempt = first_any_time_after(
+        mission_events,
+        lambda r: (
+            ("SIM_NAV_GOAL_ARRIVED" in row_text(r).upper() or "NAV2_GOAL_SUCCEEDED" in row_text(r).upper())
+            and "PATROL" in row_text(r).upper()
+        ),
+        first_patrol_goal_time,
+    )
     first_cmd = first_time_after(
         cmd,
         lambda r: str(r.get("nonzero_cmd", "")).lower() == "true",
@@ -337,6 +426,17 @@ def main() -> int:
     )
     if first_target_cmd is None:
         first_target_cmd = first_time_after(cmd, lambda r: str(r.get("nonzero_cmd", "")).lower() == "true", first_active_target)
+    first_target_cmd_after_preempt = first_time_after(
+        cmd,
+        lambda r: str(r.get("nonzero_cmd", "")).lower() == "true"
+        and (
+            str(r.get("mission_state", "")).upper().startswith("APPROACH_TARGET_OFFSET")
+            or str(r.get("mission_state", "")).upper().startswith("TARGET_NAVIGATING")
+        ),
+        first_patrol_preempt_time,
+    )
+    if first_target_cmd_after_preempt is None:
+        first_target_cmd_after_preempt = first_target_cmd
     odom_start = None
     for row in spatial:
         t = safe_float(row.get("time_sec"))
@@ -420,6 +520,25 @@ def main() -> int:
         and final_patrol is not None
         and last_removed_time <= first_return <= first_resume <= final_patrol
     )
+    patrol_dwell_happened_before_preempt = (
+        first_patrol_dwell_before_preempt is not None
+        and first_patrol_preempt_time is not None
+        and first_patrol_dwell_before_preempt < first_patrol_preempt_time
+    )
+    patrol_success_happened_before_preempt = (
+        first_patrol_success_before_preempt is not None
+        and first_patrol_preempt_time is not None
+        and first_patrol_success_before_preempt < first_patrol_preempt_time
+    )
+    mid_patrol_preempt_success = (
+        first_patrol_goal_time is not None
+        and first_patrol_preempt_time is not None
+        and first_active_target is not None
+        and first_target_cmd_after_preempt is not None
+        and first_patrol_goal_time <= first_patrol_preempt_time <= first_active_target
+        and not patrol_dwell_happened_before_preempt
+        and not patrol_success_happened_before_preempt
+    )
 
     target_goal_to_bird = nums(object_target_goals, "goal_to_bird_xy_m")
     target_goal_to_lidar = nums(object_target_goals, "goal_to_lidar_target_xy_m")
@@ -460,6 +579,13 @@ def main() -> int:
         "mechanism.has_target_cmd_vel": first_target_cmd is not None,
         "mechanism.has_odom_motion_after_target_goal": first_odom_motion is not None,
         "mechanism.has_patrol_preempt_to_target_goal": patrol_active_target_goal_time is not None,
+        "mechanism.mid_patrol_preempt_success": mid_patrol_preempt_success,
+        "mechanism.preempt_before_first_patrol_dwell": (
+            first_patrol_preempt_time is not None and not patrol_dwell_happened_before_preempt
+        ),
+        "mechanism.preempt_before_first_patrol_success": (
+            first_patrol_preempt_time is not None and not patrol_success_happened_before_preempt
+        ),
         "mechanism.has_return_to_interrupted_waypoint": first_return is not None,
         "mechanism.has_resume_patrol": first_resume is not None,
         "mechanism.has_final_patrol_after_resume": final_patrol is not None,
@@ -527,6 +653,9 @@ def main() -> int:
             patrol_object_goal_time,
             patrol_active_target_goal_time,
         ),
+        "latency.patrol_goal_to_target_preempt_ms": delta_ms(first_patrol_goal_time, first_patrol_preempt_time),
+        "latency.target_preempt_to_active_target_nav_goal_ms": delta_ms(first_patrol_preempt_time, first_active_target),
+        "latency.target_preempt_to_target_cmd_vel_ms": delta_ms(first_patrol_preempt_time, first_target_cmd_after_preempt),
         "latency.lidar_target_ok_to_first_cmd_vel_ms": delta_ms(first_lidar_ok, first_cmd),
         "latency.lidar_target_ok_to_first_target_cmd_vel_ms": delta_ms(first_lidar_ok, first_target_cmd),
         "latency.active_target_nav_goal_to_cmd_vel_ms": delta_ms(first_active_target, first_target_cmd),
@@ -568,6 +697,9 @@ def main() -> int:
             ("dynamic_lock_to_object_mission_goal_ms", metrics["latency.dynamic_lock_to_object_mission_goal_ms"], "ms", "Dynamic lock to object mission goal"),
             ("object_mission_goal_to_active_target_nav_goal_ms", metrics["latency.object_mission_goal_to_active_target_nav_goal_ms"], "ms", "Object mission goal to active target nav goal"),
             ("patrol_object_goal_to_active_target_nav_goal_ms", metrics["latency.patrol_object_goal_to_active_target_nav_goal_ms"], "ms", "Patrol-time object goal to active target nav goal"),
+            ("patrol_goal_to_target_preempt_ms", metrics["latency.patrol_goal_to_target_preempt_ms"], "ms", "Patrol goal start to LiDAR target preemption"),
+            ("target_preempt_to_active_target_nav_goal_ms", metrics["latency.target_preempt_to_active_target_nav_goal_ms"], "ms", "LiDAR target preemption to active target nav goal"),
+            ("target_preempt_to_target_cmd_vel_ms", metrics["latency.target_preempt_to_target_cmd_vel_ms"], "ms", "LiDAR target preemption to target command velocity"),
             ("active_target_nav_goal_to_cmd_vel_ms", metrics["latency.active_target_nav_goal_to_cmd_vel_ms"], "ms", "Active target nav goal to command velocity"),
             ("active_target_nav_goal_to_odom_motion_ms", metrics["latency.active_target_nav_goal_to_odom_motion_ms"], "ms", "Active target nav goal to odom motion"),
         ],

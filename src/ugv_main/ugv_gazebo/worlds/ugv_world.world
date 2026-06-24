@@ -48,6 +48,12 @@
       <pose>50.0 50.0 3.2 0 0 0</pose>
     </include>
 
+    <include>
+      <uri>model://bird</uri>
+      <name>bird_5</name>
+      <pose>50.0 50.0 3.2 0 0 0</pose>
+    </include>
+
     <physics type="ode">
       <max_step_size>0.001</max_step_size>
       <real_time_factor>1.0</real_time_factor>

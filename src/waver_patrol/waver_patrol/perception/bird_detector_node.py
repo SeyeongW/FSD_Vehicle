@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from pathlib import Path
 
 import rclpy
 from rclpy.executors import ExternalShutdownException
@@ -10,6 +9,8 @@ from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import Bool, Float32, String
 from vision_msgs.msg import BoundingBox2D, Detection2D, Detection2DArray, ObjectHypothesisWithPose
+
+from waver_patrol.perception.bird_classification import detector_model_state, normalize_class_name
 
 
 class BirdDetectorNode(Node):
@@ -34,7 +35,13 @@ class BirdDetectorNode(Node):
         self.declare_parameter("target_classification_state_topic", "/waver/target_classification_state")
         self.declare_parameter("target_classification_latency_topic", "/waver/target_classification_latency_ms")
         self.declare_parameter("backend", "yolo")
+        self.declare_parameter("bird_backend", "")
         self.declare_parameter("model_path", "")
+        self.declare_parameter("bird_model_path", "")
+        self.declare_parameter("detector_required_for_real", True)
+        self.declare_parameter("max_detector_latency_sec", 1.0)
+        self.declare_parameter("accepted_bird_classes", ["bird"])
+        self.declare_parameter("non_bird_classes", ["person", "vehicle", "robot", "drone", "irrelevant", "none"])
         self.declare_parameter("confidence_threshold", 0.65)
         self.declare_parameter("bird_class_names", ["bird"])
         self.declare_parameter("class_names_of_interest", ["bird", "drone"])
@@ -55,7 +62,8 @@ class BirdDetectorNode(Node):
         self.declare_parameter("edge_margin_fraction", 0.05)
         self.declare_parameter("max_inference_hz", 10.0)
 
-        backend = str(self.get_parameter("backend").value).strip().lower()
+        backend_alias = str(self.get_parameter("bird_backend").value).strip().lower()
+        backend = backend_alias or str(self.get_parameter("backend").value).strip().lower()
         if bool(self.get_parameter("real_profile").value) and backend == "mock_for_sim_only":
             raise RuntimeError("bird_detector_node: mock_for_sim_only backend is forbidden in real_profile")
 
@@ -98,12 +106,13 @@ class BirdDetectorNode(Node):
     def _load_backend(self) -> None:
         model_path = str(self.get_parameter("model_path").value).strip()
         if not model_path:
-            self.model_error = "MODEL_MISSING"
+            model_path = str(self.get_parameter("bird_model_path").value).strip()
+        state = detector_model_state(model_path, required=bool(self.get_parameter("detector_required_for_real").value))
+        if state != "MODEL_READY":
+            self.model_error = state
             return
-        if not Path(model_path).exists():
-            self.model_error = f"MODEL_NOT_FOUND path={model_path}"
-            return
-        backend = str(self.get_parameter("backend").value).strip().lower()
+        backend_alias = str(self.get_parameter("bird_backend").value).strip().lower()
+        backend = backend_alias or str(self.get_parameter("backend").value).strip().lower()
         if backend != "yolo":
             self.model_error = f"BACKEND_UNSUPPORTED backend={backend}"
             return
@@ -181,7 +190,7 @@ class BirdDetectorNode(Node):
             for box in boxes:
                 cls_id = int(box.cls[0]) if getattr(box, "cls", None) is not None else -1
                 class_name = str(names.get(cls_id, cls_id)).lower()
-                normalized = aliases.get(class_name, class_name)
+                normalized = normalize_class_name(class_name, aliases)
                 score = float(box.conf[0]) if getattr(box, "conf", None) is not None else 0.0
                 if normalized not in {"bird", "drone", "unknown", "irrelevant"} or score < conf_threshold:
                     continue

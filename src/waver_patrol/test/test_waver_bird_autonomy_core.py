@@ -3,6 +3,7 @@ import math
 import pytest
 
 pytest.importorskip("rclpy")
+pytestmark = pytest.mark.ros_required
 
 import rclpy
 from sensor_msgs.msg import BatteryState

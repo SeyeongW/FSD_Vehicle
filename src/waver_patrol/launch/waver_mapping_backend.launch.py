@@ -22,8 +22,11 @@ def generate_launch_description() -> LaunchDescription:
         [
             DeclareLaunchArgument(
                 "backend",
-                default_value="cartographer",
-                description="cartographer, gmapping, or gazebo_live. gazebo_live is simulation-only.",
+                default_value="scan_mapper",
+                description=(
+                    "scan_mapper, cartographer, or gazebo_live. "
+                    "The bundled gmapping source is excluded in ros2_ws5 because it is incomplete."
+                ),
             ),
             DeclareLaunchArgument("source_map_yaml", default_value=default_source_map),
             DeclareLaunchArgument("use_rviz", default_value="false"),
@@ -33,13 +36,14 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("reveal_duration_sec", default_value="12.0"),
-            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws3/FSD_Vehicle/maps"),
+            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws5/FSD_Vehicle/maps"),
             DeclareLaunchArgument("save_basename", default_value="waver_latest_map"),
             LogInfo(
                 msg=(
                     "Waver mapping backend: no Gazebo process is started here. "
                     "Use backend:=gazebo_live for UI/save/apply workflow validation, "
-                    "or backend:=cartographer/gmapping for LiDAR-only SLAM."
+                    "backend:=scan_mapper for Gazebo LaserScan occupancy mapping, "
+                    "or backend:=cartographer for LiDAR-only SLAM."
                 )
             ),
             Node(
@@ -53,6 +57,27 @@ def generate_launch_description() -> LaunchDescription:
                         "save_dir": LaunchConfiguration("save_dir"),
                         "save_basename": LaunchConfiguration("save_basename"),
                         "use_sim_time": LaunchConfiguration("use_sim_time"),
+                    }
+                ],
+            ),
+            Node(
+                package="waver_patrol",
+                executable="laser_scan_occupancy_mapper_node",
+                name="laser_scan_occupancy_mapper_node",
+                output="screen",
+                condition=LaunchConfigurationEquals("backend", "scan_mapper"),
+                parameters=[
+                    {
+                        "scan_topic": LaunchConfiguration("scan_topic"),
+                        "odom_topic": "/odom",
+                        "map_topic": "/map",
+                        "use_sim_time": LaunchConfiguration("use_sim_time"),
+                        "map_frame": "map",
+                        "odom_frame": "odom",
+                        "base_frame": "base_link",
+                        "extent_m": 30.0,
+                        "resolution": 0.05,
+                        "publish_map_to_odom_tf": True,
                     }
                 ],
             ),
@@ -88,16 +113,11 @@ def generate_launch_description() -> LaunchDescription:
                 }.items(),
                 condition=LaunchConfigurationEquals("backend", "cartographer"),
             ),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(real_mapping_launch),
-                launch_arguments={
-                    "algorithm": "gmapping",
-                    "use_rviz": LaunchConfiguration("use_rviz"),
-                    "start_lidar_bringup": LaunchConfiguration("start_lidar_bringup"),
-                    "start_robot_pose_publisher": LaunchConfiguration("start_robot_pose_publisher"),
-                    "use_sim_time": LaunchConfiguration("use_sim_time"),
-                    "scan_topic": LaunchConfiguration("scan_topic"),
-                }.items(),
+            LogInfo(
+                msg=(
+                    "backend:=gmapping is disabled in ros2_ws5; use backend:=scan_mapper "
+                    "or backend:=cartographer."
+                ),
                 condition=LaunchConfigurationEquals("backend", "gmapping"),
             ),
         ]

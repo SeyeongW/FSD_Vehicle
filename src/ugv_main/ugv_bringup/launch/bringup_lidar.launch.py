@@ -48,6 +48,10 @@ def generate_launch_description():
         'base_node_executable', default_value='base_node',
         description='Use base_node_ekf for /odom_raw output when robot_localization owns /odom and odom->base_link TF.'
     )
+    enable_legacy_base_arg = DeclareLaunchArgument(
+        'enable_legacy_ugv_base_odometry_node', default_value='true',
+        description='Start legacy ugv_base_node/base_node_ekf odometry node. Set false when waver_base_driver_node owns real base feedback.'
+    )
     enable_ldlidar_arg = DeclareLaunchArgument(
         'enable_ldlidar', default_value='false',
         description='Start physical 2D ldlidar scan publisher. Real profile must choose this or Mid360 scan adapter, not both.'
@@ -127,6 +131,7 @@ def generate_launch_description():
     base_node = Node(
         package='ugv_base_node',
         executable=LaunchConfiguration('base_node_executable'),
+        condition=IfCondition(LaunchConfiguration('enable_legacy_ugv_base_odometry_node')),
         parameters=[{'pub_odom_tf': LaunchConfiguration('pub_odom_tf')}]
     )
 
@@ -141,6 +146,7 @@ def generate_launch_description():
         feedback_serial_port_arg,
         feedback_baudrate_arg,
         base_node_executable_arg,
+        enable_legacy_base_arg,
         enable_ldlidar_arg,
         enable_rf2o_arg,
         LogInfo(

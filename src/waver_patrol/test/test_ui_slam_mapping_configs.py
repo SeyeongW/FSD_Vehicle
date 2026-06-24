@@ -18,7 +18,7 @@ def test_ui_slam_gazebo_config_keeps_cmd_authority() -> None:
     assert panel["manual_cmd_vel_topic"] == "/waver/manual_cmd_vel"
     assert safety["cmd_vel_out_topic"] == "/cmd_vel"
     assert safety["nav2_cmd_topic"] == "/waver/cmd_vel_nav2"
-    assert workflow["save_dir"] == "~/ros2_ws3/FSD_Vehicle/maps"
+    assert workflow["save_dir"] == "~/ros2_ws5/FSD_Vehicle/maps"
 
 
 def test_ui_slam_waypoints_are_4m_then_7m_square() -> None:

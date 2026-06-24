@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "${WAVER_WS3_ROOT:-$HOME/ros2_ws3/FSD_Vehicle}"
+cd "${WAVER_WS5_ROOT:-$HOME/ros2_ws5/FSD_Vehicle}"
 set +u
 source /opt/ros/humble/setup.bash
 source install/setup.bash
@@ -22,7 +22,7 @@ cleanup() {
 cleanup
 trap cleanup EXIT
 
-map_yaml="${WAVER_SAVED_MAP_YAML:-$HOME/ros2_ws3/FSD_Vehicle/maps/waver_latest_map.yaml}"
+map_yaml="${WAVER_SAVED_MAP_YAML:-$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml}"
 obstacle_x="${WAVER_STATIC_OBSTACLE_X:-1.00}"
 obstacle_y="${WAVER_STATIC_OBSTACLE_Y:-0.0}"
 goal_x="${WAVER_NAV_GOAL_X:-1.80}"

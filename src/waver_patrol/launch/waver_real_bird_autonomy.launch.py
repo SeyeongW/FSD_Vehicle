@@ -64,7 +64,8 @@ def generate_launch_description() -> LaunchDescription:
     default_nav2_params = os.path.join(share, "config", "nav2_params_waver_real.yaml")
     default_mission_params = os.path.join(share, "config", "waver_nav2_radar_bird_mission_real.yaml")
     default_ekf_params = os.path.join(share, "config", "ekf_waver_real.yaml")
-    default_map = os.path.expanduser("~/ros2_ws3/FSD_Vehicle/maps/waver_latest_map.yaml")
+    default_map = os.path.expanduser("~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml")
+    default_waypoints = os.path.join(share, "waypoints", "waver_real_0p5m_square_patrol.yaml")
 
     common = [
         LaunchConfiguration("mission_params_file"),
@@ -87,13 +88,16 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_bird_3d_fusion", default_value="true"),
             DeclareLaunchArgument("enable_camera_gimbal_controller", default_value="true"),
             DeclareLaunchArgument("enable_sound_deterrent", default_value="true"),
+            DeclareLaunchArgument("enable_target_departure_monitor", default_value="true"),
+            DeclareLaunchArgument("enable_auto_behavior_mux", default_value="true"),
             DeclareLaunchArgument("enable_experiment_logger", default_value="true"),
             DeclareLaunchArgument("experiment_name", default_value="waver_lidar_first_bird_deterrence"),
-            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ros2_ws3/FSD_Vehicle/experiment_results"),
+            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ros2_ws5/FSD_Vehicle/experiment_results"),
             DeclareLaunchArgument("enable_sound_output", default_value="false"),
             DeclareLaunchArgument("sound_safety_ack", default_value="false"),
             DeclareLaunchArgument("enable_robot_localization", default_value="true"),
             DeclareLaunchArgument("enable_waver_base_driver", default_value="false"),
+            DeclareLaunchArgument("enable_legacy_ugv_base_odometry_node", default_value="false"),
             DeclareLaunchArgument("start_base_feedback", default_value="false"),
             DeclareLaunchArgument("feedback_serial_port", default_value=""),
             DeclareLaunchArgument("feedback_baudrate", default_value="115200"),
@@ -117,6 +121,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("pointcloud_topic", default_value="/mid360_PointCloud2"),
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("map", default_value=default_map),
+            DeclareLaunchArgument("waypoint_file", default_value=default_waypoints),
             DeclareLaunchArgument("nav2_params_file", default_value=default_nav2_params),
             DeclareLaunchArgument("ekf_params_file", default_value=default_ekf_params),
             DeclareLaunchArgument("mission_params_file", default_value=default_mission_params),
@@ -140,12 +145,15 @@ def generate_launch_description() -> LaunchDescription:
                     "use_sim_time": LaunchConfiguration("use_sim_time"),
                     "nav2_params_file": LaunchConfiguration("nav2_params_file"),
                     "map": LaunchConfiguration("map"),
+                    "waypoint_file": LaunchConfiguration("waypoint_file"),
                     "use_localization": "amcl",
                     "use_localplan": "dwa",
                     "enable_deep_learning_stub": "false",
                     "enable_sound_stub": "false",
                     "enable_sound_deterrent": LaunchConfiguration("enable_sound_deterrent"),
                     "enable_camera_gimbal_controller": LaunchConfiguration("enable_camera_gimbal_controller"),
+                    "enable_target_departure_monitor": LaunchConfiguration("enable_target_departure_monitor"),
+                    "enable_auto_behavior_mux": LaunchConfiguration("enable_auto_behavior_mux"),
                     "enable_experiment_logger": LaunchConfiguration("enable_experiment_logger"),
                     "experiment_name": LaunchConfiguration("experiment_name"),
                     "experiment_output_root": LaunchConfiguration("experiment_output_root"),
@@ -164,6 +172,15 @@ def generate_launch_description() -> LaunchDescription:
                     "feedback_baudrate": LaunchConfiguration("feedback_baudrate"),
                     "base_node_executable": PythonExpression(
                         ["'base_node_ekf' if '", LaunchConfiguration("odom_source"), "' == 'ekf' else 'base_node'"]
+                    ),
+                    "enable_legacy_ugv_base_odometry_node": PythonExpression(
+                        [
+                            "'false' if '",
+                            LaunchConfiguration("enable_waver_base_driver"),
+                            "' == 'true' else '",
+                            LaunchConfiguration("enable_legacy_ugv_base_odometry_node"),
+                            "'",
+                        ]
                     ),
                     "pub_odom_tf": PythonExpression(
                         ["'false' if '", LaunchConfiguration("odom_source"), "' == 'ekf' else 'true'"]
@@ -193,6 +210,10 @@ def generate_launch_description() -> LaunchDescription:
                     ),
                     "velocity_smoother_input_topic": "/waver/cmd_vel_nav2_raw",
                     "velocity_smoother_output_topic": "/waver/cmd_vel_nav2_smooth",
+                    "cmd_vel_auto_topic": "/waver/cmd_vel_auto",
+                    "cmd_vel_target_track_topic": "/waver/cmd_vel_target_track",
+                    "cmd_vel_return_home_topic": "/waver/cmd_vel_return_home",
+                    "auto_behavior_target_active_topic": "/waver/inspection_target_active",
                     "safety_nav2_cmd_topic": PythonExpression(
                         [
                             "'/waver/cmd_vel_nav2_smooth' if '",
@@ -236,6 +257,13 @@ def generate_launch_description() -> LaunchDescription:
                     {
                         "serial_port": ParameterValue(LaunchConfiguration("serial_port"), value_type=str),
                         "cmd_vel_topic": "/cmd_vel",
+                        "odom_topic": PythonExpression(
+                            ["'/odom_raw' if '", LaunchConfiguration("odom_source"), "' == 'ekf' else '/odom'"]
+                        ),
+                        "publish_tf": PythonExpression(
+                            ["'false' if '", LaunchConfiguration("odom_source"), "' == 'ekf' else 'true'"]
+                        ),
+                        "publish_legacy_float32_odom_raw": False,
                         "command_protocol": "lr",
                         "cmd_timeout_s": 0.3,
                         "angular_gain": 0.55,

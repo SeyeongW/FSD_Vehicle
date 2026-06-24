@@ -3,7 +3,7 @@ mission_patrol_manager_node:
     waypoint_file: "waypoints/waver_nav2_patrol_mission.yaml"
     nav2_action_name: "/navigate_to_pose"
     use_nav2: true
-    resume_policy: "RETURN_TO_INTERRUPTED_WAYPOINT"
+    resume_policy: "RETURN_TO_DEPARTURE_POSE"
     patrol_loop: true
     default_mode: "STANDBY"
     target_mission_timeout_sec: 120.0
@@ -18,6 +18,9 @@ mission_patrol_manager_node:
     enable_sound_output: false
     deterrence_classes: ["bird"]
     sound_task_timeout_sec: 15.0
+    wait_bird_clear_after_sound: true
+    target_departed_topic: "/waver/target_departed"
+    bird_clear_timeout_sec: 20.0
     sound_cooldown_sec: 10.0
     bird_confidence_threshold: 0.70
     max_goal_retries: 2
@@ -164,7 +167,13 @@ bird_detector_node:
     target_classification_state_topic: "/waver/target_classification_state"
     target_classification_latency_topic: "/waver/target_classification_latency_ms"
     backend: "yolo"
+    bird_backend: "yolo"
     model_path: ""
+    bird_model_path: ""
+    detector_required_for_real: true
+    max_detector_latency_sec: 1.0
+    accepted_bird_classes: ["bird"]
+    non_bird_classes: ["person", "vehicle", "robot", "drone", "irrelevant", "none"]
     confidence_threshold: 0.65
     bird_class_names: ["bird"]
     class_names_of_interest: ["bird", "drone"]
@@ -230,6 +239,29 @@ camera_gimbal_controller_node:
     hardware_backend: "topic_only"
     real_gimbal_output_enabled: false
 
+target_departure_monitor_node:
+  ros__parameters:
+    departure_distance_m: 8.0
+    min_wait_after_mission_sec: 1.0
+    target_lost_timeout_sec: 3.0
+    max_wait_departure_sec: 20.0
+    require_mission_action_done: true
+    use_lidar_range_topic: true
+    use_pose_range_fallback: true
+
+auto_behavior_mux_node:
+  ros__parameters:
+    cmd_vel_patrol_topic: "/waver/cmd_vel_nav2_smooth"
+    cmd_vel_target_track_topic: "/waver/cmd_vel_target_track"
+    cmd_vel_return_home_topic: "/waver/cmd_vel_return_home"
+    cmd_vel_auto_topic: "/waver/cmd_vel_auto"
+    aerial_target_active_topic: "/waver/inspection_target_active"
+    return_home_active_topic: "/waver/return_home_active"
+    mode_topic: "/waver/mode"
+    command_timeout_sec: 0.5
+    target_active_hold_sec: 0.8
+    return_home_active_hold_sec: 2.0
+
 sound_deterrent_node:
   ros__parameters:
     enable_sound_output: false
@@ -249,7 +281,7 @@ sound_deterrent_node:
 safety_cmd_mux_node:
   ros__parameters:
     nav2_cmd_topic: "/waver/cmd_vel_nav2_smooth"
-    cmd_vel_auto_topic: ""
+    cmd_vel_auto_topic: "/waver/cmd_vel_auto"
     manual_cmd_vel_topic: "/waver/manual_cmd_vel"
     cmd_vel_out_topic: "/cmd_vel"
     scan_topic: "/scan"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OUT="${1:-$HOME/ros2_ws2/FSD_Vehicle/experiments_result/bags/waver_experiment_$(date +%Y%m%d_%H%M%S)}"
+OUT="${1:-$HOME/ros2_ws5/FSD_Vehicle/experiments_result/bags/waver_experiment_$(date +%Y%m%d_%H%M%S)}"
 mkdir -p "$(dirname "$OUT")"
 
 ros2 bag record \
@@ -18,6 +18,10 @@ ros2 bag record \
   /waver/manual_cmd_vel \
   /waver/cmd_vel_nav2_raw \
   /waver/cmd_vel_nav2_smooth \
+  /waver/cmd_vel_target_track \
+  /waver/cmd_vel_auto \
+  /waver/auto_behavior_state \
+  /waver/cmd_vel_return_home \
   /waver/mode \
   /waver/mission_state \
   /waver/mission_event \
@@ -52,8 +56,12 @@ ros2 bag record \
   /waver/sound_alert_request \
   /waver/sound_alert_state \
   /waver/sound_task_done \
+  /waver/target_departure_state \
+  /waver/target_departed \
   /waver/battery_safety_state \
   /waver/base_driver_state \
+  /waver/serial_owner_state \
+  /waver/bird_detector_state \
   /waver/safety_state \
   /battery_state \
   /voltage \

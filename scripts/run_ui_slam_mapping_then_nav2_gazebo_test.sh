@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "${WAVER_WS3_ROOT:-$HOME/ros2_ws3/FSD_Vehicle}"
+cd "${WAVER_WS5_ROOT:-$HOME/ros2_ws5/FSD_Vehicle}"
 set +u
 source /opt/ros/humble/setup.bash
 source install/setup.bash
@@ -40,7 +40,7 @@ timeout --foreground "${WAVER_NAV2_TEST_TIMEOUT:-180}" \
     use_sim_time:=true \
     use_gui:="${WAVER_USE_GUI:-false}" \
     start_remote_panel:=false \
-    map:="$HOME/ros2_ws3/FSD_Vehicle/maps/waver_latest_map.yaml" \
+    map:="$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml" \
   >"$nav_log" 2>&1 &
 launch_pid=$!
 set -e

@@ -1,9 +1,9 @@
 profile: real_prep_only
-workspace: ~/ros2_ws3/FSD_Vehicle
+workspace: ~/ros2_ws5/FSD_Vehicle
 notes:
   - This file documents the real-hardware topic contract for the UI-SLAM work.
   - Do not launch Gazebo-only publishers in real_profile.
-  - Keep the ros2_ws2 field-success backend untouched unless explicitly porting.
+  - Keep the ros2_ws5 field-success backend untouched unless explicitly porting.
 
 topic_authority:
   mode_state:

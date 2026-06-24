@@ -62,6 +62,13 @@ waver_experiments/
 waver_experiments*/
 *.db3
 *.mcap
+*.log
+
+# Generated quality/iteration reports
+reports/quality_gate/*
+!reports/quality_gate/.gitkeep
+reports/agent_iterations/*
+!reports/agent_iterations/.gitkeep
 
 # Generated dataset / analysis artifacts
 **/metrics/

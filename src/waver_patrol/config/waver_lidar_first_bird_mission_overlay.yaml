@@ -62,11 +62,11 @@ target_departure_monitor_node:
 mission_data_reporter_node:
   ros__parameters:
     trial_id: lidar_first_bird_mission
-    output_root: ~/ros2_ws3/FSD_Vehicle/experiment_results
+    output_root: ~/ros2_ws5/FSD_Vehicle/experiment_results
     external_send_enabled: false
     write_jsonl: true
 
 experiment_data_logger_node:
   ros__parameters:
     experiment_name: waver_lidar_first_bird_mission
-    output_root: ~/ros2_ws3/FSD_Vehicle/experiment_results
+    output_root: ~/ros2_ws5/FSD_Vehicle/experiment_results

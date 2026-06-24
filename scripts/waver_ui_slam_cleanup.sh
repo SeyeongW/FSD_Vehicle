@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${WAVER_WS3_ROOT:-$HOME/ros2_ws3/FSD_Vehicle}"
+ROOT="${WAVER_WS5_ROOT:-$HOME/ros2_ws5/FSD_Vehicle}"
 
 term_pattern() {
   local pattern="$1"

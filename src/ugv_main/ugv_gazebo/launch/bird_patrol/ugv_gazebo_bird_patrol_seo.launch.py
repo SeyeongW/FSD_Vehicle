@@ -36,7 +36,7 @@ def _launch_setup(context, *args, **kwargs):
     gazebo_ros_prefix = _package_prefix("gazebo_ros")
     gazebo_ros_lib = os.path.join(gazebo_ros_prefix, "lib") if gazebo_ros_prefix else ""
 
-    ws_root = os.path.expanduser("~/ros2_ws3/FSD_Vehicle")
+    ws_root = os.path.expanduser("~/ros2_ws5/FSD_Vehicle")
     livox_prefix = _package_prefix("ros2_livox_simulation")
     livox_plugin_candidates = [
         os.path.join(livox_prefix, "lib") if livox_prefix else "",
@@ -105,6 +105,8 @@ def _launch_setup(context, *args, **kwargs):
     use_legacy_waypoints = LaunchConfiguration("use_legacy_4m_7m_waypoints").perform(context).strip().lower() in {"1", "true", "yes", "on"}
     waypoint_file = inside_waypoints if use_inside_waypoints else (legacy_waypoints if use_legacy_waypoints else paper_waypoints)
     inspection_goal_offset = float(LaunchConfiguration("inspection_goal_offset_distance_m").perform(context))
+    sim_nav_max_linear_speed = float(LaunchConfiguration("sim_nav_max_linear_speed").perform(context))
+    sim_nav_max_angular_speed = float(LaunchConfiguration("sim_nav_max_angular_speed").perform(context))
     rviz_config = os.path.expanduser(os.path.expandvars(rviz_config_arg))
     if not os.path.isabs(rviz_config):
         rviz_config = os.path.join(ugv_share, "rviz", rviz_config)
@@ -120,12 +122,16 @@ def _launch_setup(context, *args, **kwargs):
             "trial_id": trial_id_value,
             "run_id": run_id,
             "active_birds": active_birds_value,
+            "bird_release_interval_sec": LaunchConfiguration("bird_release_interval_sec").perform(context),
+            "bird_stable_demo_spawn": LaunchConfiguration("bird_stable_demo_spawn").perform(context),
             "bird_removal_detection_hold_sec": LaunchConfiguration("bird_removal_detection_hold_sec").perform(context),
             "detection_hold_grace_sec": LaunchConfiguration("detection_hold_grace_sec").perform(context),
             "bird_removal_goal_count": LaunchConfiguration("bird_removal_goal_count").perform(context),
             "use_inside_15m_waypoints": use_inside_waypoints,
             "waypoint_file": waypoint_file,
             "inspection_goal_offset_distance_m": inspection_goal_offset,
+            "sim_nav_max_linear_speed": sim_nav_max_linear_speed,
+            "sim_nav_max_angular_speed": sim_nav_max_angular_speed,
         }
     )
 
@@ -136,6 +142,8 @@ def _launch_setup(context, *args, **kwargs):
             "waypoint_file": waypoint_file,
             "inspection_goal_offset_distance_m": inspection_goal_offset,
             "goal_offset_distance_m": inspection_goal_offset,
+            "max_linear_speed": sim_nav_max_linear_speed,
+            "max_angular_speed": sim_nav_max_angular_speed,
         },
         *common_params,
     ]
@@ -223,6 +231,7 @@ def _launch_setup(context, *args, **kwargs):
                             "max_speed_mps": 0.22,
                             "random_seed": int(random_seed_value),
                             "sequential_release_birds": LaunchConfiguration("sequential_release_birds"),
+                            "release_interval_sec": LaunchConfiguration("bird_release_interval_sec"),
                             "enable_remove_after_detection": LaunchConfiguration("enable_bird_removal_after_detection"),
                             "remove_after_detected_sec": LaunchConfiguration("bird_removal_detection_hold_sec"),
                             "detection_hold_grace_sec": LaunchConfiguration("detection_hold_grace_sec"),
@@ -236,6 +245,8 @@ def _launch_setup(context, *args, **kwargs):
                             "allowed_lidar_x_max_m": 5.0,
                             "allowed_lidar_y_min_m": -5.0,
                             "allowed_lidar_y_max_m": 5.0,
+                            "stable_demo_spawn": LaunchConfiguration("bird_stable_demo_spawn"),
+                            "random_spawn_inside_lidar_area": True,
                         }
                     ],
                 )
@@ -494,12 +505,16 @@ def generate_launch_description():
             DeclareLaunchArgument("enable_rviz", default_value="false"),
             DeclareLaunchArgument("rviz_config", default_value="waver_spatial_response_debug.rviz"),
             DeclareLaunchArgument("inspection_goal_offset_distance_m", default_value="2.0"),
+            DeclareLaunchArgument("sim_nav_max_linear_speed", default_value="0.35"),
+            DeclareLaunchArgument("sim_nav_max_angular_speed", default_value="0.55"),
             DeclareLaunchArgument("experiment_profile", default_value="spatial_lidar_response_smoke"),
             DeclareLaunchArgument("detector_mode", default_value="lidar"),
             DeclareLaunchArgument("classifier_mode", default_value="fake_gazebo"),
             DeclareLaunchArgument("random_seed", default_value="530"),
-            DeclareLaunchArgument("active_birds", default_value="bird_1,bird_2,bird_3,bird_4"),
+            DeclareLaunchArgument("active_birds", default_value="bird_1,bird_2,bird_3,bird_4,bird_5"),
             DeclareLaunchArgument("sequential_release_birds", default_value="true"),
+            DeclareLaunchArgument("bird_release_interval_sec", default_value="7.0"),
+            DeclareLaunchArgument("bird_stable_demo_spawn", default_value="false"),
             DeclareLaunchArgument("enable_bird_removal_after_detection", default_value="true"),
             DeclareLaunchArgument("bird_removal_detection_hold_sec", default_value="5.0"),
             DeclareLaunchArgument("detection_hold_grace_sec", default_value="3.0"),
@@ -507,12 +522,12 @@ def generate_launch_description():
             DeclareLaunchArgument("bird_flee_distance_m", default_value="10.0"),
             DeclareLaunchArgument("bird_return_distance_m", default_value="10.0"),
             DeclareLaunchArgument("bird_flee_speed_mps", default_value="1.5"),
-            DeclareLaunchArgument("bird_removal_goal_count", default_value="2"),
+            DeclareLaunchArgument("bird_removal_goal_count", default_value="5"),
             DeclareLaunchArgument("trial_id", default_value="gazebo_seo_bird_patrol"),
             DeclareLaunchArgument("run_id", default_value=""),
             DeclareLaunchArgument("run_dir", default_value=""),
             DeclareLaunchArgument("experiment_id", default_value="waver_gazebo_bird_patrol"),
-            DeclareLaunchArgument("output_root", default_value=os.path.expanduser("~/ros2_ws3/FSD_Vehicle/experiment_results/gazebo_bird_patrol")),
+            DeclareLaunchArgument("output_root", default_value=os.path.expanduser("~/ros2_ws5/FSD_Vehicle/experiment_results/gazebo_bird_patrol")),
             DeclareLaunchArgument("save_images", default_value="true"),
             DeclareLaunchArgument("save_every_nth_image", default_value="5"),
             DeclareLaunchArgument("write_coco", default_value="true"),

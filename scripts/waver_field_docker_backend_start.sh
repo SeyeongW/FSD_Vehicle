@@ -1,10 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-JETSON_HOST="${JETSON_HOST:-10.63.240.150}"
+FIELD_ENV_FILE="${WAVER_FIELD_ENV_FILE:-$HOME/.waver_field_env}"
+if [ -f "${FIELD_ENV_FILE}" ]; then
+  # Local-only field settings: Jetson IP/user/password/workspace. This file is
+  # intentionally outside the repository so the field password is not committed.
+  set -a
+  # shellcheck disable=SC1090
+  source "${FIELD_ENV_FILE}"
+  set +a
+fi
+
+JETSON_HOST="${JETSON_HOST:-10.139.225.150}"
 JETSON_USER="${JETSON_USER:-sw}"
-JETSON_PASS="${JETSON_PASS:-12341234}"
-JETSON_WS="${JETSON_WS:-/home/sw/ros2_ws2/FSD_Vehicle}"
+JETSON_PASS="${JETSON_PASS:-}"
+JETSON_WS="${JETSON_WS:-/home/sw/ros2_ws5/FSD_Vehicle}"
+JETSON_HOST_AUTO="${JETSON_HOST_AUTO:-true}"
+JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST} 10.139.225.150 10.63.240.150 10.139.225.126}"
 CONTAINER="${CONTAINER:-fsd_dev_jetson}"
 SERIAL_PORT="${SERIAL_PORT:-auto}"
 FIELD_BUILD_IN_DOCKER="${FIELD_BUILD_IN_DOCKER:-false}"
@@ -12,22 +24,52 @@ PATROL_ALLOW_OPEN_LOOP="${PATROL_ALLOW_OPEN_LOOP:-true}"
 PATROL_WAYPOINT_FILE="${PATROL_WAYPOINT_FILE:-/ros2_ws/ugv_ws/src/ugv_main/ugv_tools/waypoints/waver_0p2m_patrol.yaml}"
 PATROL_STEP_DISTANCE_M="${PATROL_STEP_DISTANCE_M:-0.2}"
 PATROL_FORWARD_DURATION_S="${PATROL_FORWARD_DURATION_S:-0.65}"
-PATROL_TURN_DURATION_S="${PATROL_TURN_DURATION_S:-2.1}"
-PATROL_FORWARD_SPEED="${PATROL_FORWARD_SPEED:-0.06}"
-PATROL_TURN_SPEED="${PATROL_TURN_SPEED:-0.025}"
-PATROL_TURN_WHEEL_RATIO="${PATROL_TURN_WHEEL_RATIO:-0.27}"
+PATROL_TURN_DURATION_S="${PATROL_TURN_DURATION_S:-2.6}"
+PATROL_FORWARD_SPEED="${PATROL_FORWARD_SPEED:-0.075}"
+PATROL_TURN_SPEED="${PATROL_TURN_SPEED:-0.06}"
+PATROL_TURN_WHEEL_RATIO="${PATROL_TURN_WHEEL_RATIO:-0.40}"
 PATROL_TURN_MODE="${PATROL_TURN_MODE:-pivot}"
 
 SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=8)
-if command -v sshpass >/dev/null 2>&1; then
+if [ -n "${JETSON_PASS}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-}" = "1" ] && command -v sshpass >/dev/null 2>&1; then
   SSH_CMD=(sshpass -p "${JETSON_PASS}" ssh "${SSH_OPTS[@]}")
   SCP_CMD=(sshpass -p "${JETSON_PASS}" scp "${SSH_OPTS[@]}")
 else
-  echo "[LOCAL] sshpass not found; falling back to normal ssh." >&2
-  echo "[LOCAL] Enter Jetson password when prompted: ${JETSON_PASS}" >&2
+  if [ -n "${JETSON_PASS}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-}" != "1" ]; then
+    echo "[LOCAL][WARN] JETSON_PASS is set but ignored. Set WAVER_ALLOW_PASSWORD_SSH=1 only for temporary password auth." >&2
+  fi
+  echo "[LOCAL] using SSH key/agent or interactive SSH auth." >&2
   SSH_CMD=(ssh "${SSH_OPTS[@]}")
   SCP_CMD=(scp "${SSH_OPTS[@]}")
 fi
+
+select_jetson_host() {
+  if [ "${JETSON_HOST_AUTO}" != "true" ]; then
+    return 0
+  fi
+  local seen=" "
+  local candidate
+  for candidate in ${JETSON_HOST_CANDIDATES}; do
+    [ -n "${candidate}" ] || continue
+    case "${seen}" in
+      *" ${candidate} "*) continue ;;
+    esac
+    seen="${seen}${candidate} "
+    echo "[LOCAL] probing Jetson SSH ${JETSON_USER}@${candidate}"
+    if "${SSH_CMD[@]}" "${JETSON_USER}@${candidate}" "echo WAVER_JETSON_SSH_OK" >/tmp/waver_jetson_probe.log 2>&1; then
+      JETSON_HOST="${candidate}"
+      printf '%s\n' "${JETSON_HOST}" > "${HOME}/.waver_jetson_host"
+      echo "[LOCAL] selected Jetson host: ${JETSON_HOST}"
+      return 0
+    fi
+    tail -3 /tmp/waver_jetson_probe.log 2>/dev/null || true
+  done
+  echo "[LOCAL][ERROR] Could not reach Jetson SSH on any candidate: ${JETSON_HOST_CANDIDATES}" >&2
+  echo "[LOCAL][ERROR] Local network:" >&2
+  ip -4 addr show | sed 's/^/[LOCAL][NET] /' >&2 || true
+  echo "[LOCAL][ERROR] Set JETSON_HOST=<current_jetson_ip> or reconnect PC/Jetson to the same hotspot." >&2
+  exit 12
+}
 
 LOCAL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SYNC_FILES=(
@@ -38,6 +80,11 @@ SYNC_FILES=(
   "src/ugv_main/ugv_tools/waypoints/waver_0p2m_patrol.yaml"
   "src/ugv_main/ugv_tools/waypoints/waver_0p1m_patrol.yaml"
 )
+
+if [ -f "${HOME}/.waver_jetson_host" ] && [ -z "${JETSON_HOST:-}" ]; then
+  JETSON_HOST="$(head -n 1 "${HOME}/.waver_jetson_host")"
+fi
+select_jetson_host
 
 echo "[LOCAL] target Jetson: ${JETSON_USER}@${JETSON_HOST} ws=${JETSON_WS}"
 echo "[LOCAL] syncing field-control source files to Jetson"
@@ -205,12 +252,12 @@ start_node waver_safety_cmd_mux \
     -p ignore_scan_when_require_scan_false:=true \
     -p stop_on_adapter_degraded:=false \
     -p stop_on_battery_fault:=false \
-    -p max_linear_speed:=0.08 \
-    -p max_angular_speed:=0.08 \
-    -p mapping_max_linear_speed:=0.08 \
-    -p mapping_max_angular_speed:=0.08 \
-    -p max_linear_delta_per_tick:=0.04 \
-    -p max_angular_delta_per_tick:=0.035 \
+    -p max_linear_speed:=0.10 \
+    -p max_angular_speed:=0.12 \
+    -p mapping_max_linear_speed:=0.10 \
+    -p mapping_max_angular_speed:=0.12 \
+    -p max_linear_delta_per_tick:=0.05 \
+    -p max_angular_delta_per_tick:=0.06 \
     -p manual_override_timeout_sec:=0.30 \
     -p allow_manual_override_in_auto:=true \
     -p command_timeout_sec:=0.35 \
@@ -226,16 +273,16 @@ start_node waver_base_driver \
     -p stop_repeat:=10 \
     -p linear_gain:=2.5 \
     -p angular_gain:=0.35 \
-    -p max_left_right:=0.38 \
-    -p max_demo_speed:=0.38 \
-    -p min_linear_ratio:=0.18 \
-    -p wheel_delta_per_tick:=0.06 \
+    -p max_left_right:=0.42 \
+    -p max_demo_speed:=0.42 \
+    -p min_linear_ratio:=0.20 \
+    -p wheel_delta_per_tick:=0.10 \
     -p pure_turn_mode:="${PATROL_TURN_MODE}" \
     -p pure_turn_min_ratio:="${PATROL_TURN_WHEEL_RATIO}" \
     -p pure_turn_max_ratio:="${PATROL_TURN_WHEEL_RATIO}" \
     -p mixed_turn_mode:=inside_brake \
     -p mixed_turn_inner_ratio:=0.0 \
-    -p mixed_turn_outer_ratio:=0.12 \
+    -p mixed_turn_outer_ratio:=0.18 \
     -p min_motor_voltage_v:=7.0 \
     -p feedback_request_enabled:=true \
     -p feedback_request_interval_s:=0.3 \
@@ -269,8 +316,8 @@ start_node waver_0p2_patrol \
     -p loop_count:=-1 \
     -p max_linear_speed:="${PATROL_FORWARD_SPEED}" \
     -p max_angular_speed:="${PATROL_TURN_SPEED}" \
-    -p max_linear_accel:=0.12 \
-    -p max_angular_accel:=0.04 \
+    -p max_linear_accel:=0.16 \
+    -p max_angular_accel:=0.10 \
     -p xy_tolerance:=0.04 \
     -p yaw_tolerance:=0.12 \
     -p approach_distance_m:=0.12 \
@@ -353,6 +400,6 @@ fuser -v "${SERIAL_PORT}" 2>&1 || true
 
 echo "[JETSON] BACKEND_READY=YES"
 echo "[JETSON] Now run local UI in another local PC terminal:"
-echo "  cd ~/ros2_ws2/FSD_Vehicle"
+echo "  cd ~/ros2_ws5/FSD_Vehicle"
 echo "  bash scripts/waver_field_local_ui_start.sh"
 REMOTE

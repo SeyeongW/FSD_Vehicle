@@ -33,7 +33,7 @@ def _launch_setup(context, *args, **kwargs):
     ugv_description_parent = os.path.dirname(get_package_share_directory("ugv_description"))
     gazebo_ros_prefix = _package_prefix("gazebo_ros")
     gazebo_ros_lib = os.path.join(gazebo_ros_prefix, "lib") if gazebo_ros_prefix else ""
-    ws_root = os.path.expanduser("~/ros2_ws3/FSD_Vehicle")
+    ws_root = os.path.expanduser("~/ros2_ws5/FSD_Vehicle")
     livox_prefix = _package_prefix("ros2_livox_simulation")
     livox_plugin_candidates = [
         os.path.join(livox_prefix, "lib") if livox_prefix else "",
@@ -385,7 +385,7 @@ def generate_launch_description():
             DeclareLaunchArgument("remote_panel_demo_script", default_value=""),
             DeclareLaunchArgument("demo_close_on_finish", default_value="false"),
             DeclareLaunchArgument("start_patrol_node", default_value="true"),
-            DeclareLaunchArgument("save_dir", default_value=os.path.expanduser("~/ros2_ws3/FSD_Vehicle/maps")),
+            DeclareLaunchArgument("save_dir", default_value=os.path.expanduser("~/ros2_ws5/FSD_Vehicle/maps")),
             DeclareLaunchArgument("spawn_static_obstacle", default_value="false"),
             DeclareLaunchArgument("spawn_static_obstacle_field", default_value="false"),
             DeclareLaunchArgument("static_obstacle_entity", default_value="mapping_static_test_box"),

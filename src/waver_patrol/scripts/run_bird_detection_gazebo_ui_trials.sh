@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKSPACE="${WORKSPACE:-$HOME/ros2_ws2/FSD_Vehicle}"
+WORKSPACE="${WORKSPACE:-$HOME/ros2_ws5/FSD_Vehicle}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$WORKSPACE/experiments_result/paper_ready/bird_detection_10runs}"
 RUNS="${RUNS:-10}"
 REQUIRED_SUCCESSES="${REQUIRED_SUCCESSES:-10}"

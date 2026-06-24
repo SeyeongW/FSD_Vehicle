@@ -61,11 +61,15 @@ class WaverBaseDriverNode(Node):
         self.declare_parameter("publish_odom", True)
         self.declare_parameter("publish_tf", True)
         self.declare_parameter("odom_topic", "/odom")
+        self.declare_parameter("publish_legacy_float32_odom_raw", False)
+        self.declare_parameter("legacy_float32_odom_topic", "/waver/legacy_wheel_odom_raw")
         self.declare_parameter("odom_frame", "odom")
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("wheel_base_m", 0.28)
         self.declare_parameter("odom_distance_scale", 1.0)
         self.declare_parameter("max_encoder_delta_m", 0.5)
+        self.declare_parameter("voltage_scale", 1.0)
+        self.declare_parameter("voltage_offset_v", 0.0)
 
         self.serial_port = str(self.get_parameter("serial_port").value).strip()
         if not self.serial_port:
@@ -81,11 +85,15 @@ class WaverBaseDriverNode(Node):
         self.publish_odom_enabled = bool(self.get_parameter("publish_odom").value)
         self.publish_tf_enabled = bool(self.get_parameter("publish_tf").value)
         self.odom_topic = str(self.get_parameter("odom_topic").value)
+        self.publish_legacy_float32_odom_raw = bool(self.get_parameter("publish_legacy_float32_odom_raw").value)
+        self.legacy_float32_odom_topic = str(self.get_parameter("legacy_float32_odom_topic").value)
         self.odom_frame = str(self.get_parameter("odom_frame").value)
         self.base_frame = str(self.get_parameter("base_frame").value)
         self.wheel_base_m = max(0.05, float(self.get_parameter("wheel_base_m").value))
         self.odom_distance_scale = float(self.get_parameter("odom_distance_scale").value)
         self.max_encoder_delta_m = float(self.get_parameter("max_encoder_delta_m").value)
+        self.voltage_scale = float(self.get_parameter("voltage_scale").value)
+        self.voltage_offset_v = float(self.get_parameter("voltage_offset_v").value)
 
         self.converter = CmdVelToJson(
             CmdVelToJsonConfig(
@@ -138,7 +146,11 @@ class WaverBaseDriverNode(Node):
         self.odom_y = 0.0
         self.odom_yaw = 0.0
 
-        self.odom_raw_pub = self.create_publisher(Float32MultiArray, "odom/odom_raw", 50)
+        self.legacy_odom_raw_pub = (
+            self.create_publisher(Float32MultiArray, self.legacy_float32_odom_topic, 50)
+            if self.publish_legacy_float32_odom_raw
+            else None
+        )
         self.odom_pub = self.create_publisher(Odometry, self.odom_topic, 50)
         self.tf_broadcaster = TransformBroadcaster(self) if self.publish_tf_enabled else None
         self.imu_pub = self.create_publisher(Imu, "imu/data_raw", 50)
@@ -216,7 +228,8 @@ class WaverBaseDriverNode(Node):
             self.wheel_odom_feedback_seen = True
             odom_left = float(data.get("odl", 0.0)) / 100.0
             odom_right = float(data.get("odr", 0.0)) / 100.0
-            self.odom_raw_pub.publish(Float32MultiArray(data=[odom_left, odom_right]))
+            if self.legacy_odom_raw_pub is not None:
+                self.legacy_odom_raw_pub.publish(Float32MultiArray(data=[odom_left, odom_right]))
             self.publish_wheel_odom(odom_left, odom_right)
 
         imu = Imu()
@@ -237,7 +250,8 @@ class WaverBaseDriverNode(Node):
         mag.magnetic_field.z = float(data.get("mz", 0.0)) * 0.15
         self.mag_pub.publish(mag)
 
-        self.last_voltage_v = float(data.get("v", 0.0))
+        raw_voltage_v = float(data.get("v", 0.0))
+        self.last_voltage_v = raw_voltage_v * self.voltage_scale + self.voltage_offset_v
         self.voltage_pub.publish(Float32(data=self.last_voltage_v))
 
     def on_cmd_vel(self, msg: Twist) -> None:

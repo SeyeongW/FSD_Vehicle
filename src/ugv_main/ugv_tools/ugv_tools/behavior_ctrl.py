@@ -28,8 +28,14 @@ class BehaviorController(Node):
         self.create_subscription(PoseStamped, '/robot_pose', self.robot_pose_callback, 10) 
         # Create an action server to handle the behavior action
         self.behavior_action_server = ActionServer(self, Behavior, 'behavior', self.execute_callback)
-        # Create a publisher to the /cmd_vel topic to send velocity commands to the robot
-        self.velocity_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
+        # Publish only a candidate command; safety_cmd_mux_node remains the
+        # single final /cmd_vel authority on the real robot.
+        self.declare_parameter('cmd_vel_topic', '/waver/manual_cmd_vel')
+        self.velocity_publisher = self.create_publisher(
+            Twist,
+            str(self.get_parameter('cmd_vel_topic').value),
+            10,
+        )
         # Create a publisher to the /goal_pose topic to send goal poses to the robot
         self.goal_publisher = self.create_publisher(PoseStamped, '/goal_pose', 10)
         # Initialize the distance and yaw variables
@@ -249,4 +255,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-

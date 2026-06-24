@@ -135,7 +135,7 @@ class CameraGimbalControllerNode(Node):
             self.publish_centered(
                 True,
                 (
-                    "SIMULATED_ALIGNMENT centered=true "
+                    "SIMULATED_ALIGNMENT TOPIC_ONLY real_gimbal_output_enabled=false centered=true "
                     f"pan_rad={clamped_pan:.3f} tilt_rad={clamped_tilt:.3f} "
                     f"bearing_rad={bearing:.3f} elevation_rad={elevation:.3f}"
                 ),

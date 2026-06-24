@@ -67,6 +67,7 @@ def launch_setup(context, *args, **kwargs):
             'feedback_serial_port': LaunchConfiguration('feedback_serial_port'),
             'feedback_baudrate': LaunchConfiguration('feedback_baudrate'),
             'base_node_executable': LaunchConfiguration('base_node_executable'),
+            'enable_legacy_ugv_base_odometry_node': LaunchConfiguration('enable_legacy_ugv_base_odometry_node'),
             'enable_ldlidar': LaunchConfiguration('enable_ldlidar'),
             'enable_rf2o': LaunchConfiguration('enable_rf2o'),
         }.items()
@@ -141,6 +142,7 @@ def generate_launch_description():
         DeclareLaunchArgument('feedback_serial_port', default_value='', description='Feedback serial port for ugv_bringup'),
         DeclareLaunchArgument('feedback_baudrate', default_value='115200', description='Feedback serial baudrate for ugv_bringup'),
         DeclareLaunchArgument('base_node_executable', default_value='base_node', description='base_node or base_node_ekf'),
+        DeclareLaunchArgument('enable_legacy_ugv_base_odometry_node', default_value='true', description='Start legacy ugv_base_node/base_node_ekf odometry node'),
         DeclareLaunchArgument('enable_ldlidar', default_value='false', description='Start ldlidar /scan publisher'),
         DeclareLaunchArgument('enable_rf2o', default_value='false', description='Start RF2O odometry'),
         OpaqueFunction(function=launch_setup)

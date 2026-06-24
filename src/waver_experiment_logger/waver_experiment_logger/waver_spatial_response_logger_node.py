@@ -17,7 +17,7 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import PointCloud2
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, Int32, String
 
 
 def safe_float(value: Any, default: float = math.nan) -> float:
@@ -73,7 +73,7 @@ class WaverSpatialResponseLoggerNode(Node):
         super().__init__("waver_spatial_response_logger_node")
         self.declare_parameter(
             "output_root",
-            str(Path.home() / "ros2_ws3/FSD_Vehicle/experiment_results/gazebo_bird_patrol"),
+            str(Path.home() / "ros2_ws5/FSD_Vehicle/experiment_results/gazebo_bird_patrol"),
         )
         self.declare_parameter("trial_id", "spatial_response")
         self.declare_parameter("run_id", "")
@@ -101,6 +101,7 @@ class WaverSpatialResponseLoggerNode(Node):
         self.sound_done = False
         self.sound_done_seen = False
         self.removal_state = "UNKNOWN"
+        self.patrol_lap_count = 0
         self.latest_bird: dict[str, Any] = {}
         self.latest_birds: dict[str, dict[str, Any]] = {}
         self.latest_lidar_target: dict[str, float] = {}
@@ -145,6 +146,7 @@ class WaverSpatialResponseLoggerNode(Node):
         self.create_subscription(String, "/waver/active_nav_goal_meta", self.active_goal_meta_callback, 10)
         self.create_subscription(String, "/waver/mission_state", self.mission_state_callback, 10)
         self.create_subscription(String, "/waver/mission_event", self.mission_event_callback, 10)
+        self.create_subscription(Int32, "/waver/patrol_lap_count", lambda m: setattr(self, "patrol_lap_count", int(m.data)), 10)
         self.create_subscription(String, "/waver/sim_nav2_debug", self.sim_nav2_debug_callback, 10)
         self.create_subscription(Bool, "/waver/sound_task_done", self.sound_done_callback, 10)
         self.create_subscription(String, "/waver/gazebo_bird_removal_state", self.removal_state_callback, 10)
@@ -1000,6 +1002,10 @@ class WaverSpatialResponseLoggerNode(Node):
             "mechanism.removed_bird_count": len(removed),
             "mechanism.two_bird_removal_success": len(removed) >= 2,
             "mechanism.four_bird_removal_success": len(removed) >= 4,
+            "mechanism.five_bird_removal_success": len(removed) >= 5,
+            "mechanism.patrol_lap_count": int(self.patrol_lap_count),
+            "mechanism.two_patrol_laps_success": int(self.patrol_lap_count) >= 2,
+            "mechanism.validation_success_5_birds_2_laps": len(removed) >= 5 and int(self.patrol_lap_count) >= 2,
             "spatial.robot_to_bird_xy_mean_m": self.mean(self.numeric(spatial_rows, "robot_to_bird_xy_m")),
             "spatial.robot_to_bird_xy_min_m": min(self.numeric(spatial_rows, "robot_to_bird_xy_m") or [math.nan]),
             "spatial.object_goal_to_bird_xy_first_m": self.first_numeric(target_goal_rows, "goal_to_bird_xy_m", "object_mission_goal"),

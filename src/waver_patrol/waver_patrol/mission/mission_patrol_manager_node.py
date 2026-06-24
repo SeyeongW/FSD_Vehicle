@@ -9,6 +9,7 @@ import rclpy
 from action_msgs.msg import GoalStatus
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
 from rclpy.executors import ExternalShutdownException
@@ -43,8 +44,10 @@ class MissionState(str, Enum):
     SOUND_TASK_REQUESTED = "SOUND_TASK_REQUESTED"
     SOUND_TASK_RUNNING = "SOUND_TASK_RUNNING"
     SOUND_TASK_DONE = "SOUND_TASK_DONE"
+    WAIT_TARGET_DEPARTURE = "WAIT_TARGET_DEPARTURE"
     SOUND_TASK_BLOCKED_BY_CLASS = "SOUND_TASK_BLOCKED_BY_CLASS"
     SOUND_TASK_TIMEOUT = "SOUND_TASK_TIMEOUT"
+    RETURN_TO_DEPARTURE_POSE = "RETURN_TO_DEPARTURE_POSE"
     RETURN_TO_INTERRUPTED_WAYPOINT = "RETURN_TO_INTERRUPTED_WAYPOINT"
     RESUME_PATROL = "RESUME_PATROL"
     TARGET_LOST_RECOVERY = "TARGET_LOST_RECOVERY"
@@ -62,6 +65,7 @@ class NavGoalType(str, Enum):
     PATROL = "PATROL"
     RADAR_TARGET = "RADAR_TARGET"
     TARGET_INSPECTION = "TARGET_INSPECTION"
+    RETURN_TO_DEPARTURE_POSE = "RETURN_TO_DEPARTURE_POSE"
     RETURN_TO_INTERRUPTED_WAYPOINT = "RETURN_TO_INTERRUPTED_WAYPOINT"
     BATTERY_RETURN = "BATTERY_RETURN"
 
@@ -87,8 +91,10 @@ TARGET_MISSION_STATES = {
     MissionState.SOUND_TASK_REQUESTED,
     MissionState.SOUND_TASK_RUNNING,
     MissionState.SOUND_TASK_DONE,
+    MissionState.WAIT_TARGET_DEPARTURE,
     MissionState.SOUND_TASK_BLOCKED_BY_CLASS,
     MissionState.SOUND_TASK_TIMEOUT,
+    MissionState.RETURN_TO_DEPARTURE_POSE,
     MissionState.RETURN_TO_INTERRUPTED_WAYPOINT,
     MissionState.TARGET_LOST_RECOVERY,
 }
@@ -115,7 +121,7 @@ class MissionPatrolManagerNode(Node):
         self.declare_parameter("use_nav2", True)
         self.declare_parameter("patrol_loop", True)
         self.declare_parameter("default_mode", "STANDBY")
-        self.declare_parameter("resume_policy", "RETURN_TO_INTERRUPTED_WAYPOINT")
+        self.declare_parameter("resume_policy", "RETURN_TO_DEPARTURE_POSE")
         self.declare_parameter("target_mission_timeout_sec", 120.0)
         self.declare_parameter("target_goal_tolerance_xy", 0.5)
         self.declare_parameter("target_arrival_tolerance_xy_m", 0.5)
@@ -134,7 +140,9 @@ class MissionPatrolManagerNode(Node):
         self.declare_parameter("sound_task_timeout_sec", 15.0)
         self.declare_parameter("wait_bird_clear_after_sound", False)
         self.declare_parameter("bird_clear_state_topic", "/waver/gazebo_bird_removal_state")
+        self.declare_parameter("target_departed_topic", "/waver/target_departed")
         self.declare_parameter("bird_clear_timeout_sec", 15.0)
+        self.declare_parameter("odom_topic", "/odom")
         self.declare_parameter("nav2_action_timeout_sec", 5.0)
         self.declare_parameter("nav2_result_timeout_sec", 240.0)
         self.declare_parameter("cancel_timeout_sec", 2.0)
@@ -164,8 +172,11 @@ class MissionPatrolManagerNode(Node):
         self.state = MissionState.IDLE
         self.mode = str(self.get_parameter("default_mode").value).strip().upper()
         self.current_index = 0
+        self.patrol_lap_count = 0
         self.interrupted_index: Optional[int] = None
         self.interrupted_goal: Optional[PoseStamped] = None
+        self.interrupted_departure_pose: Optional[PoseStamped] = None
+        self.latest_odom: Optional[Odometry] = None
         self.object_goal: Optional[PoseStamped] = None
         self.object_goal_active = False
         self.return_home_active = False
@@ -188,6 +199,8 @@ class MissionPatrolManagerNode(Node):
         self.active_goal_type = NavGoalType.NONE
         self.active_goal_pose: Optional[PoseStamped] = None
         self.goal_handle = None
+        self.goal_sequence = 0
+        self.active_goal_sequence = 0
         self.goal_start_time = 0.0
         self.state_enter_time = self._now()
         self.goal_retry_count = 0
@@ -208,6 +221,7 @@ class MissionPatrolManagerNode(Node):
         self.active_goal_meta_pub = self.create_publisher(String, "/waver/active_nav_goal_meta", 10)
         self.sound_request_pub = self.create_publisher(Bool, "/waver/sound_alert_request", 10)
         self.index_pub = self.create_publisher(Int32, "/waver/patrol_index", 10)
+        self.lap_count_pub = self.create_publisher(Int32, "/waver/patrol_lap_count", 10)
         self.camera_aim_target_pub = self.create_publisher(PoseStamped, "/waver/camera_aim_target_pose", 10)
         self.camera_aim_request_pub = self.create_publisher(Bool, "/waver/camera_aim_request", 10)
 
@@ -236,6 +250,8 @@ class MissionPatrolManagerNode(Node):
         self.create_subscription(Bool, "/waver/external_stop", lambda m: setattr(self, "external_stop", bool(m.data)), 10)
         self.create_subscription(Bool, "/waver/sound_task_done", lambda m: setattr(self, "sound_task_done", bool(m.data)), 10)
         self.create_subscription(String, str(self.get_parameter("bird_clear_state_topic").value), self.bird_clear_state_callback, 10)
+        self.create_subscription(Bool, str(self.get_parameter("target_departed_topic").value), self.target_departed_callback, 10)
+        self.create_subscription(Odometry, str(self.get_parameter("odom_topic").value), self.odom_callback, 10)
         self.create_subscription(Bool, "/waver/bird_confirmed", lambda m: setattr(self, "bird_confirmed", bool(m.data)), 10)
         self.create_subscription(String, "/waver/target_class", lambda m: setattr(self, "target_class", m.data), 10)
         self.create_subscription(Float32, "/waver/target_confidence", lambda m: setattr(self, "target_confidence", float(m.data)), 10)
@@ -253,6 +269,9 @@ class MissionPatrolManagerNode(Node):
         self.nav_client = ActionClient(self, NavigateToPose, str(self.get_parameter("nav2_action_name").value)) if self.use_nav2 else None
         self.create_timer(0.2, self.tick)
         self.publish_event("STARTUP", "mission_patrol_manager initialized")
+
+    def odom_callback(self, msg: Odometry) -> None:
+        self.latest_odom = msg
 
     def mode_callback(self, msg: String) -> None:
         requested = msg.data.strip().upper()
@@ -318,6 +337,7 @@ class MissionPatrolManagerNode(Node):
         self.object_goal = None
         self.target_interrupt_locked = False
         self.post_target_resume_cooldown_until = 0.0
+        self.interrupted_departure_pose = None
         self.camera_target_centered = False
         self.camera_aim_request_pub.publish(Bool(data=False))
         if not self.estop and self.state in {
@@ -524,6 +544,11 @@ class MissionPatrolManagerNode(Node):
         if self.state in {MissionState.SOUND_TASK_REQUESTED, MissionState.SOUND_TASK_RUNNING}:
             self.handle_sound_task()
             return
+        if self.state == MissionState.WAIT_TARGET_DEPARTURE:
+            if self.waiting_for_bird_clear_after_sound():
+                return
+            self.return_after_target_mission()
+            return
         if self.state in {
             MissionState.SOUND_TASK_DONE,
             MissionState.SOUND_TASK_BLOCKED_BY_CLASS,
@@ -536,7 +561,7 @@ class MissionPatrolManagerNode(Node):
         }:
             if self.state == MissionState.SOUND_TASK_DONE and self.waiting_for_bird_clear_after_sound():
                 return
-            self.return_to_interrupted_waypoint()
+            self.return_after_target_mission()
             return
         if self.state == MissionState.PATROL_DWELL:
             if self._now() - self.state_enter_time >= self.current_waypoint().dwell_s:
@@ -574,10 +599,20 @@ class MissionPatrolManagerNode(Node):
         if self.active_goal_type not in {NavGoalType.RADAR_TARGET, NavGoalType.TARGET_INSPECTION}:
             self.interrupted_index = self.current_index
             self.interrupted_goal = self.current_waypoint().pose if self.route.waypoints else None
+            self.interrupted_departure_pose = self.snapshot_departure_pose()
             self.target_mission_id += 1
+            departure_x = "nan"
+            departure_y = "nan"
+            if self.interrupted_departure_pose is not None:
+                departure_x = f"{self.interrupted_departure_pose.pose.position.x:.3f}"
+                departure_y = f"{self.interrupted_departure_pose.pose.position.y:.3f}"
             self.publish_event(
                 "INTERRUPT_PATROL_FOR_LIDAR_TARGET",
-                f"target_id={self.target_mission_id} waypoint_index={self.interrupted_index}",
+                (
+                    f"target_id={self.target_mission_id} waypoint_index={self.interrupted_index} "
+                    f"departure_pose_available={self.interrupted_departure_pose is not None} "
+                    f"departure_x={departure_x} departure_y={departure_y}"
+                ),
             )
         self.target_interrupt_locked = True
         self.object_goal_active = False
@@ -705,7 +740,10 @@ class MissionPatrolManagerNode(Node):
             self.camera_aim_request_pub.publish(Bool(data=False))
             self.bird_clear_after_sound = False
             self.bird_clear_wait_reported = False
-            self.set_state(MissionState.SOUND_TASK_DONE, "sound_task_done")
+            if bool(self.get_parameter("wait_bird_clear_after_sound").value):
+                self.set_state(MissionState.WAIT_TARGET_DEPARTURE, "sound_task_done_wait_for_bird_departure")
+            else:
+                self.set_state(MissionState.SOUND_TASK_DONE, "sound_task_done")
         elif self._now() - self.state_enter_time > float(self.get_parameter("sound_task_timeout_sec").value):
             self.sound_request_pub.publish(Bool(data=False))
             self.camera_aim_request_pub.publish(Bool(data=False))
@@ -716,6 +754,19 @@ class MissionPatrolManagerNode(Node):
         if text.startswith("RETURN_DISTANCE_REACHED") or text.startswith("REMOVED"):
             self.bird_clear_after_sound = True
             self.publish_event("BIRD_CLEAR_AFTER_SOUND", msg.data)
+
+    def target_departed_callback(self, msg: Bool) -> None:
+        if not bool(msg.data):
+            return
+        if self.state not in {
+            MissionState.SOUND_TASK_REQUESTED,
+            MissionState.SOUND_TASK_RUNNING,
+            MissionState.SOUND_TASK_DONE,
+            MissionState.WAIT_TARGET_DEPARTURE,
+        }:
+            return
+        self.bird_clear_after_sound = True
+        self.publish_event("TARGET_DEPARTED_AFTER_SOUND", "target_departed=true")
 
     def waiting_for_bird_clear_after_sound(self) -> bool:
         if not bool(self.get_parameter("wait_bird_clear_after_sound").value):
@@ -732,18 +783,52 @@ class MissionPatrolManagerNode(Node):
             self.publish_event("WAIT_BIRD_CLEAR_AFTER_SOUND", "waiting_for_return_distance_reached")
         return True
 
-    def return_to_interrupted_waypoint(self) -> None:
-        if self.interrupted_goal is None:
+    def return_after_target_mission(self) -> None:
+        resume_policy = str(self.get_parameter("resume_policy").value).strip().upper()
+        prefer_departure_pose = resume_policy == "RETURN_TO_DEPARTURE_POSE"
+        target_pose = (
+            self.interrupted_departure_pose
+            if prefer_departure_pose and self.interrupted_departure_pose is not None
+            else self.interrupted_goal
+        )
+        target_type = (
+            NavGoalType.RETURN_TO_DEPARTURE_POSE
+            if prefer_departure_pose and self.interrupted_departure_pose is not None
+            else NavGoalType.RETURN_TO_INTERRUPTED_WAYPOINT
+        )
+        target_state = (
+            MissionState.RETURN_TO_DEPARTURE_POSE
+            if prefer_departure_pose and self.interrupted_departure_pose is not None
+            else MissionState.RETURN_TO_INTERRUPTED_WAYPOINT
+        )
+        if target_pose is None:
             self.camera_aim_request_pub.publish(Bool(data=False))
             self.start_post_target_resume_cooldown("no_interrupted_goal")
+            self.publish_event("RESUME_PATROL", f"waypoint_index={self.current_index} reason=no_interrupted_goal")
             self.set_state(MissionState.RESUME_PATROL, "no_interrupted_goal")
             return
         self.camera_aim_request_pub.publish(Bool(data=False))
-        self.send_nav_goal(
-            self.interrupted_goal,
-            NavGoalType.RETURN_TO_INTERRUPTED_WAYPOINT,
-            MissionState.RETURN_TO_INTERRUPTED_WAYPOINT,
+        self.publish_event(
+            target_type.value,
+            f"goal_x={target_pose.pose.position.x:.3f} goal_y={target_pose.pose.position.y:.3f} waypoint_index={self.interrupted_index}",
         )
+        self.send_nav_goal(
+            target_pose,
+            target_type,
+            target_state,
+        )
+
+    def return_to_interrupted_waypoint(self) -> None:
+        self.return_after_target_mission()
+
+    def snapshot_departure_pose(self) -> Optional[PoseStamped]:
+        if self.latest_odom is None:
+            return None
+        pose = PoseStamped()
+        pose.header.stamp = self.get_clock().now().to_msg()
+        pose.header.frame_id = self.latest_odom.header.frame_id or str(self.get_parameter("global_frame").value)
+        pose.pose = self.latest_odom.pose.pose
+        return pose
 
     def handle_battery_return(self) -> None:
         if self.active_goal_type == NavGoalType.BATTERY_RETURN:
@@ -769,6 +854,9 @@ class MissionPatrolManagerNode(Node):
     ) -> None:
         if self.active_goal_type == goal_type and self.active_goal_pose is not None:
             return
+        self.goal_sequence += 1
+        goal_sequence = self.goal_sequence
+        self.active_goal_sequence = goal_sequence
         self.active_goal_type = goal_type
         self.active_goal_pose = goal
         self.goal_start_time = self._now()
@@ -789,7 +877,9 @@ class MissionPatrolManagerNode(Node):
         action_goal = NavigateToPose.Goal()
         action_goal.pose = goal
         future = self.nav_client.send_goal_async(action_goal, feedback_callback=self.feedback_callback)
-        future.add_done_callback(self.goal_response_callback)
+        future.add_done_callback(
+            lambda done, seq=goal_sequence, sent_type=goal_type: self.goal_response_callback(done, seq, sent_type)
+        )
 
     def publish_active_goal_meta(self, goal: PoseStamped, goal_type: NavGoalType, state: MissionState) -> None:
         target = self.active_target_pose if goal_type == NavGoalType.TARGET_INSPECTION else None
@@ -810,20 +900,54 @@ class MissionPatrolManagerNode(Node):
         }
         self.active_goal_meta_pub.publish(String(data=json.dumps(payload, separators=(",", ":"))))
 
-    def goal_response_callback(self, future) -> None:
+    def stale_nav2_callback(self, goal_sequence: int, goal_type: NavGoalType) -> bool:
+        return goal_sequence != self.active_goal_sequence or goal_type != self.active_goal_type
+
+    def goal_response_callback(self, future, goal_sequence: int, goal_type: NavGoalType) -> None:
         try:
-            self.goal_handle = future.result()
+            goal_handle = future.result()
         except Exception as exc:
-            self.set_state(MissionState.NAV2_FAILED, f"goal_send_exception={exc}")
+            if self.stale_nav2_callback(goal_sequence, goal_type):
+                self.publish_event(
+                    "STALE_NAV2_GOAL_RESPONSE_IGNORED",
+                    f"goal_type={goal_type.value} seq={goal_sequence} exception={exc}",
+                )
+            else:
+                self.set_state(MissionState.NAV2_FAILED, f"goal_send_exception={exc}")
             return
+        if self.stale_nav2_callback(goal_sequence, goal_type):
+            if getattr(goal_handle, "accepted", False):
+                try:
+                    goal_handle.cancel_goal_async()
+                    self.publish_event(
+                        "STALE_NAV2_GOAL_ACCEPTED_CANCEL_REQUESTED",
+                        f"goal_type={goal_type.value} seq={goal_sequence} active_seq={self.active_goal_sequence}",
+                    )
+                except Exception as exc:
+                    self.publish_event("STALE_NAV2_GOAL_CANCEL_FAILED", f"goal_type={goal_type.value} exception={exc}")
+            else:
+                self.publish_event(
+                    "STALE_NAV2_GOAL_REJECT_IGNORED",
+                    f"goal_type={goal_type.value} seq={goal_sequence} active_seq={self.active_goal_sequence}",
+                )
+            return
+        self.goal_handle = goal_handle
         if not self.goal_handle.accepted:
             self.set_state(MissionState.NAV2_FAILED, "goal_rejected")
             return
         self.publish_event("NAV2_GOAL_ACCEPTED", self.active_goal_type.value)
         result_future = self.goal_handle.get_result_async()
-        result_future.add_done_callback(self.result_callback)
+        result_future.add_done_callback(
+            lambda done, seq=goal_sequence, sent_type=goal_type: self.result_callback(done, seq, sent_type)
+        )
 
-    def result_callback(self, future) -> None:
+    def result_callback(self, future, goal_sequence: int, goal_type: NavGoalType) -> None:
+        if self.stale_nav2_callback(goal_sequence, goal_type):
+            self.publish_event(
+                "STALE_NAV2_RESULT_IGNORED",
+                f"goal_type={goal_type.value} seq={goal_sequence} active_seq={self.active_goal_sequence}",
+            )
+            return
         try:
             result = future.result()
         except Exception as exc:
@@ -857,12 +981,14 @@ class MissionPatrolManagerNode(Node):
         elif goal_type == NavGoalType.TARGET_INSPECTION:
             self.consecutive_target_failures = 0
             self.set_state(MissionState.TARGET_REACHED, "inspection_offset_goal_reached")
-        elif goal_type == NavGoalType.RETURN_TO_INTERRUPTED_WAYPOINT:
+        elif goal_type in {NavGoalType.RETURN_TO_DEPARTURE_POSE, NavGoalType.RETURN_TO_INTERRUPTED_WAYPOINT}:
             self.consecutive_target_failures = 0
             if self.interrupted_index is not None:
                 self.current_index = self.interrupted_index
-            self.start_post_target_resume_cooldown("interrupted_waypoint_reached")
-            self.set_state(MissionState.RESUME_PATROL, "interrupted_waypoint_reached")
+            self.interrupted_departure_pose = None
+            self.start_post_target_resume_cooldown(f"{goal_type.value.lower()}_reached")
+            self.publish_event("RESUME_PATROL", f"waypoint_index={self.current_index} after={goal_type.value}")
+            self.set_state(MissionState.RESUME_PATROL, f"{goal_type.value.lower()}_reached")
         elif goal_type == NavGoalType.BATTERY_RETURN:
             self.set_state(MissionState.HOLD_AT_HOME, "battery_return_arrived")
 
@@ -892,7 +1018,7 @@ class MissionPatrolManagerNode(Node):
             )
             self.set_state(MissionState.RESUME_PATROL, f"target_goal_failed {reason}")
             return
-        if failed_goal_type == NavGoalType.RETURN_TO_INTERRUPTED_WAYPOINT:
+        if failed_goal_type in {NavGoalType.RETURN_TO_DEPARTURE_POSE, NavGoalType.RETURN_TO_INTERRUPTED_WAYPOINT}:
             self.consecutive_target_failures += 1
             self.start_post_target_resume_cooldown(f"return_to_interrupted_failed {reason}")
             self.publish_event("RETURN_TO_INTERRUPTED_FAILED_RESUME_PATROL", reason)
@@ -925,6 +1051,8 @@ class MissionPatrolManagerNode(Node):
             self.handle_goal_failure("goal_timeout")
 
     def cancel_active_goal(self, reason: str) -> None:
+        self.goal_sequence += 1
+        self.active_goal_sequence = self.goal_sequence
         if self.goal_handle is not None:
             try:
                 self.goal_handle.cancel_goal_async()
@@ -1003,6 +1131,9 @@ class MissionPatrolManagerNode(Node):
         if self.current_index >= len(self.route.waypoints):
             if bool(self.get_parameter("patrol_loop").value) and self.route.loop:
                 self.current_index = 0
+                self.patrol_lap_count += 1
+                self.lap_count_pub.publish(Int32(data=int(self.patrol_lap_count)))
+                self.publish_event("PATROL_LAP_COMPLETED", f"lap_count={self.patrol_lap_count}")
             else:
                 self.set_state(MissionState.IDLE, "route_complete")
                 return
@@ -1030,6 +1161,7 @@ class MissionPatrolManagerNode(Node):
         self.mode_pub.publish(String(data=self.mode))
         self.state_pub.publish(String(data=f"{self.state.value} mode={self.mode} nav_goal={self.active_goal_type.value}"))
         self.index_pub.publish(Int32(data=int(self.current_index)))
+        self.lap_count_pub.publish(Int32(data=int(self.patrol_lap_count)))
         if self.route.waypoints:
             wp = self.current_waypoint().pose
             wp.header.stamp = self.get_clock().now().to_msg()

@@ -1,0 +1,3 @@
+This bundled ROS2 gmapping fork is incomplete in this workspace snapshot.
+It is excluded from colcon so the maintained Waver scan_mapper/slam_toolbox
+mapping paths can build cleanly.

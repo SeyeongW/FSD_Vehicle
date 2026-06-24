@@ -3,7 +3,7 @@ mapping_workflow_manager_node:
     use_sim_time: true
     map_topic: /map
     fixed_map_topic: /map_fixed
-    save_dir: ~/ros2_ws3/FSD_Vehicle/maps
+    save_dir: ~/ros2_ws5/FSD_Vehicle/maps
     save_basename: waver_latest_map
     use_internal_map_writer: true
     crop_unknown_border_on_save: true
@@ -60,7 +60,7 @@ waver_gazebo_patrol:
     cmd_vel_topic: /waver/cmd_vel_nav2
     odom_topic: /odom
     scan_topic: /scan_safety
-    waypoint_file: ~/ros2_ws3/FSD_Vehicle/src/waver_patrol/waypoints/waver_4m_then_7m_square_patrol.yaml
+    waypoint_file: ~/ros2_ws5/FSD_Vehicle/src/waver_patrol/waypoints/waver_4m_then_7m_square_patrol.yaml
     auto_start: false
     start_on_mission_command: true
     relative_waypoints_to_start: true

@@ -41,7 +41,8 @@ class JoyTeleop(Node):
 		self.angular_Gear = 1
 		
 		#create pub
-		self.pub_cmdVel = self.create_publisher(Twist,'cmd_vel',  10)
+		self.declare_parameter('cmd_vel_topic', '/waver/manual_cmd_vel')
+		self.pub_cmdVel = self.create_publisher(Twist, str(self.get_parameter('cmd_vel_topic').value), 10)
 		self.pub_JoyState = self.create_publisher(Bool,"JoyState",  10)
 		
 		#create sub

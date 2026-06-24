@@ -108,14 +108,14 @@ If no key arrives for 0.3 s, Waver stops.
 
 ```bash
 ros2 launch waver_patrol waver_mapping_2d.launch.py algorithm:=cartographer use_rviz:=true
-ros2 launch waver_patrol waver_mapping_2d.launch.py algorithm:=gmapping use_rviz:=true
+ros2 launch waver_patrol waver_mapping_backend.launch.py backend:=scan_mapper use_sim_time:=true
 ros2 launch waver_patrol waver_mapping_3d.launch.py use_rviz:=true
 ```
 
-For the Gazebo airport `ugv_rover`, the operator-panel `SLAM MAPPING` workflow uses LiDAR-only
-`slam_gmapping` on `/scan` by default. The UI clears the previously displayed fixed map, starts
-the LiDAR SLAM backend, shows the live `/map`, then SAVE MAP and APPLY FIXED MAP publish the newly
-saved map back into the panel.
+For the Gazebo airport `ugv_rover`, the operator-panel `SLAM MAPPING` workflow uses the
+ros2_ws5 `scan_mapper` LaserScan occupancy backend on `/scan_slam` by default. The UI clears
+the previously displayed fixed map, starts the live mapping backend, shows `/map`, then SAVE MAP
+and APPLY FIXED MAP publish the newly saved map back into the panel.
 
 ## Localization
 

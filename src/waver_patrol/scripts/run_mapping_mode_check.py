@@ -113,7 +113,7 @@ class MappingModeCheck(Node):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate Gazebo mapping mode /map update and save/apply workflow")
-    parser.add_argument("--output-root", default="~/ros2_ws2/FSD_Vehicle/experiments_result")
+    parser.add_argument("--output-root", default="~/ros2_ws5/FSD_Vehicle/experiments_result")
     parser.add_argument("--experiment-name", default="")
     parser.add_argument("--duration-sec", type=float, default=14.0)
     parser.add_argument("--save-after-sec", type=float, default=7.0)

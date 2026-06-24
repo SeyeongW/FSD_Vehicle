@@ -11,7 +11,7 @@ for arg in "$@"; do
   esac
 done
 
-REPO="${WAVER_REPO:-$HOME/ros2_ws2/FSD_Vehicle}"
+REPO="${WAVER_REPO:-$HOME/ros2_ws5/FSD_Vehicle}"
 WS="${WAVER_WS:-$REPO}"
 cd "$REPO"
 

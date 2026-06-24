@@ -6,7 +6,7 @@ set -uo pipefail
 # publishes /cmd_vel; manual motion must appear on /waver/manual_cmd_vel and
 # final /cmd_vel must be owned by safety_cmd_mux_node.
 
-WORKSPACE="${WORKSPACE:-$HOME/ros2_ws2/FSD_Vehicle}"
+WORKSPACE="${WORKSPACE:-$HOME/ros2_ws5/FSD_Vehicle}"
 RUNS="${RUNS:-10}"
 ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-30}"
 DEMO_SCRIPT="${DEMO_SCRIPT:-mapping_workflow_smoke}"

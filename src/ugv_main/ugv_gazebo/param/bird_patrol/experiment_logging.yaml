@@ -1,14 +1,14 @@
 seo_mechanism_trial_logger_node:
   ros__parameters:
     use_sim_time: true
-    output_root: /home/chotaehyun/ros2_ws3/FSD_Vehicle/experiment_results/gazebo_bird_patrol
+    output_root: /home/chotaehyun/ros2_ws5/FSD_Vehicle/experiment_results/gazebo_bird_patrol
     trial_id: gazebo_seo_bird_patrol
     summary_period_sec: 0.5
 
 gazebo_trial_logger_node:
   ros__parameters:
     use_sim_time: true
-    output_root: /home/chotaehyun/ros2_ws3/FSD_Vehicle/experiment_results/gazebo_bird_patrol
+    output_root: /home/chotaehyun/ros2_ws5/FSD_Vehicle/experiment_results/gazebo_bird_patrol
     trial_id: 1
     trial_name_prefix: gazebo_seo_bird_patrol
     target_min_height_m: 3.0
