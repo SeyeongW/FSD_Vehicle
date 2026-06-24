@@ -188,9 +188,10 @@ waver_ssh_cmd() {
   fi
   if [ -n "${JETSON_PASS:-}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-0}" = "1" ]; then
     if ! command -v sshpass >/dev/null 2>&1; then
-      echo "[WAVER_ENV][WARN] sshpass is not installed; falling back to interactive SSH prompts." >&2
-      WAVER_SSH_CMD=(ssh "${opts[@]}")
-      return 0
+      echo "[WAVER_ENV][ERROR] JETSON_PASS is set but sshpass is not installed." >&2
+      echo "[WAVER_ENV][ERROR] Install once: sudo apt install -y sshpass" >&2
+      echo "[WAVER_ENV][ERROR] This prevents repeated SSH password prompts." >&2
+      return 1
     fi
     WAVER_SSH_CMD=(sshpass -p "${JETSON_PASS}" ssh "${opts[@]}")
   else
@@ -216,9 +217,10 @@ waver_scp_cmd() {
   fi
   if [ -n "${JETSON_PASS:-}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-0}" = "1" ]; then
     if ! command -v sshpass >/dev/null 2>&1; then
-      echo "[WAVER_ENV][WARN] sshpass is not installed; falling back to interactive SCP prompts." >&2
-      WAVER_SCP_CMD=(scp "${opts[@]}")
-      return 0
+      echo "[WAVER_ENV][ERROR] JETSON_PASS is set but sshpass is not installed." >&2
+      echo "[WAVER_ENV][ERROR] Install once: sudo apt install -y sshpass" >&2
+      echo "[WAVER_ENV][ERROR] This prevents repeated SCP password prompts." >&2
+      return 1
     fi
     WAVER_SCP_CMD=(sshpass -p "${JETSON_PASS}" scp "${opts[@]}")
   else
@@ -241,9 +243,10 @@ waver_rsync_cmd() {
   fi
   if [ -n "${JETSON_PASS:-}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-0}" = "1" ]; then
     if ! command -v sshpass >/dev/null 2>&1; then
-      echo "[WAVER_ENV][WARN] sshpass is not installed; falling back to interactive rsync SSH prompts." >&2
-      WAVER_RSYNC_CMD=(rsync -az --delete -e "${ssh_parts[*]}")
-      return 0
+      echo "[WAVER_ENV][ERROR] JETSON_PASS is set but sshpass is not installed." >&2
+      echo "[WAVER_ENV][ERROR] Install once: sudo apt install -y sshpass" >&2
+      echo "[WAVER_ENV][ERROR] This prevents repeated rsync password prompts." >&2
+      return 1
     fi
     WAVER_RSYNC_CMD=(sshpass -p "${JETSON_PASS}" rsync -az --delete -e "${ssh_parts[*]}")
   else
