@@ -229,7 +229,7 @@ camera_gimbal_controller_node:
 experiment_data_logger_node:
   ros__parameters:
     experiment_name: "waver_radar_guided_bird_deterrence"
-    output_root: "~/ros2_ws/experiments_result"
+    output_root: "~/ugv_ws/FSD_Vehicle/experiments_result"
     csv_flush_interval_sec: 1.0
     write_rosbag_command_file: true
     log_odom: true

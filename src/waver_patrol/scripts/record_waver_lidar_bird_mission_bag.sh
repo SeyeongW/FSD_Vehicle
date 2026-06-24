@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${1:-$HOME/ros2_ws5/FSD_Vehicle/experiment_results/raw_bags}"
+ROOT="${1:-$HOME/ugv_ws/FSD_Vehicle/experiment_results/raw_bags}"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 OUT="${ROOT}/waver_lidar_bird_${STAMP}"
 mkdir -p "${ROOT}"

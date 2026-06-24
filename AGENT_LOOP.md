@@ -88,21 +88,21 @@ The real profile must preserve these invariants:
 Run one no-hardware gate:
 
 ```bash
-cd ~/ros2_ws5/FSD_Vehicle
+cd ~/ugv_ws/FSD_Vehicle
 bash scripts/waver_quality_gate.sh --no-hardware --report-dir reports/quality_gate/latest
 ```
 
 Run a bounded iteration loop:
 
 ```bash
-cd ~/ros2_ws5/FSD_Vehicle
+cd ~/ugv_ws/FSD_Vehicle
 bash scripts/waver_agent_iteration_loop.sh --max-iterations 3 --time-budget-hours 2 --no-hardware
 ```
 
 Run only the contract checker:
 
 ```bash
-cd ~/ros2_ws5/FSD_Vehicle
+cd ~/ugv_ws/FSD_Vehicle
 python3 scripts/waver_contract_check.py --root . --report-dir reports/quality_gate/manual_contract
 ```
 

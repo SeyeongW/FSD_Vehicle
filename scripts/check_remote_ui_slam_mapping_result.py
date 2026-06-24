@@ -153,7 +153,7 @@ def main() -> int:
         "--map-yaml",
         "--map",
         dest="map_yaml",
-        default="~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml",
+        default="~/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml",
     )
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--skip-graph", action="store_true", help="Only check saved map files; use after launch shutdown.")

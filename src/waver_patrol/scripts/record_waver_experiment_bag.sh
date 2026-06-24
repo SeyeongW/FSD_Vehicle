@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OUT="${1:-$HOME/ros2_ws5/FSD_Vehicle/experiments_result/bags/waver_experiment_$(date +%Y%m%d_%H%M%S)}"
+OUT="${1:-$HOME/ugv_ws/FSD_Vehicle/experiments_result/bags/waver_experiment_$(date +%Y%m%d_%H%M%S)}"
 mkdir -p "$(dirname "$OUT")"
 
 ros2 bag record \

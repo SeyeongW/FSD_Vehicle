@@ -1,7 +1,7 @@
 # Waver Operator Modes
 
 This page defines the three operator-facing modes that should be used before
-real field work. The commands are examples for `~/ros2_ws5/FSD_Vehicle`; adjust
+real field work. The commands are examples for `~/ugv_ws/FSD_Vehicle`; adjust
 only topic names and device IDs that are physically verified.
 
 ## Mode Table
@@ -15,7 +15,7 @@ only topic names and device IDs that are physically verified.
 ## Gazebo Validation Command
 
 ```bash
-cd ~/ros2_ws5/FSD_Vehicle
+cd ~/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch waver_patrol waver_gazebo_bird_autonomy.launch.py \
@@ -30,7 +30,7 @@ real YOLO accuracy, real deterrence performance, or outdoor field proof.
 ## Real Sensor-Only Dry Run
 
 ```bash
-cd ~/ros2_ws5/FSD_Vehicle
+cd ~/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
@@ -50,7 +50,7 @@ Use `/dev/serial/by-id/...` for the serial port. Avoid `/dev/ttyUSB0` in field
 procedures because enumeration can change after reconnects.
 
 ```bash
-cd ~/ros2_ws5/FSD_Vehicle
+cd ~/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 bash src/waver_patrol/scripts/waver_real_preflight_check.sh --strict --wheel-on

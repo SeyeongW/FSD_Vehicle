@@ -14,7 +14,7 @@ fi
 JETSON_HOST="${JETSON_HOST:-10.139.225.150}"
 JETSON_USER="${JETSON_USER:-sw}"
 JETSON_PASS="${JETSON_PASS:-}"
-JETSON_WS="${JETSON_WS:-/home/sw/ros2_ws5/FSD_Vehicle}"
+JETSON_WS="${JETSON_WS:-/home/sw/ugv_ws/FSD_Vehicle}"
 JETSON_HOST_AUTO="${JETSON_HOST_AUTO:-true}"
 JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST} 10.139.225.150 10.63.240.150 10.139.225.126}"
 CONTAINER="${CONTAINER:-fsd_dev_jetson}"
@@ -24,10 +24,10 @@ PATROL_ALLOW_OPEN_LOOP="${PATROL_ALLOW_OPEN_LOOP:-true}"
 PATROL_WAYPOINT_FILE="${PATROL_WAYPOINT_FILE:-/ros2_ws/ugv_ws/src/ugv_main/ugv_tools/waypoints/waver_0p2m_patrol.yaml}"
 PATROL_STEP_DISTANCE_M="${PATROL_STEP_DISTANCE_M:-0.2}"
 PATROL_FORWARD_DURATION_S="${PATROL_FORWARD_DURATION_S:-0.65}"
-PATROL_TURN_DURATION_S="${PATROL_TURN_DURATION_S:-2.6}"
-PATROL_FORWARD_SPEED="${PATROL_FORWARD_SPEED:-0.075}"
-PATROL_TURN_SPEED="${PATROL_TURN_SPEED:-0.06}"
-PATROL_TURN_WHEEL_RATIO="${PATROL_TURN_WHEEL_RATIO:-0.40}"
+PATROL_TURN_DURATION_S="${PATROL_TURN_DURATION_S:-2.4}"
+PATROL_FORWARD_SPEED="${PATROL_FORWARD_SPEED:-0.085}"
+PATROL_TURN_SPEED="${PATROL_TURN_SPEED:-0.075}"
+PATROL_TURN_WHEEL_RATIO="${PATROL_TURN_WHEEL_RATIO:-0.46}"
 PATROL_TURN_MODE="${PATROL_TURN_MODE:-pivot}"
 
 SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=8)
@@ -155,7 +155,6 @@ if [ "${FIELD_BUILD_IN_DOCKER}" = "true" ]; then
   docker exec "${CONTAINER}" bash -lc '
   set -eo pipefail
   cd /ros2_ws/ugv_ws
-  source /opt/ros/humble/install/setup.bash
   source /opt/ros/humble/setup.bash
   colcon --log-base log_docker build \
     --build-base build_docker \
@@ -210,6 +209,7 @@ failure_policy:
 YAML"
 
 echo "[JETSON] stopping stale ROS driver processes"
+pkill -f "docker exec -i ${CONTAINER}.*WAVER_REMOTE_BRIDGE_TIMEOUT_S" 2>/dev/null || true
 for pat in \
   waver_base_driver_node \
   safety_cmd_mux_node \
@@ -252,40 +252,40 @@ start_node waver_safety_cmd_mux \
     -p ignore_scan_when_require_scan_false:=true \
     -p stop_on_adapter_degraded:=false \
     -p stop_on_battery_fault:=false \
-    -p max_linear_speed:=0.10 \
-    -p max_angular_speed:=0.12 \
-    -p mapping_max_linear_speed:=0.10 \
-    -p mapping_max_angular_speed:=0.12 \
-    -p max_linear_delta_per_tick:=0.05 \
-    -p max_angular_delta_per_tick:=0.06 \
-    -p manual_override_timeout_sec:=0.30 \
+    -p max_linear_speed:=0.12 \
+    -p max_angular_speed:=0.16 \
+    -p mapping_max_linear_speed:=0.12 \
+    -p mapping_max_angular_speed:=0.16 \
+    -p max_linear_delta_per_tick:=0.08 \
+    -p max_angular_delta_per_tick:=0.12 \
+    -p manual_override_timeout_sec:=0.12 \
     -p allow_manual_override_in_auto:=true \
-    -p command_timeout_sec:=0.35 \
-    -p timer_hz:=60.0
+    -p command_timeout_sec:=0.14 \
+    -p timer_hz:=80.0
 
 start_node waver_base_driver \
   ros2 run waver_patrol waver_base_driver_node --ros-args \
     -p serial_port:="${SERIAL_PORT}" \
     -p cmd_vel_topic:=/cmd_vel \
     -p command_protocol:=lr \
-    -p command_rate_hz:=60.0 \
-    -p cmd_timeout_s:=0.35 \
+    -p command_rate_hz:=80.0 \
+    -p cmd_timeout_s:=0.14 \
     -p stop_repeat:=10 \
     -p linear_gain:=2.5 \
-    -p angular_gain:=0.35 \
-    -p max_left_right:=0.42 \
-    -p max_demo_speed:=0.42 \
-    -p min_linear_ratio:=0.20 \
-    -p wheel_delta_per_tick:=0.10 \
+    -p angular_gain:=0.45 \
+    -p max_left_right:=0.48 \
+    -p max_demo_speed:=0.48 \
+    -p min_linear_ratio:=0.22 \
+    -p wheel_delta_per_tick:=0.16 \
     -p pure_turn_mode:="${PATROL_TURN_MODE}" \
     -p pure_turn_min_ratio:="${PATROL_TURN_WHEEL_RATIO}" \
     -p pure_turn_max_ratio:="${PATROL_TURN_WHEEL_RATIO}" \
     -p mixed_turn_mode:=inside_brake \
     -p mixed_turn_inner_ratio:=0.0 \
-    -p mixed_turn_outer_ratio:=0.18 \
+    -p mixed_turn_outer_ratio:=0.22 \
     -p min_motor_voltage_v:=7.0 \
     -p feedback_request_enabled:=true \
-    -p feedback_request_interval_s:=0.3 \
+    -p feedback_request_interval_s:=0.25 \
     -p publish_odom:=true \
     -p publish_tf:=true \
     -p odom_topic:=/odom \
@@ -316,8 +316,8 @@ start_node waver_0p2_patrol \
     -p loop_count:=-1 \
     -p max_linear_speed:="${PATROL_FORWARD_SPEED}" \
     -p max_angular_speed:="${PATROL_TURN_SPEED}" \
-    -p max_linear_accel:=0.16 \
-    -p max_angular_accel:=0.10 \
+    -p max_linear_accel:=0.22 \
+    -p max_angular_accel:=0.18 \
     -p xy_tolerance:=0.04 \
     -p yaw_tolerance:=0.12 \
     -p approach_distance_m:=0.12 \
@@ -400,6 +400,6 @@ fuser -v "${SERIAL_PORT}" 2>&1 || true
 
 echo "[JETSON] BACKEND_READY=YES"
 echo "[JETSON] Now run local UI in another local PC terminal:"
-echo "  cd ~/ros2_ws5/FSD_Vehicle"
+echo "  cd ~/ugv_ws/FSD_Vehicle"
 echo "  bash scripts/waver_field_local_ui_start.sh"
 REMOTE

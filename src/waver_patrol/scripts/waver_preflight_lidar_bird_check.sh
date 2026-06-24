@@ -38,7 +38,7 @@ check_topic /waver/camera_gimbal_cmd
 check_topic /waver/camera_gimbal_feedback
 check_topic /waver/mission_report
 
-RESULT_ROOT="${WAVER_EXPERIMENT_RESULTS:-$HOME/ros2_ws5/FSD_Vehicle/experiment_results}"
+RESULT_ROOT="${WAVER_EXPERIMENT_RESULTS:-$HOME/ugv_ws/FSD_Vehicle/experiment_results}"
 mkdir -p "${RESULT_ROOT}"
 if [ -w "${RESULT_ROOT}" ]; then
   echo "OK experiment_results writable: ${RESULT_ROOT}"

@@ -23,11 +23,11 @@ displacement is logged for debugging only and must not trigger missions.
 ## Commands
 
 ```bash
-cd ~/ros2_ws
+cd ~/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
-OUTPUT_ROOT=$HOME/ros2_ws/experiments_result \
+OUTPUT_ROOT=$HOME/ugv_ws/FSD_Vehicle/experiments_result \
 ROS_DOMAIN_BASE=180 \
 TRIALS="1 2 3" \
 REQUIRED_SUCCESSES=3 \
@@ -40,7 +40,7 @@ bash src/FSD_Vehicle/src/waver_patrol/scripts/run_pre_real_gazebo_trials.sh
 For a stronger stability check:
 
 ```bash
-OUTPUT_ROOT=$HOME/ros2_ws/experiments_result \
+OUTPUT_ROOT=$HOME/ugv_ws/FSD_Vehicle/experiments_result \
 ROS_DOMAIN_BASE=190 \
 TRIALS="1 2 3 1 2" \
 REQUIRED_SUCCESSES=5 \
@@ -55,7 +55,7 @@ bash src/FSD_Vehicle/src/waver_patrol/scripts/run_pre_real_gazebo_trials.sh
 - `/waver/lidar_objects_map` preserves z after map/odom transform.
 - `experiment_summary.csv` includes height and dynamic filter columns.
 - `/cmd_vel` has exactly one publisher: `safety_cmd_mux_node`.
-- Results are written under `~/ros2_ws/experiments_result`.
+- Results are written under `~/ugv_ws/FSD_Vehicle/experiments_result`.
 
 ## Remaining Recommended Trials
 

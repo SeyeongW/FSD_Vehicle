@@ -9,7 +9,7 @@ set -eo pipefail
 #   - fake cluster publisher는 실제 cluster_node.py와 같은 `/waver/lidar_objects` 인터페이스를 낸다.
 #   - serial bridge, real sound output, direct motor control은 켜지지 않는다.
 
-WS="${WAVER_WS:-$HOME/ros2_ws}"
+WS="${WAVER_WS:-$HOME/ugv_ws/FSD_Vehicle}"
 TRIALS="${TRIALS:-1 2 3}"
 REQUIRED_SUCCESSES="${REQUIRED_SUCCESSES:-3}"
 MAX_WAIT_SEC="${MAX_WAIT_SEC:-150}"

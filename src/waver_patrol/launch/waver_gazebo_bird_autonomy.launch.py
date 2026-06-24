@@ -17,7 +17,7 @@ def _find_ugv_script(filename: str, ugv_share: str) -> str:
     installed = os.path.normpath(os.path.join(ugv_share, "..", "..", "lib", "ugv_gazebo", filename))
     if os.path.isfile(installed):
         return installed
-    source_matches = glob.glob(os.path.expanduser(f"~/ros2_ws5/FSD_Vehicle/src/**/{filename}"), recursive=True)
+    source_matches = glob.glob(os.path.expanduser(f"~/ugv_ws/FSD_Vehicle/src/**/{filename}"), recursive=True)
     return source_matches[0] if source_matches else installed
 
 

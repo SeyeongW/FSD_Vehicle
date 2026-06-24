@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "${WAVER_WS5_ROOT:-$HOME/ros2_ws5/FSD_Vehicle}"
+cd "${WAVER_UGV_WS_ROOT:-$HOME/ugv_ws/FSD_Vehicle}"
 set +u
 source /opt/ros/humble/setup.bash
 source install/setup.bash
@@ -22,4 +22,4 @@ exec ros2 launch ugv_gazebo ugv_gazebo_ui_slam_mapping.launch.py \
   mapping_backend:="${WAVER_MAPPING_BACKEND:-slam_toolbox}" \
   start_remote_panel:=true \
   demo_close_on_finish:=false \
-  save_dir:="$HOME/ros2_ws5/FSD_Vehicle/maps"
+  save_dir:="$HOME/ugv_ws/FSD_Vehicle/maps"

@@ -35,10 +35,10 @@ but it cannot prove actual vehicle speed.
 This local workspace currently builds the Waver package from the FSD_Vehicle source tree:
 
 ```text
-~/ros2_ws/src/FSD_Vehicle/src/waver_patrol
+~/ugv_ws/FSD_Vehicle/src/waver_patrol
 ```
 
-If another copy exists at `~/ros2_ws/src/waver_patrol`, keep only one build-visible copy. The
+If another copy exists at `~/ugv_ws/FSD_Vehicle/src/waver_patrol`, keep only one build-visible copy. The
 safe local option is to leave the files in place and add `COLCON_IGNORE` to the extra copy, instead
 of deleting it. Duplicate `waver_patrol` packages will stop `colcon` before the robot can be tested.
 
@@ -46,7 +46,7 @@ If this zip restored `waver_patrol` only under the archived folder, recover it i
 colcon source space first:
 
 ```bash
-cd /home/chotaehyun/ros2_ws
+cd /home/chotaehyun/ugv_ws/FSD_Vehicle
 mkdir -p src
 rsync -a _waver_archived_non_ugv_tools_20260519/src/waver_patrol/ src/FSD_Vehicle/src/waver_patrol/
 ```
@@ -55,15 +55,15 @@ Do not move or symlink the `FSD_Vehicle` trees while doing this; duplicate packa
 `colcon`. Build `waver_patrol` alone first.
 
 ```bash
-cd /home/chotaehyun/ros2_ws
+cd /home/chotaehyun/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 rosdep install -i --from-paths src/FSD_Vehicle/src/waver_patrol --rosdistro humble -y
 colcon build --packages-select waver_patrol --symlink-install
 source install/setup.bash
 ```
 
-In this workspace, `FSD_Vehicle` exists both at `~/ros2_ws/FSD_Vehicle` and
-`~/ros2_ws/src/FSD_Vehicle`, so avoid a blind full-workspace build until the duplicate package paths
+In this workspace, `FSD_Vehicle` exists both at `~/ugv_ws/FSD_Vehicle` and
+`~/ugv_ws/FSD_Vehicle`, so avoid a blind full-workspace build until the duplicate package paths
 are intentionally handled. If `ugv_nav` or `ugv_slam` are not visible in `ros2 pkg list`, build the
 needed upstream packages from one chosen source tree only.
 
@@ -76,7 +76,7 @@ ros2 run waver_patrol inspect_stack
 Real-robot preflight check, after starting the Waver launch but before enabling serial:
 
 ```bash
-bash ~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/waver_real_preflight_check.sh
+bash ~/ugv_ws/FSD_Vehicle/src/waver_patrol/scripts/waver_real_preflight_check.sh
 ```
 
 The script does not publish motion commands. It verifies that exactly one build-visible
@@ -113,7 +113,7 @@ ros2 launch waver_patrol waver_mapping_3d.launch.py use_rviz:=true
 ```
 
 For the Gazebo airport `ugv_rover`, the operator-panel `SLAM MAPPING` workflow uses the
-ros2_ws5 `scan_mapper` LaserScan occupancy backend on `/scan_slam` by default. The UI clears
+ugv_ws `scan_mapper` LaserScan occupancy backend on `/scan_slam` by default. The UI clears
 the previously displayed fixed map, starts the live mapping backend, shows `/map`, then SAVE MAP
 and APPLY FIXED MAP publish the newly saved map back into the panel.
 
@@ -167,7 +167,7 @@ Never run `ugv_driver` and `serial_cmd_vel_bridge` on the same serial port. If e
 Desk test, with fake odom and fake targets only:
 
 ```bash
-cd /home/chotaehyun/ros2_ws
+cd /home/chotaehyun/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch waver_patrol waver_bird_autonomy.launch.py \
@@ -491,7 +491,7 @@ ros2 launch waver_patrol waver_gazebo_nav2_radar_bird_mission.launch.py \
 ### Mission Build And Run
 
 ```bash
-cd ~/ros2_ws
+cd ~/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 rosdep install -i --from-paths src/FSD_Vehicle/src/waver_patrol --rosdistro humble -y
 colcon build --packages-select waver_patrol --symlink-install
@@ -572,16 +572,16 @@ ros2 topic pub /waver/external_target_confidence std_msgs/msg/Float32 "{data: 0.
 CSV output:
 
 ```bash
-ls -R ~/ros2_ws/experiments_result
-head -n 5 ~/ros2_ws/experiments_result/*/mission_events.csv
-head -n 5 ~/ros2_ws/experiments_result/*/radar_targets.csv
-head -n 5 ~/ros2_ws/experiments_result/*/experiment_summary.csv
+ls -R ~/ugv_ws/FSD_Vehicle/experiments_result
+head -n 5 ~/ugv_ws/FSD_Vehicle/experiments_result/*/mission_events.csv
+head -n 5 ~/ugv_ws/FSD_Vehicle/experiments_result/*/radar_targets.csv
+head -n 5 ~/ugv_ws/FSD_Vehicle/experiments_result/*/experiment_summary.csv
 ```
 
 Raw rosbag recording:
 
 ```bash
-~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/record_waver_experiment_bag.sh
+~/ugv_ws/FSD_Vehicle/src/waver_patrol/scripts/record_waver_experiment_bag.sh
 ```
 
 ### Research References Used
@@ -613,7 +613,7 @@ Use Waver's Gazebo launch to keep the same command path as the real robot: Waver
 commands go through `auto_behavior_mux_node`, then `safety_cmd_mux_node`, and only then `/cmd_vel`.
 
 ```bash
-cd /home/chotaehyun/ros2_ws
+cd /home/chotaehyun/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 colcon build --paths src/FSD_Vehicle/src/waver_patrol src/FSD_Vehicle/src/ugv_main/ugv_gazebo \
   --packages-select waver_patrol ugv_gazebo --symlink-install
@@ -668,12 +668,12 @@ adapters:
 - tf2 map/odom output: `/waver/lidar_objects_map`
 - elevated dynamic filter: height >= `target_min_height_m` and map/odom compensated motion
 - mission target goal: `/waver/object_mission_goal`
-- CSV summary: `~/ros2_ws/experiments_result/gazebo_trial_*`
+- CSV summary: `~/ugv_ws/FSD_Vehicle/experiments_result/gazebo_trial_*`
 
 Run one GUI trial:
 
 ```bash
-cd ~/ros2_ws
+cd ~/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch waver_patrol gazebo_moving_object_trial.launch.py \
@@ -681,7 +681,7 @@ ros2 launch waver_patrol gazebo_moving_object_trial.launch.py \
   target_min_height_m:=3.0 \
   min_dynamic_motion_m:=0.2 \
   target_z:=3.2 \
-  world_file:=~/ros2_ws/install/ugv_gazebo/share/ugv_gazebo/worlds/ugv_world.world \
+  world_file:=~/ugv_ws/FSD_Vehicle/install/ugv_gazebo/share/ugv_gazebo/worlds/ugv_world.world \
   use_gui:=true \
   enable_cluster_node:=true \
   enable_experiment_logger:=true \
@@ -695,7 +695,7 @@ only as a fallback/debug world, not as the normal trial world.
 Run the required three headless trials:
 
 ```bash
-cd ~/ros2_ws
+cd ~/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 bash src/FSD_Vehicle/src/waver_patrol/scripts/run_gazebo_mission_trials.sh
@@ -705,8 +705,8 @@ Analyze results:
 
 ```bash
 python3 src/FSD_Vehicle/src/waver_patrol/scripts/analyze_gazebo_trials.py \
-  --input_dir ~/ros2_ws/experiments_result \
-  --output_dir ~/ros2_ws/experiments_result/results
+  --input_dir ~/ugv_ws/FSD_Vehicle/experiments_result \
+  --output_dir ~/ugv_ws/FSD_Vehicle/experiments_result/results
 ```
 
 Detailed scenario, CSV schema, rosbag notes, and the real-robot gate are in
@@ -720,7 +720,7 @@ wrappers. They use the existing `ugv_gazebo/worlds/ugv_world.world` and the
 `ugv_rover` model.
 
 ```bash
-cd ~/ros2_ws
+cd ~/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
@@ -741,20 +741,20 @@ ros2 launch waver_patrol gazebo_pre_real_validation.launch.py \
 Height-based H1/H2/H3 gate:
 
 ```bash
-bash ~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/scripts/run_pre_real_gazebo_trials.sh
+bash ~/ugv_ws/FSD_Vehicle/src/waver_patrol/scripts/run_pre_real_gazebo_trials.sh
 ```
 
 The report is written to:
 
 ```text
-~/ros2_ws/experiments_result/results/pre_real_validation_report.md
+~/ugv_ws/FSD_Vehicle/experiments_result/results/pre_real_validation_report.md
 ```
 
 Remote visualization:
 
 ```bash
 ros2 launch waver_patrol remote_visualization.launch.py \
-  rviz_config:=~/ros2_ws/src/FSD_Vehicle/src/waver_patrol/rviz/pre_real_gazebo_validation.rviz \
+  rviz_config:=~/ugv_ws/FSD_Vehicle/src/waver_patrol/rviz/pre_real_gazebo_validation.rviz \
   require_scan:=false
 ```
 
@@ -785,9 +785,9 @@ Additional handover and UI documentation:
 ## Tests
 
 ```bash
-cd /home/chotaehyun/ros2_ws/src/FSD_Vehicle/src/waver_patrol
+cd /home/chotaehyun/ugv_ws/FSD_Vehicle/src/waver_patrol
 pytest -q
-cd /home/chotaehyun/ros2_ws
+cd /home/chotaehyun/ugv_ws/FSD_Vehicle
 colcon test --packages-select waver_patrol
 ```
 

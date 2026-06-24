@@ -5,7 +5,7 @@
   - 이미 실행 중인 Gazebo/Waver backend에 H1/H2/H3 elevated dynamic sequence를 연속 주입한다.
   - `/waver/lidar_objects` PoseArray, fake camera classification, Gazebo entity pose를 함께 발행한다.
   - moving target valid, target goal, sound task, patrol resume, `/cmd_vel` safety gate를 검사한다.
-  - 논문용 CSV와 간단한 plot 데이터를 `~/ros2_ws/experiments_result` 아래 저장한다.
+  - 논문용 CSV와 간단한 plot 데이터를 `~/ugv_ws/FSD_Vehicle/experiments_result` 아래 저장한다.
 
 주의:
   - 실차 주행 중 사용 금지. Gazebo pre-real 검증 전용이다.
@@ -489,7 +489,7 @@ def write_plots(results_dir: Path, rows: list[dict[str, object]]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-root", default="~/ros2_ws/experiments_result")
+    parser.add_argument("--output-root", default="~/ugv_ws/FSD_Vehicle/experiments_result")
     parser.add_argument("--experiment-name", default="")
     parser.add_argument("--duration-sec", type=float, default=8.0)
     parser.add_argument("--publish-hz", type=float, default=10.0)

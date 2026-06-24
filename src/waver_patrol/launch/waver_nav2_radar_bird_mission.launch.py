@@ -117,7 +117,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_auto_behavior_mux", default_value="true"),
             DeclareLaunchArgument("enable_experiment_logger", default_value="true"),
             DeclareLaunchArgument("experiment_name", default_value="waver_lidar_first_bird_deterrence"),
-            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ros2_ws5/FSD_Vehicle/experiment_results"),
+            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ugv_ws/FSD_Vehicle/experiment_results"),
             DeclareLaunchArgument("enable_keyboard_teleop", default_value="false"),
             DeclareLaunchArgument("enable_test_publishers", default_value="false"),
             DeclareLaunchArgument("start_serial_bridge", default_value="false"),

@@ -112,7 +112,7 @@ path. It is not a real-camera YOLO mAP claim.
 Build:
 
 ```bash
-cd ~/ros2_ws/FSD_Vehicle
+cd ~/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 colcon build --packages-select ugv_tools waver_patrol ugv_slam ugv_gazebo --symlink-install
 source install/setup.bash
@@ -129,7 +129,7 @@ ros2 launch waver_patrol gazebo_bird_detection_validation.launch.py \
   expected_bird:=true \
   expected_mission_trigger:=true \
   move_target_model:=true \
-  output_dir:=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/manual_bird_trial/csv
+  output_dir:=$HOME/ugv_ws/FSD_Vehicle/experiments_result/paper_ready/manual_bird_trial/csv
 ```
 
 Operator UI only:
@@ -153,7 +153,7 @@ REQUIRED_SUCCESSES=10 \
 USE_GUI=true \
 TRIAL_DURATION_SEC=6 \
 HZ_SAMPLE_SEC=5 \
-OUTPUT_ROOT=$HOME/ros2_ws/FSD_Vehicle/experiments_result/paper_ready/bird_detection_10runs \
+OUTPUT_ROOT=$HOME/ugv_ws/FSD_Vehicle/experiments_result/paper_ready/bird_detection_10runs \
 bash src/waver_patrol/scripts/run_bird_detection_gazebo_ui_trials.sh
 ```
 

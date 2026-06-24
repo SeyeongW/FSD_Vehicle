@@ -35,7 +35,7 @@ def generate_launch_description() -> LaunchDescription:
 
     source_setup = (
         "source /opt/ros/humble/setup.bash && "
-        "source $HOME/ros2_ws/install/setup.bash"
+        "source $HOME/ugv_ws/FSD_Vehicle/install/setup.bash"
     )
     default_mapping_command = (
         f"bash -lc '{source_setup} && "
@@ -43,8 +43,8 @@ def generate_launch_description() -> LaunchDescription:
     )
     default_map_save_command = (
         f"bash -lc '{source_setup} && "
-        "mkdir -p $HOME/ros2_ws/FSD_Vehicle/maps && "
-        "ros2 run nav2_map_server map_saver_cli -f $HOME/ros2_ws/FSD_Vehicle/maps/patrol_map'"
+        "mkdir -p $HOME/ugv_ws/FSD_Vehicle/maps && "
+        "ros2 run nav2_map_server map_saver_cli -f $HOME/ugv_ws/FSD_Vehicle/maps/patrol_map'"
     )
 
     return LaunchDescription(

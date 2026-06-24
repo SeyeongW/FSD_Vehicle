@@ -3,7 +3,7 @@
 
 This script is intentionally separate from the Tk UI.  It runs during Gazebo
 or saved-map tests, watches the same topics the operator panel renders, and
-writes a paper/test friendly CSV under ``~/ros2_ws/experiments_result``.
+writes a paper/test friendly CSV under ``~/ugv_ws/FSD_Vehicle/experiments_result``.
 """
 
 from __future__ import annotations
@@ -201,7 +201,7 @@ class UiVisualizationCheck(Node):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Write Waver operator UI visualization validation CSV")
-    parser.add_argument("--output-root", default="~/ros2_ws/experiments_result")
+    parser.add_argument("--output-root", default="~/ugv_ws/FSD_Vehicle/experiments_result")
     parser.add_argument("--experiment-name", default="")
     parser.add_argument("--duration-sec", type=float, default=12.0)
     parser.add_argument("--trial-id", default="U3")

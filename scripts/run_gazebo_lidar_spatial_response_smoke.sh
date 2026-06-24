@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKSPACE_ROOT=${WORKSPACE_ROOT:-/home/chotaehyun/ros2_ws5/FSD_Vehicle}
+WORKSPACE_ROOT=${WORKSPACE_ROOT:-/home/chotaehyun/ugv_ws/FSD_Vehicle}
 OUTPUT_ROOT=${OUTPUT_ROOT:-$WORKSPACE_ROOT/experiment_results/gazebo_spatial_response}
 TIMEOUT_SEC=${TIMEOUT_SEC:-180}
 ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-30}

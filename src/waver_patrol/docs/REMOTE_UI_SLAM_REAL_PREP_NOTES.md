@@ -1,6 +1,6 @@
 # Remote UI SLAM Real Prep Notes
 
-This note is for porting the `ros2_ws5` UI-SLAM workflow to the real Waver
+This note is for porting the `ugv_ws` UI-SLAM workflow to the real Waver
 backend later. It does not change the current field-success backend.
 
 ## Do Not Mix Profiles

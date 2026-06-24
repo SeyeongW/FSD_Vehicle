@@ -98,7 +98,7 @@ class GazeboTrialDataLogger(Node):
 
     def __init__(self) -> None:
         super().__init__("gazebo_trial_data_logger")
-        self.declare_parameter("output_dir", "~/ros2_ws/bird_patrol_data")
+        self.declare_parameter("output_dir", "~/ugv_ws/FSD_Vehicle/bird_patrol_data")
         self.declare_parameter("session_name", "bird_patrol_trial")
         self.declare_parameter("sample_period_s", 1.0)
         self.declare_parameter("map_side_m", 15.0)

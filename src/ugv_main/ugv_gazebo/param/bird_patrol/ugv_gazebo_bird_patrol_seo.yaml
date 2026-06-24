@@ -1,7 +1,7 @@
 mission_patrol_manager_node:
   ros__parameters:
     use_sim_time: true
-    waypoint_file: /home/chotaehyun/ros2_ws5/FSD_Vehicle/src/ugv_main/ugv_gazebo/param/bird_patrol/patrol_waypoints_square_8m_paper.yaml
+    waypoint_file: /home/chotaehyun/ugv_ws/FSD_Vehicle/src/ugv_main/ugv_gazebo/param/bird_patrol/patrol_waypoints_square_8m_paper.yaml
     use_nav2: false
     enable_sim_nav_goal_arrival: true
     default_mode: STANDBY

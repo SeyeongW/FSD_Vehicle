@@ -1,14 +1,14 @@
 # Waver UI SLAM Mapping Gazebo
 
-Workspace: `~/ros2_ws5/FSD_Vehicle`
+Workspace: `~/ugv_ws/FSD_Vehicle`
 
 This profile validates the operator-panel SLAM mapping workflow without touching
-the `~/ros2_ws5` field-success setup.
+the `~/ugv_ws` field-success setup.
 
 ## Build
 
 ```bash
-cd ~/ros2_ws5/FSD_Vehicle
+cd ~/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 colcon build --symlink-install --packages-select waver_patrol ugv_tools ugv_gazebo ugv_description
 source install/setup.bash
@@ -17,7 +17,7 @@ source install/setup.bash
 ## Manual Launch
 
 ```bash
-cd ~/ros2_ws5/FSD_Vehicle
+cd ~/ugv_ws/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=30
@@ -28,28 +28,28 @@ ros2 launch ugv_gazebo ugv_gazebo_ui_slam_mapping.launch.py \
   use_gui:=true \
   mapping_backend:=slam_toolbox \
   start_remote_panel:=true \
-  save_dir:=~/ros2_ws5/FSD_Vehicle/maps
+  save_dir:=~/ugv_ws/FSD_Vehicle/maps
 ```
 
 UI buttons:
 
 - `SLAM MAPPING`: clears old UI map state and starts the live SLAM map workflow.
 - WASD/buttons: publish `/waver/manual_cmd_vel` only.
-- `SAVE MAP`: saves the live `/map` to `~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml`.
+- `SAVE MAP`: saves the live `/map` to `~/ugv_ws/FSD_Vehicle/maps/waver_latest_map.yaml`.
 - `APPLY FIXED MAP`: publishes the saved map on `/map_fixed`.
 - `START PATROL`: starts the 4 m straight, then 7 m square odom waypoint route.
 
 ## Automated Smoke
 
 ```bash
-cd ~/ros2_ws5/FSD_Vehicle
+cd ~/ugv_ws/FSD_Vehicle
 bash scripts/run_ui_slam_mapping_gazebo_smoke.sh
 ```
 
 Longer mapping plus patrol:
 
 ```bash
-cd ~/ros2_ws5/FSD_Vehicle
+cd ~/ugv_ws/FSD_Vehicle
 bash scripts/run_ui_slam_mapping_then_patrol_gazebo_test.sh
 ```
 

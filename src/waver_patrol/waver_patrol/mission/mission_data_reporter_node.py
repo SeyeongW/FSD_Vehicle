@@ -19,7 +19,7 @@ class MissionDataReporterNode(Node):
     def __init__(self) -> None:
         super().__init__("mission_data_reporter_node")
         self.declare_parameter("trial_id", "field_trial")
-        self.declare_parameter("output_root", "~/ros2_ws5/FSD_Vehicle/experiment_results")
+        self.declare_parameter("output_root", "~/ugv_ws/FSD_Vehicle/experiment_results")
         self.declare_parameter("external_send_enabled", False)
         self.declare_parameter("http_post_url", "")
         self.declare_parameter("write_jsonl", True)

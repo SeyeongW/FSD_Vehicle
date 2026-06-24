@@ -25,7 +25,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("scan_source_safety", default_value="gazebo_laser"),
             DeclareLaunchArgument("demo_script", default_value=""),
             DeclareLaunchArgument("demo_close_on_finish", default_value="false"),
-            DeclareLaunchArgument("save_dir", default_value="~/ros2_ws5/FSD_Vehicle/maps"),
+            DeclareLaunchArgument("save_dir", default_value="~/ugv_ws/FSD_Vehicle/maps"),
             DeclareLaunchArgument("save_basename", default_value="waver_latest_map"),
             DeclareLaunchArgument("world_file", default_value=default_world),
             DeclareLaunchArgument("robot_sdf_file", default_value=default_robot),

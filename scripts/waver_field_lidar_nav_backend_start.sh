@@ -19,7 +19,7 @@ fi
 JETSON_HOST="${JETSON_HOST:-10.139.225.150}"
 JETSON_USER="${JETSON_USER:-sw}"
 JETSON_PASS="${JETSON_PASS:-}"
-JETSON_WS="${JETSON_WS:-/home/sw/ros2_ws5/FSD_Vehicle}"
+JETSON_WS="${JETSON_WS:-/home/sw/ugv_ws/FSD_Vehicle}"
 JETSON_HOST_AUTO="${JETSON_HOST_AUTO:-true}"
 JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST} 10.139.225.150 10.63.240.150 10.139.225.126}"
 CONTAINER="${CONTAINER:-fsd_dev_jetson}"
@@ -181,7 +181,6 @@ if [ "${FIELD_BUILD_IN_DOCKER}" = "true" ]; then
   docker exec "${CONTAINER}" bash -lc '
   set -eo pipefail
   cd /ros2_ws/ugv_ws
-  source /opt/ros/humble/install/setup.bash
   source /opt/ros/humble/setup.bash
   colcon --log-base log_docker build \
     --build-base build_docker \
@@ -208,6 +207,7 @@ fi
 '
 
 echo "[JETSON] stopping stale Waver/Nav2 processes"
+pkill -f "docker exec -i ${CONTAINER}.*WAVER_REMOTE_BRIDGE_TIMEOUT_S" 2>/dev/null || true
 for pat in \
   waver_base_driver_node safety_cmd_mux_node mission_patrol_manager_node target_goal_manager_node \
   livox_pointcloud_to_scan_node pointcloud_lidar_objects_node moving_object_map_transform_node \
@@ -217,6 +217,7 @@ for pat in \
   pkill -f "${pat}" 2>/dev/null || true
   docker exec "${CONTAINER}" pkill -f "${pat}" 2>/dev/null || true
 done
+docker exec "${CONTAINER}" bash -lc "ps -eo pid,args | awk '/livox_ros_driver2_node|livox_lidar_publisher/ && !/awk/ {print \$1}' | xargs -r kill -9" 2>/dev/null || true
 sleep 1
 
 echo "[JETSON] serial owner before launch:"
@@ -349,5 +350,5 @@ REMOTE
 
 echo "[LOCAL] LIDAR_NAV_BACKEND_READY=YES"
 echo "[LOCAL] Open the local UI in another terminal:"
-echo "  cd ~/ros2_ws5/FSD_Vehicle"
+echo "  cd ~/ugv_ws/FSD_Vehicle"
 echo "  JETSON_HOST=${JETSON_HOST} bash scripts/waver_field_local_ui_start.sh"

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Verify the ros2_ws5 Gazebo bird patrol mechanism event log.
+"""Verify the ugv_ws Gazebo bird patrol mechanism event log.
 
 This checker is intentionally log-based so a completed Gazebo run can be audited
 without relying on memory or screenshots. It validates the high-level mechanism
-required by CODEX_FINAL_PROMPT_ROS2_WS5_BIRD_PATROL.
+required by CODEX_FINAL_PROMPT_UGV_WS_BIRD_PATROL.
 """
 from __future__ import annotations
 

@@ -257,7 +257,7 @@ class WaverRemoteNode(Node):
             ParameterDescriptor(dynamic_typing=True),
         )
         self.declare_parameter("remote_bridge_key_filename", "")
-        self.declare_parameter("remote_bridge_workspace", "/home/sw/ros2_ws5/FSD_Vehicle")
+        self.declare_parameter("remote_bridge_workspace", "/home/sw/ugv_ws/FSD_Vehicle")
         self.declare_parameter("remote_bridge_use_docker", True)
         self.declare_parameter("remote_bridge_container", "fsd_dev_jetson")
         self.declare_parameter("remote_bridge_container_workspace", "/ros2_ws/ugv_ws")
@@ -265,6 +265,7 @@ class WaverRemoteNode(Node):
         self.declare_parameter("remote_bridge_ros_domain_id", 30)
         self.declare_parameter("remote_bridge_rmw", "rmw_cyclonedds_cpp")
         self.declare_parameter("remote_bridge_command_timeout_s", 0.30)
+        self.declare_parameter("key_release_debounce_ms", 90)
 
         self.state = state
         self.lock = lock
@@ -285,6 +286,7 @@ class WaverRemoteNode(Node):
         self.remote_bridge_stdin = None
         self.remote_bridge_stdout = None
         self.remote_bridge_stderr = None
+        self.last_remote_manual_log_time = 0.0
         self.profile = str(self.get_parameter("profile").value).strip().lower() or "real"
         self.map_view_extent_m = float(self.get_parameter("map_view_extent_m").value)
         self.map_view_center_x = float(self.get_parameter("map_view_center_x").value)
@@ -941,7 +943,11 @@ finally:
             if packet.get("topic", "manual_cmd_vel") == "manual_cmd_vel":
                 lx = float(packet.get("lx", 0.0))
                 az = float(packet.get("az", 0.0))
-                if abs(lx) > 1e-6 or abs(az) > 1e-6:
+                now = time.monotonic()
+                if (abs(lx) > 1e-6 or abs(az) > 1e-6) and (
+                    now - self.last_remote_manual_log_time >= 0.25
+                ):
+                    self.last_remote_manual_log_time = now
                     self.get_logger().info(
                         f"remote bridge manual write: lx={lx:.3f} az={az:.3f}"
                     )
@@ -1945,6 +1951,10 @@ class WaverRemotePanel:
         self.active_keys: set[str] = set()
         self.pending_combo_release_keys: set[str] = set()
         self.key_release_after_ids: dict[str, str] = {}
+        self.key_release_debounce_ms = max(
+            40,
+            int(float(self.node.get_parameter("key_release_debounce_ms").value)),
+        )
         self.demo_script_name = ""
         self.key_vectors = {
             "up": (1.0, 0.0),
@@ -2002,7 +2012,9 @@ class WaverRemotePanel:
         self.hazard_var = tk.StringVar(value="scan: unknown")
         self.auto_cmd_var = tk.StringVar(value="nav2 cmd: 0.00 m/s, 0.00 rad/s")
         self.mode_hint_var = tk.StringVar(value="STANDBY: stopped")
-        self.speed_text_var = tk.StringVar(value="speed: 0.12 m/s, turn: 0.45 rad/s")
+        self.speed_text_var = tk.StringVar(
+            value=f"speed: {self.state.speed_limit:.2f} m/s, turn: {self.state.angular_limit:.2f} rad/s"
+        )
         self.source_badge_var = tk.StringVar(value="CONTROL: STANDBY")
         self.estop_badge_var = tk.StringVar(value="E-STOP: CLEAR")
         self.scan_badge_var = tk.StringVar(value="SCAN: WAITING")
@@ -2766,13 +2778,18 @@ class WaverRemotePanel:
         if key in self.active_keys:
             if self.handle_combo_release(key):
                 return
-            pending = self.key_release_after_ids.pop(key, None)
-            if pending is not None:
-                self.root.after_cancel(pending)
-            self.key_release_after_ids[key] = self.root.after(
-                300,
-                lambda released_key=key: self.finish_key_release(released_key),
-            )
+            self.schedule_key_release(key)
+
+    def schedule_key_release(self, key: str) -> None:
+        # 역할: 키보드 반복 이벤트가 만드는 가짜 release를 짧게 걸러낸다.
+        # 실제 release면 0.09초 뒤 멈추고, 계속 누르는 중이면 KeyPress가 이 예약을 취소한다.
+        pending = self.key_release_after_ids.pop(key, None)
+        if pending is not None:
+            self.root.after_cancel(pending)
+        self.key_release_after_ids[key] = self.root.after(
+            self.key_release_debounce_ms,
+            lambda released_key=key: self.finish_key_release(released_key),
+        )
 
     def finish_key_release(self, key: str) -> None:
         # 역할: X11/Tk 키 반복이 만드는 짧은 release 이벤트를 debounce한다.
@@ -2807,6 +2824,7 @@ class WaverRemotePanel:
             # Keep the key latched while the orthogonal key remains active so
             # W+D, W+A, S+D, S+A stay diagonal instead of collapsing to A/D.
             self.pending_combo_release_keys.add(key)
+            self.schedule_key_release(key)
             self.apply_active_key_command()
             return True
         if not (self.active_keys & own_axis):

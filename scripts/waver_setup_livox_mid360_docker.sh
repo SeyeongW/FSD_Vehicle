@@ -17,7 +17,7 @@ fi
 JETSON_HOST="${JETSON_HOST:-10.139.225.150}"
 JETSON_USER="${JETSON_USER:-sw}"
 JETSON_PASS="${JETSON_PASS:-}"
-JETSON_WS="${JETSON_WS:-/home/sw/ros2_ws5/FSD_Vehicle}"
+JETSON_WS="${JETSON_WS:-/home/sw/ugv_ws/FSD_Vehicle}"
 JETSON_HOST_AUTO="${JETSON_HOST_AUTO:-true}"
 JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST} 10.139.225.150 10.63.240.150 10.139.225.126}"
 CONTAINER="${CONTAINER:-fsd_dev_jetson}"
@@ -219,5 +219,5 @@ REMOTE
 
 echo "[LOCAL] LIVOX_MID360_DOCKER_READY=YES"
 echo "[LOCAL] Real LiDAR/Nav2 backend command:"
-echo "  cd ~/ros2_ws5/FSD_Vehicle"
+echo "  cd ~/ugv_ws/FSD_Vehicle"
 echo "  START_LIVOX_DRIVER=true bash scripts/waver_field_lidar_nav_backend_start.sh"

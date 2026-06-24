@@ -4,9 +4,9 @@ set -euo pipefail
 TRIALS="${1:-3}"
 DETECTOR_MODE="${DETECTOR_MODE:-lidar}"
 CLASSIFIER_MODE="${CLASSIFIER_MODE:-fake_gazebo}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-$HOME/ros2_ws5/FSD_Vehicle/experiments_result/gazebo_bird_patrol}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-$HOME/ugv_ws/FSD_Vehicle/experiments_result/gazebo_bird_patrol}"
 
-cd "$HOME/ros2_ws5/FSD_Vehicle"
+cd "$HOME/ugv_ws/FSD_Vehicle"
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
