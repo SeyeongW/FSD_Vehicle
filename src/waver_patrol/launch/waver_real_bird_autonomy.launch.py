@@ -118,7 +118,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("serial_port", default_value=""),
             DeclareLaunchArgument("camera_image_topic", default_value="/camera/image_raw"),
             DeclareLaunchArgument("camera_info_topic", default_value="/camera/camera_info"),
-            DeclareLaunchArgument("pointcloud_topic", default_value="/mid360_PointCloud2"),
+            DeclareLaunchArgument("pointcloud_topic", default_value="/livox/lidar"),
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("map", default_value=default_map),
             DeclareLaunchArgument("waypoint_file", default_value=default_waypoints),
@@ -161,7 +161,13 @@ def generate_launch_description() -> LaunchDescription:
                     "sound_safety_ack": LaunchConfiguration("sound_safety_ack"),
                     "enable_test_publishers": "false",
                     "enable_livox_scan_adapter": PythonExpression(
-                        ["'true' if '", LaunchConfiguration("scan_source_safety"), "' == 'mid360' else 'false'"]
+                        [
+                            "'true' if '",
+                            LaunchConfiguration("enable_livox_scan_adapter"),
+                            "' == 'true' and '",
+                            LaunchConfiguration("scan_source_safety"),
+                            "' == 'mid360' else 'false'",
+                        ]
                     ),
                     "enable_pointcloud_lidar_objects": LaunchConfiguration("enable_pointcloud_lidar_objects"),
                     "enable_moving_object_map_transform": LaunchConfiguration("enable_moving_object_map_transform"),

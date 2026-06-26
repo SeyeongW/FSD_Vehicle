@@ -22,14 +22,19 @@ WAYPOINT_FILE="${WAYPOINT_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/waypoints/wav
 MISSION_PARAMS_FILE="${MISSION_PARAMS_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/config/waver_nav2_radar_bird_mission_real.yaml}"
 NAV2_PARAMS_FILE="${NAV2_PARAMS_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/config/nav2_params_waver_real.yaml}"
 ODOM_SOURCE="${ODOM_SOURCE:-base}"
-POINTCLOUD_TOPIC="${POINTCLOUD_TOPIC:-/mid360_PointCloud2}"
+POINTCLOUD_TOPIC="${POINTCLOUD_TOPIC:-${LIVOX_POINTCLOUD_TOPIC:-/livox/lidar}}"
 SCAN_TOPIC="${SCAN_TOPIC:-/scan}"
 START_LIVOX_DRIVER="${START_LIVOX_DRIVER:-true}"
 LIVOX_TOPIC="${LIVOX_TOPIC:-${POINTCLOUD_TOPIC}}"
 LIVOX_CONFIG_PATH="${LIVOX_CONFIG_PATH:-/ros2_ws/ros2_ws5/install_docker/livox_ros_driver2/share/livox_ros_driver2/config/MID360_config.json}"
-LIVOX_FRAME_ID="${LIVOX_FRAME_ID:-livox_frame}"
+LIVOX_FRAME_ID="${LIVOX_FRAME_ID:-livox}"
+LIVOX_HOST_IP="${LIVOX_HOST_IP:-192.168.1.50}"
+LIVOX_SENSOR_IP="${LIVOX_SENSOR_IP:-192.168.1.102}"
 LIVOX_PUBLISH_FREQ="${LIVOX_PUBLISH_FREQ:-10.0}"
 LIVOX_BD_CODE="${LIVOX_BD_CODE:-livox0000000001}"
+BIRD_MODEL_PATH="${BIRD_MODEL_PATH:-${bird_model_path:-}}"
+CAMERA_IMAGE_TOPIC="${CAMERA_IMAGE_TOPIC:-/camera/image_raw}"
+CAMERA_INFO_TOPIC="${CAMERA_INFO_TOPIC:-/camera/camera_info}"
 SAFETY_MAX_LINEAR_SPEED="${SAFETY_MAX_LINEAR_SPEED:-0.05}"
 SAFETY_MAX_ANGULAR_SPEED="${SAFETY_MAX_ANGULAR_SPEED:-0.20}"
 ENABLE_BIRD_STACK="${ENABLE_BIRD_STACK:-false}"
@@ -95,7 +100,9 @@ done
   "${SAFETY_MAX_LINEAR_SPEED}" "${SAFETY_MAX_ANGULAR_SPEED}" \
   "${ENABLE_BIRD_STACK}" "${ENABLE_SOUND_STACK}" \
   "${START_LIVOX_DRIVER}" "${LIVOX_TOPIC}" "${LIVOX_CONFIG_PATH}" \
-  "${LIVOX_FRAME_ID}" "${LIVOX_PUBLISH_FREQ}" "${LIVOX_BD_CODE}" <<'REMOTE'
+  "${LIVOX_FRAME_ID}" "${LIVOX_PUBLISH_FREQ}" "${LIVOX_BD_CODE}" \
+  "${LIVOX_HOST_IP}" "${LIVOX_SENSOR_IP}" "${BIRD_MODEL_PATH}" \
+  "${CAMERA_IMAGE_TOPIC}" "${CAMERA_INFO_TOPIC}" <<'REMOTE'
 set -euo pipefail
 
 JETSON_WS="$1"
@@ -119,6 +126,15 @@ LIVOX_CONFIG_PATH="${18}"
 LIVOX_FRAME_ID="${19}"
 LIVOX_PUBLISH_FREQ="${20}"
 LIVOX_BD_CODE="${21}"
+LIVOX_HOST_IP="${22}"
+LIVOX_SENSOR_IP="${23}"
+BIRD_MODEL_PATH="${24}"
+CAMERA_IMAGE_TOPIC="${25}"
+CAMERA_INFO_TOPIC="${26}"
+BIRD_MODEL_LAUNCH_ARG=""
+if [ -n "${BIRD_MODEL_PATH}" ]; then
+  BIRD_MODEL_LAUNCH_ARG="bird_model_path:=${BIRD_MODEL_PATH}"
+fi
 
 cd "${JETSON_WS}"
 echo "[JETSON] repo=$(pwd) branch=$(git branch --show-current 2>/dev/null || echo unknown) head=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -218,6 +234,39 @@ if [ "${START_LIVOX_DRIVER}" = "true" ]; then
     echo "[JETSON][ERROR] Run: bash scripts/waver_setup_livox_mid360_docker.sh" >&2
     exit 30
   fi
+  echo "[JETSON] patching Livox Mid-360 config host_ip=${LIVOX_HOST_IP} lidar_ip=${LIVOX_SENSOR_IP}"
+  docker exec \
+    -e LIVOX_CONFIG_PATH="${LIVOX_CONFIG_PATH}" \
+    -e LIVOX_HOST_IP="${LIVOX_HOST_IP}" \
+    -e LIVOX_SENSOR_IP="${LIVOX_SENSOR_IP}" \
+    "${CONTAINER}" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+path = Path(os.environ["LIVOX_CONFIG_PATH"])
+source = Path("/ros2_ws/ros2_ws5/src/livox_ros_driver2/config/MID360_config.json")
+if not path.exists() and source.exists():
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source.read_text())
+if not path.exists():
+    raise SystemExit(f"Livox config not found: {path}")
+
+data = json.loads(path.read_text())
+host_ip = os.environ.get("LIVOX_HOST_IP", "").strip()
+sensor_ip = os.environ.get("LIVOX_SENSOR_IP", "").strip()
+if host_ip:
+    host = data.setdefault("MID360", {}).setdefault("host_net_info", {})
+    for key in ("cmd_data_ip", "push_msg_ip", "point_data_ip", "imu_data_ip"):
+        host[key] = host_ip
+if sensor_ip:
+    configs = data.setdefault("lidar_configs", [])
+    if not configs:
+        configs.append({})
+    configs[0]["ip"] = sensor_ip
+path.write_text(json.dumps(data, indent=2) + "\n")
+print(f"LIVOX_CONFIG_PATCHED path={path} host_ip={host_ip} lidar_ip={sensor_ip}")
+PY
   echo "[JETSON] starting Livox Mid-360 driver: livox/lidar -> ${LIVOX_TOPIC}"
   docker exec -d "${CONTAINER}" bash -lc "
   cd /ros2_ws/ros2_ws5
@@ -241,6 +290,9 @@ echo "[JETSON] starting real LiDAR/Nav2 backend"
 echo "[JETSON] map=${MAP_PATH}"
 echo "[JETSON] waypoints=${WAYPOINT_FILE}"
 echo "[JETSON] serial=${SERIAL_PORT} odom_source=${ODOM_SOURCE} pointcloud=${POINTCLOUD_TOPIC} scan=${SCAN_TOPIC}"
+if [ "${ENABLE_BIRD_STACK}" = "true" ] && [ -z "${BIRD_MODEL_PATH}" ]; then
+  echo "[JETSON][WARN] ENABLE_BIRD_STACK=true but BIRD_MODEL_PATH is empty; bird_confirmed will remain false until a model/detector bridge is provided."
+fi
 
 docker exec -d "${CONTAINER}" bash -lc "
 cd /ros2_ws/ros2_ws5
@@ -263,6 +315,8 @@ exec ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   scan_source_safety:=mid360 \
   scan_source_slam:=mid360 \
   pointcloud_topic:=${POINTCLOUD_TOPIC} \
+  camera_image_topic:=${CAMERA_IMAGE_TOPIC} \
+  camera_info_topic:=${CAMERA_INFO_TOPIC} \
   scan_topic:=${SCAN_TOPIC} \
   map:=${MAP_PATH} \
   waypoint_file:=${WAYPOINT_FILE} \
@@ -281,7 +335,7 @@ exec ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   enable_experiment_logger:=false \
   safety_max_linear_speed:=${SAFETY_MAX_LINEAR_SPEED} \
   safety_max_angular_speed:=${SAFETY_MAX_ANGULAR_SPEED} \
-  bird_model_path:= \
+  ${BIRD_MODEL_LAUNCH_ARG} \
   > /tmp/waver_lidar_nav_backend.log 2>&1
 "
 

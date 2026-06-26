@@ -113,6 +113,11 @@ class TargetGoalManagerNode(Node):
         self.declare_parameter("target_hold_sec", 1.0)
         self.declare_parameter("target_lost_timeout_sec", 2.0)
         self.declare_parameter("target_pose_stale_timeout_sec", 3.0)
+        self.declare_parameter("enable_target_goal_smoothing", True)
+        self.declare_parameter("target_goal_smoothing_alpha", 0.35)
+        self.declare_parameter("target_jump_memory_sec", 2.0)
+        self.declare_parameter("max_accepted_target_jump_m", 1.5)
+        self.declare_parameter("reject_target_jump", True)
         self.declare_parameter("robot_pose_stale_timeout_sec", 2.0)
         self.declare_parameter("goal_yaw_policy", "FACE_TARGET")
         self.declare_parameter("robot_pose_topic", "/amcl_pose")
@@ -164,6 +169,8 @@ class TargetGoalManagerNode(Node):
         self.robot_pose_time = 0.0
         self.inspected_targets: list[InspectedTargetMemory] = []
         self.pending_inspection_target: PoseStamped | None = None
+        self.last_accepted_target_pose: PoseStamped | None = None
+        self.last_accepted_target_time = 0.0
 
         self.create_subscription(PoseStamped, "/waver/radar_target_goal", self.radar_goal_callback, 10)
         self.create_subscription(Bool, "/waver/radar_target_active", lambda m: setattr(self, "radar_active", bool(m.data)), 10)
@@ -368,6 +375,16 @@ class TargetGoalManagerNode(Node):
             self.active_pub.publish(Bool(data=False))
             self.inspection_active_pub.publish(Bool(data=False))
             return
+        stabilized = self.stabilize_target_pose(transformed)
+        if stabilized is None:
+            self._publish_state(
+                f"REJECT source={candidate.source} mission_type=REJECTED_TARGET_JUMP "
+                f"target_jump_from_last_accepted"
+            )
+            self.active_pub.publish(Bool(data=False))
+            self.inspection_active_pub.publish(Bool(data=False))
+            return
+        transformed = stabilized
         robot_pose = self.robot_pose
         if robot_pose is not None and robot_pose.header.frame_id != transformed.header.frame_id:
             robot_pose = self.transform_to_global(robot_pose)
@@ -394,6 +411,8 @@ class TargetGoalManagerNode(Node):
         self.inspection_target_pub.publish(transformed)
         self.inspection_active_pub.publish(Bool(data=True))
         self.pending_inspection_target = transformed
+        self.last_accepted_target_pose = self.copy_pose_stamped(transformed)
+        self.last_accepted_target_time = now
         height = transformed.pose.position.z
         distance = self.robot_relative_range_xy(transformed)
         if distance is None:
@@ -411,6 +430,45 @@ class TargetGoalManagerNode(Node):
         )
         self.last_goal_time = now
         self.last_candidate_time = now
+
+    def stabilize_target_pose(self, target: PoseStamped) -> PoseStamped | None:
+        if not bool(self.get_parameter("enable_target_goal_smoothing").value):
+            return self.copy_pose_stamped(target)
+        previous = self.last_accepted_target_pose
+        if previous is None or self.last_accepted_target_time <= 0.0:
+            return self.copy_pose_stamped(target)
+        memory_sec = max(0.0, float(self.get_parameter("target_jump_memory_sec").value))
+        if memory_sec <= 0.0 or self._now() - self.last_accepted_target_time > memory_sec:
+            return self.copy_pose_stamped(target)
+        jump = math.sqrt(
+            (float(target.pose.position.x) - float(previous.pose.position.x)) ** 2
+            + (float(target.pose.position.y) - float(previous.pose.position.y)) ** 2
+            + (float(target.pose.position.z) - float(previous.pose.position.z)) ** 2
+        )
+        max_jump = max(0.0, float(self.get_parameter("max_accepted_target_jump_m").value))
+        if max_jump > 0.0 and jump > max_jump:
+            if bool(self.get_parameter("reject_target_jump").value):
+                return None
+            return self.copy_pose_stamped(target)
+        alpha = min(1.0, max(0.0, float(self.get_parameter("target_goal_smoothing_alpha").value)))
+        smoothed = self.copy_pose_stamped(target)
+        smoothed.pose.position.x = (1.0 - alpha) * float(previous.pose.position.x) + alpha * float(target.pose.position.x)
+        smoothed.pose.position.y = (1.0 - alpha) * float(previous.pose.position.y) + alpha * float(target.pose.position.y)
+        smoothed.pose.position.z = (1.0 - alpha) * float(previous.pose.position.z) + alpha * float(target.pose.position.z)
+        return smoothed
+
+    @staticmethod
+    def copy_pose_stamped(msg: PoseStamped) -> PoseStamped:
+        copied = PoseStamped()
+        copied.header = msg.header
+        copied.pose.position.x = float(msg.pose.position.x)
+        copied.pose.position.y = float(msg.pose.position.y)
+        copied.pose.position.z = float(msg.pose.position.z)
+        copied.pose.orientation.x = float(msg.pose.orientation.x)
+        copied.pose.orientation.y = float(msg.pose.orientation.y)
+        copied.pose.orientation.z = float(msg.pose.orientation.z)
+        copied.pose.orientation.w = float(msg.pose.orientation.w)
+        return copied
 
     def publish_goal_debug(
         self,
@@ -647,6 +705,8 @@ class TargetGoalManagerNode(Node):
             self.active_pub.publish(Bool(data=False))
             self._publish_state("TARGET_LOST_TIMEOUT")
             self.last_candidate_time = 0.0
+            self.last_accepted_target_pose = None
+            self.last_accepted_target_time = 0.0
 
     def _publish_state(self, text: str) -> None:
         msg = String(data=text)

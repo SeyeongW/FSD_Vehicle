@@ -110,6 +110,10 @@ class MovingObjectMotionFilterNode(Node):
         self.declare_parameter("track_match_gate_m", 1.2)
         self.declare_parameter("max_sample_step_m", 2.0)
         self.declare_parameter("reset_on_track_jump", True)
+        self.declare_parameter("enable_target_pose_smoothing", True)
+        self.declare_parameter("target_pose_smoothing_alpha", 0.35)
+        self.declare_parameter("max_smoothed_step_m", 0.8)
+        self.declare_parameter("reset_smoothing_on_jump", True)
         self.declare_parameter("lock_on_first_valid_target", True)
         self.declare_parameter("locked_target_gate_m", 1.0)
         self.declare_parameter("locked_target_lost_timeout_sec", 3.0)
@@ -148,6 +152,7 @@ class MovingObjectMotionFilterNode(Node):
         self.locked_target_active = False
         self.locked_target_id = 0
         self.locked_target_pose: Pose | None = None
+        self.smoothed_target_pose: Pose | None = None
         self.lock_lost_since = 0.0
         self.lock_invalid_since = 0.0
 
@@ -246,11 +251,13 @@ class MovingObjectMotionFilterNode(Node):
                 return
             self.track = TrackState()
             self.track_id += 1
+            self.smoothed_target_pose = None
             self._publish(False, "NO_VALID_OBJECT", None, {})
             return
-        if reset_reason:
+        if reset_reason.startswith("association_jump"):
             self.track = TrackState(raw_samples=self.track.raw_samples)
             self.track_id += 1
+        pose = self._smooth_target_pose(pose, reset_reason)
         self._append_sample(now, pose)
         metrics = self._metrics()
         valid, classification, gates = self._classify(pose, metrics)
@@ -323,7 +330,38 @@ class MovingObjectMotionFilterNode(Node):
         self.lock_invalid_since = 0.0
         self.track = TrackState(raw_samples=self.track.raw_samples)
         self.track_id += 1
+        self.smoothed_target_pose = None
         self.state_pub.publish(String(data=f"TARGET_LOCK_CLEARED reason={reason} next_track_id={self.track_id}"))
+
+    def _smooth_target_pose(self, pose: Pose, reset_reason: str) -> Pose:
+        if not bool(self.get_parameter("enable_target_pose_smoothing").value):
+            self.smoothed_target_pose = _copy_pose(pose)
+            return _copy_pose(pose)
+        if (
+            self.smoothed_target_pose is None
+            or (
+                reset_reason.startswith("association_jump")
+                and bool(self.get_parameter("reset_smoothing_on_jump").value)
+            )
+        ):
+            self.smoothed_target_pose = _copy_pose(pose)
+            return _copy_pose(pose)
+
+        previous = self.smoothed_target_pose
+        step = _distance(previous, pose)
+        max_step = max(0.0, float(self.get_parameter("max_smoothed_step_m").value))
+        if max_step > 0.0 and step > max_step:
+            self.smoothed_target_pose = _copy_pose(pose)
+            return _copy_pose(pose)
+
+        alpha = min(1.0, max(0.0, float(self.get_parameter("target_pose_smoothing_alpha").value)))
+        smoothed = Pose()
+        smoothed.position.x = (1.0 - alpha) * float(previous.position.x) + alpha * float(pose.position.x)
+        smoothed.position.y = (1.0 - alpha) * float(previous.position.y) + alpha * float(pose.position.y)
+        smoothed.position.z = (1.0 - alpha) * float(previous.position.z) + alpha * float(pose.position.z)
+        smoothed.orientation = pose.orientation
+        self.smoothed_target_pose = _copy_pose(smoothed)
+        return smoothed
 
     def _mission_holds_target_lock(self) -> bool:
         state = self.mission_state.upper()

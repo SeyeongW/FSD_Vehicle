@@ -115,7 +115,10 @@ waver_field_env_masked_summary() {
   echo "CONTAINER=${CONTAINER:-}"
   echo "ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-}"
   echo "SERIAL_PORT=${SERIAL_PORT:-}"
+  echo "LIVOX_HOST_IP=${LIVOX_HOST_IP:-}"
   echo "LIVOX_SENSOR_IP=${LIVOX_SENSOR_IP:-}"
+  echo "LIVOX_FRAME_ID=${LIVOX_FRAME_ID:-}"
+  echo "LIVOX_POINTCLOUD_TOPIC=${LIVOX_POINTCLOUD_TOPIC:-}"
   if [ -n "${JETSON_PASS:-}" ]; then
     echo "JETSON_PASS=<set, masked>"
   else

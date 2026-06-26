@@ -67,6 +67,11 @@ target_goal_manager_node:
     target_hold_sec: 1.0
     target_lost_timeout_sec: 2.0
     target_pose_stale_timeout_sec: 3.0
+    enable_target_goal_smoothing: true
+    target_goal_smoothing_alpha: 0.35
+    target_jump_memory_sec: 2.0
+    max_accepted_target_jump_m: 1.5
+    reject_target_jump: true
     robot_pose_stale_timeout_sec: 2.0
     goal_yaw_policy: "FACE_TARGET"
     robot_pose_topic: "/amcl_pose"
@@ -93,6 +98,13 @@ moving_object_motion_filter_node:
     min_dynamic_motion_m: 0.2
     min_dynamic_velocity_mps: 0.05
     min_sample_motion_epsilon_m: 0.005
+    track_match_gate_m: 0.8
+    max_sample_step_m: 1.0
+    reset_on_track_jump: true
+    enable_target_pose_smoothing: true
+    target_pose_smoothing_alpha: 0.35
+    max_smoothed_step_m: 0.8
+    reset_smoothing_on_jump: true
     lock_on_first_valid_target: true
     locked_target_gate_m: 1.0
     locked_target_lost_timeout_sec: 3.0
@@ -111,7 +123,7 @@ moving_object_motion_filter_node:
 
 livox_pointcloud_to_scan_node:
   ros__parameters:
-    pointcloud_topic: "/mid360_PointCloud2"
+    pointcloud_topic: "/livox/lidar"
     scan_topic: "/scan"
     state_topic: "/waver/livox_scan_adapter_state"
     forward_axis: "x"
@@ -129,7 +141,7 @@ livox_pointcloud_to_scan_node:
 
 pointcloud_lidar_objects_node:
   ros__parameters:
-    pointcloud_topic: "/mid360_PointCloud2"
+    pointcloud_topic: "/livox/lidar"
     output_pose_array_topic: "/waver/lidar_objects"
     state_topic: "/waver/lidar_objects_state"
     target_frame: "base_link"
@@ -196,7 +208,7 @@ bird_3d_fusion_node:
     detections_topic: "/waver/bird_detections_2d"
     bird_confirmed_topic: "/waver/bird_confirmed"
     camera_info_topic: "/camera/camera_info"
-    pointcloud_topic: "/mid360_PointCloud2"
+    pointcloud_topic: "/livox/lidar"
     moving_target_valid_topic: "/waver/moving_target_valid"
     dynamic_targets_topic: "/waver/elevated_dynamic_targets"
     pose_base_topic: "/waver/bird_target_pose_base"
