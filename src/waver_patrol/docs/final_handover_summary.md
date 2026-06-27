@@ -140,7 +140,7 @@ Gazebo only:
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 
 ros2 launch waver_patrol gazebo_mapping_mode.launch.py \
   use_gui:=true \
@@ -156,7 +156,7 @@ Operator UI only:
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 
 ros2 launch ugv_tools waver_operator_panel.launch.py \
   map_topic:=/map \
@@ -174,7 +174,7 @@ Paper-ready 10-run Gazebo/UI validation:
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 
 RUNS=10 \
 TRIAL_TIMEOUT_SEC=220 \

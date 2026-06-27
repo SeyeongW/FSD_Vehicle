@@ -45,7 +45,7 @@ UGV_MODEL=ugv_rover          # ugv_rover | ugv_beast | rasp_rover
 SERIAL_PORT_JETSON=/dev/ttyTHS1
 SERIAL_PORT_PC=/dev/ttyUSB0
 VIDEO_DEVICE=/dev/video0
-ROS_DOMAIN_ID=30
+ROS_DOMAIN_ID=0
 ```
 
 이렇게 하면 새로운 하드웨어 모델을 추가하거나 시리얼 포트가 바뀌더라도 `.env` 파일 한 줄만 수정하면 된다. Launch 파일이나 소스코드를 직접 수정할 필요가 없다.

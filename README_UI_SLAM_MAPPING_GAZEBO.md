@@ -20,7 +20,7 @@ source install/setup.bash
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 ros2 launch ugv_gazebo ugv_gazebo_ui_slam_mapping.launch.py \

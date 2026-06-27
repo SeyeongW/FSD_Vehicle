@@ -57,7 +57,7 @@ waver_field_env_load() {
   fi
 
   : "${JETSON_PORT:=22}"
-  : "${ROS_DOMAIN_ID:=30}"
+  : "${ROS_DOMAIN_ID:=0}"
   : "${ROS_DISTRO:=humble}"
   : "${RMW_IMPLEMENTATION:=rmw_cyclonedds_cpp}"
   : "${FIELD_BUILD_IN_DOCKER:=auto}"
@@ -316,7 +316,7 @@ if [ -f install_docker/setup.bash ]; then
 elif [ -f install/setup.bash ]; then
   source install/setup.bash
 fi
-export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-30}"
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 if [ -n "${RMW_IMPLEMENTATION:-}" ]; then
   export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION}"
 fi

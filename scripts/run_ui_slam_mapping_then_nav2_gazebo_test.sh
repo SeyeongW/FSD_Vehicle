@@ -7,7 +7,7 @@ source /opt/ros/humble/setup.bash
 source install/setup.bash
 set -u
 
-export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-30}"
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 if [ -n "${WAVER_RMW_IMPLEMENTATION:-}" ]; then
   export RMW_IMPLEMENTATION="$WAVER_RMW_IMPLEMENTATION"
 fi

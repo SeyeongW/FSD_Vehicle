@@ -30,7 +30,7 @@ Jetson에 모니터/키보드를 직접 꽂아 legacy 단독 테스트를 할 �
 Jetson과 조작 PC 둘 다 같은 값을 사용한다.
 
 ```bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 export ROS_LOCALHOST_ONLY=0
 ```
 
@@ -45,7 +45,7 @@ export ROS_LOCALHOST_ONLY=0
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 export ROS_LOCALHOST_ONLY=0
 
 ros2 launch waver_patrol waver_nav2_radar_bird_mission.launch.py \
@@ -99,7 +99,7 @@ Jetson 하드웨어 경로는 둘 중 하나만 고른다.
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 export ROS_LOCALHOST_ONLY=0
 
 ros2 launch ugv_tools waver_robot_backend.launch.py \
@@ -121,7 +121,7 @@ ros2 launch ugv_tools waver_robot_backend.launch.py \
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 export ROS_LOCALHOST_ONLY=0
 
 ros2 launch ugv_tools waver_robot_backend.launch.py \
@@ -145,7 +145,7 @@ AUTO 버튼은 별도 자율주행 프로세스를 새로 띄우지 않고 `/wav
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 export ROS_LOCALHOST_ONLY=0
 
 ros2 launch ugv_tools waver_operator_panel.launch.py \

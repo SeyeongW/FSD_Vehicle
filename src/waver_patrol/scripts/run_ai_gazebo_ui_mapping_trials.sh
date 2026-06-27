@@ -8,7 +8,7 @@ set -uo pipefail
 
 WORKSPACE="${WORKSPACE:-$HOME/ros2_ws5/FSD_Vehicle}"
 RUNS="${RUNS:-10}"
-ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-30}"
+ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 DEMO_SCRIPT="${DEMO_SCRIPT:-mapping_workflow_smoke}"
 TRIAL_TIMEOUT_SEC="${TRIAL_TIMEOUT_SEC:-210}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$WORKSPACE/experiments_result/paper_ready/ai_gazebo_ui_10runs}"

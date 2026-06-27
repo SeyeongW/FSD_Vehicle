@@ -85,7 +85,7 @@ Terminal 1:
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 
 ros2 launch waver_patrol waver_gazebo_mapping_debug.launch.py \
   use_sim_time:=true \
@@ -103,7 +103,7 @@ Terminal 2:
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 
 bash src/waver_patrol/scripts/waver_scan_quality_check.sh /scan_slam
 bash src/waver_patrol/scripts/waver_mapping_health_check.sh
@@ -133,7 +133,7 @@ safety mux command chain.
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 
 ros2 launch waver_patrol waver_gazebo_bird_autonomy.launch.py \
   use_gui:=true \
@@ -171,7 +171,7 @@ Gazebo-only fake/stub publishers are allowed here, but real launch blocks them.
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 
 for i in 1 2 3; do
   bash src/waver_patrol/scripts/waver_cleanup_stale_nodes.sh
@@ -227,7 +227,7 @@ LiDAR dynamic candidate or 3D fusion validity. Sound is blocked until
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 
 ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   start_serial_bridge:=false \
@@ -260,7 +260,7 @@ Only run with the robot lifted or drive wheels disconnected.
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 
 bash src/waver_patrol/scripts/waver_real_preflight_check.sh --strict --wheel-on
 

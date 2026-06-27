@@ -43,7 +43,7 @@ for f in .env .env.example config/waver_field_env config/waver_field_env.example
   waver_secret_scan_file "${ROOT}/${f}" || failed+=("secret scan failed: ${f}")
 done
 
-if rg -n 'WAVER_FIELD_ENV_FILE:-\\$HOME/\\.waver_field_env|source /opt/ros/humble/install/setup.bash &&|ROS_DOMAIN_ID=0|ROS_DOMAIN_ID=27' "${ROOT}" \
+if rg -n 'WAVER_FIELD_ENV_FILE:-\\$HOME/\\.waver_field_env|source /opt/ros/humble/install/setup.bash &&|ROS_DOMAIN_ID=27' "${ROOT}" \
   -g '!build/**' -g '!install/**' -g '!log/**' -g '!build_docker/**' -g '!install_docker/**' -g '!log_docker/**' -g '!.git/**' \
   -g '!scripts/waver_clone_to_run_acceptance.sh' >/tmp/waver_acceptance_grep.log; then
   failed+=("legacy field env/source/domain patterns remain; see /tmp/waver_acceptance_grep.log")

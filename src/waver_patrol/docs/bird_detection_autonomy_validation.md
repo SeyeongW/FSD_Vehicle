@@ -116,7 +116,7 @@ cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 colcon build --packages-select ugv_tools waver_patrol ugv_slam ugv_gazebo --symlink-install
 source install/setup.bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=0
 ```
 
 Single Gazebo bird validation launch:

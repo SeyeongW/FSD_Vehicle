@@ -25,7 +25,7 @@ else
   exit 2
 fi
 
-export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-30}"
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 WAVER_SKIP_JETSON_CHECK="${WAVER_SKIP_JETSON_CHECK:-false}"
 
 select_jetson_host() {

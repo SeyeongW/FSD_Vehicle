@@ -20,7 +20,7 @@ DOCKER_COMPOSE_FILE=docker-compose.jetson.yml
 
 # ROS 2
 ROS_DISTRO=humble
-ROS_DOMAIN_ID=30
+ROS_DOMAIN_ID=0
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 # Waver base serial
@@ -51,7 +51,7 @@ FIELD_BUILD_IN_DOCKER=auto
 
 # Optional Jetson host auto-detection
 JETSON_HOST_AUTO=false
-JETSON_HOST_CANDIDATES="10.139.225.150 10.63.240.150 192.168.0.23 10.42.0.1"
+JETSON_HOST_CANDIDATES="10.139.225.150"
 
 # SSH password bootstrap.
 # First field script run can create ignored config/waver_field_env.local

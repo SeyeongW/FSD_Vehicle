@@ -4,7 +4,7 @@ set -euo pipefail
 WORKSPACE_ROOT=${WORKSPACE_ROOT:-$HOME/ros2_ws5/FSD_Vehicle}
 OUTPUT_ROOT=${OUTPUT_ROOT:-$WORKSPACE_ROOT/experiment_results/gazebo_spatial_response}
 TIMEOUT_SEC=${TIMEOUT_SEC:-180}
-ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-30}
+ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
 RANDOM_SEED=${RANDOM_SEED:-530}
 BATCH_TIME="$(date +%Y%m%d_%H%M%S)"
 TRIAL_ID="spatial_lidar_${BATCH_TIME}_seed${RANDOM_SEED}"
