@@ -20,6 +20,7 @@ setup(
         ('share/' + package_name + '/models/static_obstacle_box', glob('models/static_obstacle_box/*')),
         ('share/' + package_name + '/scripts', glob('scripts/*.sh') + glob('scripts/*.py')),
         ('share/' + package_name + '/docs', glob('docs/*.md')),
+        ('share/' + package_name + '/docs/cleanup', glob('docs/cleanup/*.md')),
         ('share/' + package_name + '/rviz', glob('rviz/*.rviz')),
         ('share/' + package_name + '/data', glob('data/*.md')),
         ('share/' + package_name + '/data/schema', glob('data/schema/*.csv')),

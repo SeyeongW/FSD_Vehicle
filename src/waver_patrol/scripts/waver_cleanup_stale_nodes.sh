@@ -35,6 +35,10 @@ patterns=(
   "moving_object_map_transform_node"
   "moving_object_motion_filter_node"
   "pointcloud_lidar_objects_node"
+  "target_body_tracker_node"
+  "target_observation_body_tracker_node"
+  "target_goal_manager_node"
+  "radar_command_bridge_node"
   "gzserver"
   "gzclient"
 )

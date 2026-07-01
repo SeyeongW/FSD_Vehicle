@@ -16,10 +16,10 @@ setup(
     ],
     install_requires=['setuptools', 'scikit-learn', 'numpy'],
     zip_safe=True,
-    maintainer='User',
-    maintainer_email='user@todo.todo',
-    description='4D LiDAR Object Detection package',
-    license='TODO',
+    maintainer='Waver project maintainers',
+    maintainer_email='whxogus4793@naver.com',
+    description='LiDAR object detection utilities for Waver UGV perception experiments.',
+    license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [

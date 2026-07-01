@@ -1,0 +1,3 @@
+cycle,scenario,status,command,evidence,key_output
+1,slam_mapping_smoke,PASS,"WAVER_SPAWN_TEST_OBSTACLE=true WAVER_USE_GUI=false WAVER_START_RVIZ=false WAVER_UI_SLAM_TIMEOUT=90 bash scripts/run_ui_slam_mapping_gazebo_smoke.sh",/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/gazebo_functional_validation/20260630_185338/cycle_1/slam_mapping_smoke.log,"completed"
+2,slam_mapping_smoke,PASS,"WAVER_SPAWN_TEST_OBSTACLE=true WAVER_USE_GUI=false WAVER_START_RVIZ=false WAVER_UI_SLAM_TIMEOUT=90 bash scripts/run_ui_slam_mapping_gazebo_smoke.sh",/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/gazebo_functional_validation/20260630_185338/cycle_2/slam_mapping_smoke.log,"completed"

@@ -167,7 +167,7 @@ class WaverKeyboard(Node):
     def __init__(self, serial_writer: Optional[SerialJsonWriter] = None):
         super().__init__("keyboard_ctrl")
         # 역할: 실증 전/후에 launch 파라미터만으로 속도, LiDAR 보조, 출력 토픽을 조정한다.
-        self.declare_parameter("cmd_vel_topic", "/cmd_vel")
+        self.declare_parameter("cmd_vel_topic", "/waver/manual_cmd_vel")
         self.declare_parameter("output_mode", "twist")
         self.declare_parameter("default_ratio", 0.16)
         self.declare_parameter("max_ratio", 0.22)

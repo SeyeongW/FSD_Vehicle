@@ -1,0 +1,15 @@
+cycle,step,status,evidence
+1,compileall,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_1/compileall.log
+1,no_ros_tests,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_1/no_ros_tests.log
+1,contract_check,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_1/contract_check.log
+1,clone_to_run,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_1/clone_to_run.log
+1,remote_ui,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_1/remote_ui.log
+1,docker_ssh_no_motion,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_1/docker_ssh_no_motion.log
+1,gazebo_keyboard,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_1/gazebo_keyboard.log
+2,compileall,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_2/compileall.log
+2,no_ros_tests,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_2/no_ros_tests.log
+2,contract_check,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_2/contract_check.log
+2,clone_to_run,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_2/clone_to_run.log
+2,remote_ui,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_2/remote_ui.log
+2,docker_ssh_no_motion,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_2/docker_ssh_no_motion.log
+2,gazebo_keyboard,PASS,/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/full_readiness_loop/20260630_190110/cycle_2/gazebo_keyboard.log

@@ -15,7 +15,7 @@ from waver_patrol.comms.serial_json_client import FakeSerial, SerialJsonClient
 from waver_patrol.control.auto_behavior_mux_node import AutoBehaviorMuxNode
 from waver_patrol.control.target_body_tracker_node import TargetBodyTrackerNode
 from waver_patrol.patrol.battery_return_manager_node import BatteryReturnManagerNode
-from waver_patrol.safety.safety_cmd_mux_node import SafetyCmdMuxNode
+from waver_patrol.safety.safety_cmd_mux_node import SafetyCmdMuxNode, ScanSectorState
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -89,6 +89,123 @@ def test_safety_scan_stale_stops_when_required():
     node = SafetyCmdMuxNode()
     try:
         assert node._scan_state(node._now(), (node.auto_cmd, "AUTO_PASS", False)) == "SCAN_STALE_STOP"
+    finally:
+        node.destroy_node()
+
+
+def test_safety_ok_clear_does_not_bypass_hard_stop():
+    node = SafetyCmdMuxNode()
+    try:
+        now = node._now()
+        node.scan = ScanSectorState(
+            front_min=0.20,
+            rear_min=math.inf,
+            finite_points=100,
+            last_time=now,
+            adapter_state="OK_CLEAR",
+        )
+        node.auto_cmd.linear.x = 0.03
+        assert node._scan_state(now, (node.auto_cmd, "AUTO_PASS", False)) == "SCAN_HARD_STOP_FRONT"
+    finally:
+        node.destroy_node()
+
+
+def test_safety_ok_clear_reverse_hard_stop():
+    node = SafetyCmdMuxNode()
+    try:
+        now = node._now()
+        node.scan = ScanSectorState(
+            front_min=math.inf,
+            rear_min=0.20,
+            finite_points=100,
+            last_time=now,
+            adapter_state="OK_CLEAR",
+        )
+        node.auto_cmd.linear.x = -0.03
+        assert node._scan_state(now, (node.auto_cmd, "AUTO_PASS", False)) == "SCAN_HARD_STOP_REAR"
+    finally:
+        node.destroy_node()
+
+
+def test_safety_ok_clear_low_finite_points_degrades():
+    node = SafetyCmdMuxNode()
+    try:
+        now = node._now()
+        node.scan = ScanSectorState(
+            front_min=math.inf,
+            rear_min=math.inf,
+            finite_points=0,
+            last_time=now,
+            adapter_state="OK_CLEAR",
+        )
+        assert node._scan_state(now, (node.auto_cmd, "AUTO_PASS", False)) == "SCAN_DEGRADED_STOP"
+    finally:
+        node.destroy_node()
+
+
+def test_safety_ok_clear_stale_scan_stops():
+    node = SafetyCmdMuxNode()
+    try:
+        now = node._now()
+        node.scan = ScanSectorState(
+            front_min=math.inf,
+            rear_min=math.inf,
+            finite_points=100,
+            last_time=now - 10.0,
+            adapter_state="OK_CLEAR",
+        )
+        assert node._scan_state(now, (node.auto_cmd, "AUTO_PASS", False)) == "SCAN_STALE_STOP"
+    finally:
+        node.destroy_node()
+
+
+def test_safety_ok_clear_slow_zone_after_hard_stop_check():
+    node = SafetyCmdMuxNode()
+    try:
+        now = node._now()
+        node.scan = ScanSectorState(
+            front_min=0.80,
+            rear_min=math.inf,
+            finite_points=100,
+            last_time=now,
+            adapter_state="OK_CLEAR",
+        )
+        node.auto_cmd.linear.x = 0.03
+        assert node._scan_state(now, (node.auto_cmd, "AUTO_PASS", False)) == "SCAN_SLOW_FRONT"
+    finally:
+        node.destroy_node()
+
+
+def test_safety_ok_obstacle_hard_stop():
+    node = SafetyCmdMuxNode()
+    try:
+        now = node._now()
+        node.scan = ScanSectorState(
+            front_min=0.20,
+            rear_min=math.inf,
+            finite_points=100,
+            last_time=now,
+            adapter_state="OK_OBSTACLE",
+        )
+        node.auto_cmd.linear.x = 0.03
+        assert node._scan_state(now, (node.auto_cmd, "AUTO_PASS", False)) == "SCAN_HARD_STOP_FRONT"
+    finally:
+        node.destroy_node()
+
+
+def test_safety_ok_clear_normal_scan_clears():
+    node = SafetyCmdMuxNode()
+    try:
+        now = node._now()
+        node.scan = ScanSectorState(
+            front_min=math.inf,
+            rear_min=math.inf,
+            finite_points=100,
+            last_time=now,
+            adapter_state="OK_CLEAR",
+        )
+        node.auto_cmd.linear.x = 0.03
+        assert node._scan_state(now, (node.auto_cmd, "AUTO_PASS", False)) == "SCAN_CLEAR"
     finally:
         node.destroy_node()
 

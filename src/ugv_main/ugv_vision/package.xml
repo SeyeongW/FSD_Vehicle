@@ -3,9 +3,9 @@
 <package format="3">
   <name>ugv_vision</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="dudu@todo.todo">dudu</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Vision, camera tracking, detector, and camera-LiDAR fusion nodes for the Waver UGV.</description>
+  <maintainer email="whxogus4793@naver.com">Waver project maintainers</maintainer>
+  <license>Apache-2.0</license>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
@@ -16,10 +16,16 @@
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>nav2_msgs</depend>
   <depend>vision_msgs</depend>
+  <depend>rcl_interfaces</depend>
   <depend>tf2_ros</depend>
   <depend>tf2_geometry_msgs</depend>
   <depend>cv_bridge</depend>
+  <depend>ugv_interface</depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-serial</exec_depend>
   <export>
     <build_type>ament_python</build_type>
   </export>

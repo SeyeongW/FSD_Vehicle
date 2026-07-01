@@ -39,6 +39,9 @@ SAFETY_MAX_LINEAR_SPEED="${SAFETY_MAX_LINEAR_SPEED:-0.05}"
 SAFETY_MAX_ANGULAR_SPEED="${SAFETY_MAX_ANGULAR_SPEED:-0.20}"
 ENABLE_BIRD_STACK="${ENABLE_BIRD_STACK:-false}"
 ENABLE_SOUND_STACK="${ENABLE_SOUND_STACK:-false}"
+SERIAL_PORT_BY_ID_PATTERN="${SERIAL_PORT_BY_ID_PATTERN:-/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_*}"
+SERIAL_PORT_ALLOW_TTYUSB_FALLBACK="${SERIAL_PORT_ALLOW_TTYUSB_FALLBACK:-false}"
+SERIAL_PORT_ALLOW_TTYTHS_FALLBACK="${SERIAL_PORT_ALLOW_TTYTHS_FALLBACK:-false}"
 
 select_jetson_host() {
   if [ "${JETSON_HOST_AUTO}" != "true" ]; then
@@ -102,7 +105,8 @@ done
   "${START_LIVOX_DRIVER}" "${LIVOX_TOPIC}" "${LIVOX_CONFIG_PATH}" \
   "${LIVOX_FRAME_ID}" "${LIVOX_PUBLISH_FREQ}" "${LIVOX_BD_CODE}" \
   "${LIVOX_HOST_IP}" "${LIVOX_SENSOR_IP}" "${BIRD_MODEL_PATH}" \
-  "${CAMERA_IMAGE_TOPIC}" "${CAMERA_INFO_TOPIC}" <<'REMOTE'
+  "${CAMERA_IMAGE_TOPIC}" "${CAMERA_INFO_TOPIC}" \
+  "${SERIAL_PORT_BY_ID_PATTERN}" "${SERIAL_PORT_ALLOW_TTYUSB_FALLBACK}" "${SERIAL_PORT_ALLOW_TTYTHS_FALLBACK}" <<'REMOTE'
 set -euo pipefail
 
 JETSON_WS="$1"
@@ -131,6 +135,9 @@ LIVOX_SENSOR_IP="${23}"
 BIRD_MODEL_PATH="${24}"
 CAMERA_IMAGE_TOPIC="${25}"
 CAMERA_INFO_TOPIC="${26}"
+SERIAL_PORT_BY_ID_PATTERN="${27}"
+SERIAL_PORT_ALLOW_TTYUSB_FALLBACK="${28}"
+SERIAL_PORT_ALLOW_TTYTHS_FALLBACK="${29}"
 BIRD_MODEL_LAUNCH_ARG=""
 if [ -n "${BIRD_MODEL_PATH}" ]; then
   BIRD_MODEL_LAUNCH_ARG="bird_model_path:=${BIRD_MODEL_PATH}"
@@ -141,12 +148,30 @@ echo "[JETSON] repo=$(pwd) branch=$(git branch --show-current 2>/dev/null || ech
 
 SERIAL_PORT="${SERIAL_REQUEST}"
 if [ "${SERIAL_PORT}" = "auto" ]; then
-  SERIAL_PORT="$(ls /dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_* 2>/dev/null | head -n 1 || true)"
-  [ -n "${SERIAL_PORT}" ] || SERIAL_PORT="$(ls /dev/ttyUSB* 2>/dev/null | head -n 1 || true)"
-fi
-if [ -z "${SERIAL_PORT}" ]; then
-  echo "[JETSON][ERROR] No Waver serial port found. Connect Waver USB to Jetson first." >&2
-  exit 20
+  shopt -s nullglob
+  by_id_candidates=(${SERIAL_PORT_BY_ID_PATTERN})
+  ttyusb_candidates=(/dev/ttyUSB*)
+  shopt -u nullglob
+  if [ "${#by_id_candidates[@]}" -eq 1 ]; then
+    SERIAL_PORT="${by_id_candidates[0]}"
+  elif [ "${#by_id_candidates[@]}" -gt 1 ]; then
+    echo "[JETSON][ERROR] multiple Waver by-id serial candidates:" >&2
+    printf '  - %s\n' "${by_id_candidates[@]}" >&2
+    exit 20
+  elif [ "${#ttyusb_candidates[@]}" -eq 1 ] && [ "${SERIAL_PORT_ALLOW_TTYUSB_FALLBACK}" = "true" ]; then
+    SERIAL_PORT="${ttyusb_candidates[0]}"
+    echo "[JETSON][WARN] falling back to ${SERIAL_PORT}" >&2
+  elif [ "${#ttyusb_candidates[@]}" -gt 1 ]; then
+    echo "[JETSON][ERROR] multiple /dev/ttyUSB* candidates; set SERIAL_PORT explicitly." >&2
+    printf '  - %s\n' "${ttyusb_candidates[@]}" >&2
+    exit 20
+  elif [ "${SERIAL_PORT_ALLOW_TTYTHS_FALLBACK}" = "true" ] && [ -e /dev/ttyTHS1 ]; then
+    SERIAL_PORT="/dev/ttyTHS1"
+    echo "[JETSON][WARN] falling back to /dev/ttyTHS1" >&2
+  else
+    echo "[JETSON][ERROR] no Waver by-id serial port found. Connect Waver USB or set SERIAL_PORT=/dev/serial/by-id/..." >&2
+    exit 20
+  fi
 fi
 
 if ! docker ps --format '{{.Names}}' | grep -qx "${CONTAINER}"; then

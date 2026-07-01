@@ -25,12 +25,28 @@ For real wheel-off/wheel-on tests, prefer `enable_waver_base_driver:=true`. It o
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
-rosdep install --from-paths FSD_Vehicle/src --ignore-src -r -y
-bash FSD_Vehicle/src/waver_patrol/scripts/waver_duplicate_package_check.sh
+rosdep install --from-paths src --ignore-src -r -y
+bash src/waver_patrol/scripts/waver_duplicate_package_check.sh
 colcon build --symlink-install --packages-select \
   waver_patrol ugv_bringup ugv_base_node ugv_tools ugv_nav
 source install/setup.bash
 ```
+
+## Indoor Low-Speed Profile
+
+Use this launch before enabling the full bird-autonomy stack indoors:
+
+```bash
+ros2 launch waver_patrol waver_indoor_patrol_real.launch.py \
+  default_mode:=STANDBY \
+  safety_max_linear_speed:=0.05 \
+  safety_max_angular_speed:=0.20 \
+  enable_waver_base_driver:=false
+```
+
+It keeps scan/safety/Nav2 wiring while disabling bird detector, bird 3D fusion,
+sound, target-departure, experiment logger, and battery-return manager by
+default. See `src/waver_patrol/docs/indoor_real_patrol_runbook.md`.
 
 ## Dry Run, No Serial
 

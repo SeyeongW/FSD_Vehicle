@@ -248,8 +248,6 @@ class SafetyCmdMuxNode(Node):
             return "SCAN_ADAPTER_DEGRADED_STOP"
         if self.scan.last_time == 0.0 or now - self.scan.last_time > float(self.get_parameter("scan_stale_s").value):
             return "SCAN_STALE_STOP" if bool(self.get_parameter("require_scan").value) else "SCAN_STALE_IGNORED"
-        if self.scan.adapter_state.startswith("OK_CLEAR"):
-            return "SCAN_CLEAR"
         if self.scan.finite_points < int(self.get_parameter("min_valid_scan_points").value):
             return "SCAN_DEGRADED_STOP" if bool(self.get_parameter("require_scan").value) else "SCAN_DEGRADED_WARN"
         cmd = selected[0]

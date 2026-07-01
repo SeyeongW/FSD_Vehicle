@@ -47,6 +47,29 @@ bash scripts/waver_field_local_ui_start.sh
 
 Detailed fresh-clone instructions are in [docs/CLONE_TO_FIELD.md](docs/CLONE_TO_FIELD.md).
 
+## Indoor Low-Speed Real Patrol
+
+For the conservative indoor pre-real profile, use the Waver-specific runbook:
+
+```bash
+cd ~/ros2_ws5/FSD_Vehicle
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch waver_patrol waver_indoor_patrol_real.launch.py \
+  default_mode:=STANDBY \
+  safety_max_linear_speed:=0.05 \
+  safety_max_angular_speed:=0.20 \
+  enable_waver_base_driver:=false
+```
+
+Details:
+
+- [src/waver_patrol/docs/indoor_real_patrol_runbook.md](src/waver_patrol/docs/indoor_real_patrol_runbook.md)
+- [src/waver_patrol/docs/repo_inventory.md](src/waver_patrol/docs/repo_inventory.md)
+- [src/waver_patrol/docs/package_role_matrix.md](src/waver_patrol/docs/package_role_matrix.md)
+- [src/waver_patrol/docs/cleanup/cleanup_report.md](src/waver_patrol/docs/cleanup/cleanup_report.md)
+
 ## Build And Static Checks
 
 ```bash

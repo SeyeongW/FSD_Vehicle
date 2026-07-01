@@ -82,18 +82,25 @@ SDK 디렉토리가 이미 존재하는지 먼저 확인하기 때문에, 스크
 
 외부 SDK는 변경이 없으므로 재빌드할 필요가 없다. 소스코드만 수정한 경우에는 이 스크립트로 메인 패키지만 빠르게 재빌드한다.
 
+#### Entry Point 위생
+
+`ugv_vision`의 `kcf_track = ugv_vision.kcf_track:main` 항목은 대응 Python 모듈이 없어 설치 후 실행 시 즉시 import error를 만들 수 있었다. 실제 KCF tracker 구현 파일이 없으므로 빈 stub를 만들지 않고 죽은 console entry point를 제거했다. `ugv_vision/test/test_console_scripts.py`가 남은 console script target의 모듈 파일과 `main()` 존재를 정적으로 확인한다.
+
 #### `build_apriltag.sh` — AprilTag C 라이브러리 별도 빌드
 
 AprilTag는 C 라이브러리를 먼저 시스템에 설치해야 ROS2 wrapper가 빌드된다. 이 절차가 다른 패키지 빌드와 순서가 엄격하여 별도 스크립트로 분리했다.
 
-#### 크로스 플랫폼 지원
+#### 로컬/Jetson 실행 지원
 
-Windows 환경에서도 동일한 명령을 사용할 수 있도록 `.bat` 파일을 함께 제공했다.
+현재 필드 운용 경로는 Linux 로컬 PC에서 SSH로 Jetson Docker 백엔드를 제어하고,
+로컬 PC에서 리모콘 UI를 실행하는 방식으로 정리했다. 오래된 Windows `.bat`
+보조 파일은 현재 검증된 필드 경로에 포함되지 않아 제거했다.
 
-| 명령 | Linux/macOS | Windows |
-|------|-------------|----------|
-| 이미지 빌드 | `make build_pc` | `build_pc.bat` |
-| 컨테이너 실행 | `make run_pc` | `run_pc.bat` |
+| 목적 | 명령 |
+|------|------|
+| 로컬 필드 환경 점검 | `bash scripts/waver_doctor.sh` |
+| Jetson Docker 백엔드 시작 | `bash scripts/waver_field_docker_backend_start.sh` |
+| 로컬 리모콘 UI 시작 | `bash scripts/waver_field_local_ui_start.sh` |
 
 ---
 

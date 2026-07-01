@@ -1,0 +1,2 @@
+cycle,scenario,status,command,evidence,key_output
+1,keyboard_teleop_smoke,PASS,"ros2 launch ugv_tools waver_gazebo_test.launch.py start_gazebo:=true use_minimal_model:=true gui:=false start_scripted_keyboard:=true start_patrol:=false start_remote_panel:=false require_scan:=false start_lidar_perception:=false start_lidar_target_follow:=false start_bird_manager:=false start_data_logger:=false",/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/gazebo_functional_validation/20260630_190112/cycle_1/keyboard_teleop_smoke.log,"timeout_after_expected_success_markers"

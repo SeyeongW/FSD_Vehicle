@@ -130,7 +130,8 @@ def main() -> int:
     print(f"SOURCE_ARCHIVE_ROOT={root}")
     print(f"SOURCE_ARCHIVE_OUTPUT={output}")
     print("TOP_LEVEL_INCLUDED=" + ",".join(included))
-    print("TOP_LEVEL_EXCLUDED=" + ",".join(excluded))
+    if not args.list:
+        print("TOP_LEVEL_EXCLUDED=" + ",".join(excluded))
     files = iter_source_files(root)
     print(f"INCLUDED_FILE_COUNT={len(files)}")
     if args.list:

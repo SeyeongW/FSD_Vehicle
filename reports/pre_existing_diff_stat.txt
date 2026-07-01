@@ -1,0 +1,35 @@
+ README.md                                          |  23 ++++
+ README_REAL_VEHICLE.md                             |  20 +++-
+ build_pc.bat                                       |   4 -
+ build_pc.sh                                        |   4 -
+ docs/technical_report.md                           |  19 ++--
+ remotessh.sh                                       |   1 -
+ ros2_humble.sh                                     |  27 -----
+ run_pc.bat                                         |   5 -
+ run_pc.sh                                          |   5 -
+ scripts/make_source_archive.py                     |   3 +-
+ scripts/waver_field_docker_backend_start.sh        |   6 ++
+ scripts/waver_field_env_load.sh                    |   7 +-
+ scripts/waver_field_lidar_nav_backend_start.sh     |  39 +++++--
+ src/livox_ros_driver2                              |   0
+ src/ugv_else/cartographer/package.xml              |   6 +-
+ src/ugv_main/ugv_interface/package.xml             |   6 +-
+ src/ugv_main/ugv_lidar_detection/package.xml       |   7 +-
+ src/ugv_main/ugv_lidar_detection/setup.py          |   8 +-
+ src/ugv_main/ugv_nav/launch/nav_bringup/cartographer_localization.launch.py |  43 ++++----
+ src/ugv_main/ugv_nav/package.xml                   |   9 +-
+ src/ugv_main/ugv_tools/ugv_tools/keyboard_ctrl.py  |   2 +-
+ src/ugv_main/ugv_vision/package.xml                |  12 ++-
+ src/ugv_main/ugv_vision/setup.py                   |   9 +-
+ src/waver_patrol/config/nav2_params_waver_real.yaml |   2 +-
+ src/waver_patrol/launch/waver_real_bird_autonomy.launch.py |  14 ++-
+ src/waver_patrol/scripts/waver_clean_graph_check.sh |  40 +++++--
+ src/waver_patrol/scripts/waver_cleanup_stale_nodes.sh |   4 +
+ src/waver_patrol/scripts/waver_cmd_chain_check.sh  |  32 ++++--
+ src/waver_patrol/scripts/waver_real_preflight_check.sh |  90 +++++++++++++---
+ src/waver_patrol/scripts/waver_scan_quality_check.sh | 109 ++++++++++++++++---
+ src/waver_patrol/setup.py                          |   1 +
+ src/waver_patrol/test/test_remote_ui_security_contract.py |   3 +
+ src/waver_patrol/test/test_waver_bird_autonomy_core.py | 119 ++++++++++++++++++++-
+ src/waver_patrol/waver_patrol/safety/safety_cmd_mux_node.py |   2 -
+ 34 files changed, 521 insertions(+), 160 deletions(-)

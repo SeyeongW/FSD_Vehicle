@@ -3,9 +3,9 @@
 <package format="3">
   <name>cartographer</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="ws@todo.todo">ws</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Cartographer Lua configs and launch wrappers used by Waver UGV navigation.</description>
+  <maintainer email="whxogus4793@naver.com">Waver project maintainers</maintainer>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

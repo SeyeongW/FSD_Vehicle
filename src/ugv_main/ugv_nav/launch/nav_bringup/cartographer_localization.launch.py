@@ -1,42 +1,41 @@
 import os
 
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, ThisLaunchFileDir
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, ThisLaunchFileDir
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    ugv_cartographer_prefix = get_package_share_directory("ugv_cartographer")
-    cartographer_config_dir = LaunchConfiguration(
-        "cartographer_config_dir",
-        default=os.path.join(ugv_cartographer_prefix, "config"),
-    )
-    configuration_basename = LaunchConfiguration(
-        "configuration_basename",
-        default="localization_2d.lua",
-    )
-    use_sim_time = LaunchConfiguration("use_sim_time", default="false")
-    resolution = LaunchConfiguration("resolution", default="0.05")
-    publish_period_sec = LaunchConfiguration("publish_period_sec", default="1.0")
+    cartographer_config_package = LaunchConfiguration("cartographer_config_package")
+    cartographer_config_dir = LaunchConfiguration("cartographer_config_dir")
+    configuration_basename = LaunchConfiguration("configuration_basename")
+    use_sim_time = LaunchConfiguration("use_sim_time")
+    resolution = LaunchConfiguration("resolution")
+    publish_period_sec = LaunchConfiguration("publish_period_sec")
     ws_path = os.environ.get("ROS2_WS5_PATH", os.path.expanduser("~/ros2_ws5/FSD_Vehicle"))
-    pbstream_path = LaunchConfiguration(
-        "pbstream_path",
-        default=os.path.join(ws_path, "src/ugv_main/ugv_gazebo/maps/map.pbstream"),
+    pbstream_path = LaunchConfiguration("pbstream_path")
+    default_cartographer_config_dir = PathJoinSubstitution(
+        [FindPackageShare(cartographer_config_package), "config"]
     )
 
     return LaunchDescription(
         [
             DeclareLaunchArgument(
+                "cartographer_config_package",
+                default_value="cartographer",
+                description="Package that provides Cartographer Lua config files",
+            ),
+            DeclareLaunchArgument(
                 "cartographer_config_dir",
-                default_value=cartographer_config_dir,
+                default_value=default_cartographer_config_dir,
                 description="Full path to Cartographer config directory",
             ),
             DeclareLaunchArgument(
                 "configuration_basename",
-                default_value=configuration_basename,
+                default_value="localization_2d.lua",
                 description="Cartographer Lua configuration file",
             ),
             DeclareLaunchArgument(
@@ -46,17 +45,17 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "resolution",
-                default_value=resolution,
+                default_value="0.05",
                 description="Resolution of the published occupancy grid",
             ),
             DeclareLaunchArgument(
                 "publish_period_sec",
-                default_value=publish_period_sec,
+                default_value="1.0",
                 description="OccupancyGrid publishing period",
             ),
             DeclareLaunchArgument(
                 "pbstream_path",
-                default_value=pbstream_path,
+                default_value=os.path.join(ws_path, "src/ugv_main/ugv_gazebo/maps/map.pbstream"),
                 description="Cartographer state file to load for localization",
             ),
             Node(

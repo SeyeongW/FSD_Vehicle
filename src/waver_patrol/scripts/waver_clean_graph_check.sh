@@ -5,15 +5,21 @@ echo "== Waver clean graph check =="
 
 topic_pub_count() {
   local topic="$1"
-  local tmp
-  tmp="$(mktemp)"
-  if ! ros2 topic info -v "$topic" >"$tmp" 2>/dev/null; then
-    rm -f "$tmp"
-    echo 0
-    return
-  fi
-  grep -c 'Endpoint type: PUBLISHER' "$tmp" || true
-  rm -f "$tmp"
+  publisher_nodes "$topic" | awk 'END {print NR+0}'
+}
+
+topic_info() {
+  ros2 topic info -v "$1" 2>/dev/null || true
+}
+
+publisher_nodes() {
+  ros2 topic info -v "$1" 2>/dev/null | awk '
+    /^Node name:/ {node=$3}
+    /^Endpoint type:/ && $3 == "PUBLISHER" && node != "" {
+      print node
+      node=""
+    }
+  ' || true
 }
 
 fail=0
@@ -25,6 +31,22 @@ for topic in /cmd_vel /waver/mode /scan /scan_slam /scan_safety /map /odom; do
     fail=1
   fi
 done
+
+cmd_publishers="$(publisher_nodes /cmd_vel)"
+cmd_pubs="$(printf '%s\n' "$cmd_publishers" | sed '/^$/d' | awk 'END {print NR+0}')"
+if [ "$cmd_pubs" -gt 0 ] && printf '%s\n' "$cmd_publishers" | grep -Ev '^safety_cmd_mux_node$' >/dev/null; then
+  echo "ERROR: /cmd_vel publisher is not the Waver safety gate"
+  printf '  publisher: %s\n' $cmd_publishers
+  fail=1
+fi
+
+mode_publishers="$(publisher_nodes /waver/mode)"
+mode_pubs="$(printf '%s\n' "$mode_publishers" | sed '/^$/d' | awk 'END {print NR+0}')"
+if [ "$mode_pubs" -gt 0 ] && printf '%s\n' "$mode_publishers" | grep -Ev '^mission_patrol_manager_node$' >/dev/null; then
+  echo "ERROR: /waver/mode publisher is not mission_patrol_manager_node"
+  printf '  publisher: %s\n' $mode_publishers
+  fail=1
+fi
 
 nodes="$(ros2 node list 2>/dev/null || true)"
 for name in \

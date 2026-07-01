@@ -25,12 +25,15 @@ def test_remote_bridge_password_auth_requires_explicit_env_gate():
     ui = text("src/ugv_main/ugv_tools/ugv_tools/waver_remote_panel.py")
     local_script = text("scripts/waver_field_local_ui_start.sh")
     backend_script = text("scripts/waver_field_docker_backend_start.sh")
+    env_loader = text("scripts/waver_field_env_load.sh")
 
     assert re.search(r"remote_bridge_password[\"']\s*,\s*\n\s*[\"']{2}", ui)
     assert "remote_bridge_key_filename" in ui
     assert "WAVER_ALLOW_PASSWORD_SSH" in ui
     assert "WAVER_ALLOW_PASSWORD_SSH" in local_script
     assert "WAVER_ALLOW_PASSWORD_SSH" in backend_script
+    assert "Password SSH is disabled by default." in env_loader
+    assert 'WAVER_ALLOW_PASSWORD_SSH:-1' not in env_loader
 
 
 def test_remote_bridge_uses_candidate_topics_not_final_cmd_vel():

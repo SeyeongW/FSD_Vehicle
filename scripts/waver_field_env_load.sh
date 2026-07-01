@@ -128,7 +128,12 @@ waver_field_env_masked_summary() {
 
 waver_field_env_ensure_password() {
   if [ -n "${JETSON_PASS:-}" ]; then
-    export WAVER_ALLOW_PASSWORD_SSH="${WAVER_ALLOW_PASSWORD_SSH:-1}"
+    if [ "${WAVER_ALLOW_PASSWORD_SSH:-0}" != "1" ]; then
+      echo "[SECURITY] Password SSH is disabled by default." >&2
+      echo "[SECURITY] Set WAVER_ALLOW_PASSWORD_SSH=1 only for explicit field debugging." >&2
+      echo "[SECURITY] Prefer SSH keys." >&2
+      return 1
+    fi
     export JETSON_PASS
     return 0
   fi

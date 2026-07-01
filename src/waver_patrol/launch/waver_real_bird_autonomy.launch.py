@@ -65,6 +65,7 @@ def generate_launch_description() -> LaunchDescription:
     default_mission_params = os.path.join(share, "config", "waver_nav2_radar_bird_mission_real.yaml")
     default_ekf_params = os.path.join(share, "config", "ekf_waver_real.yaml")
     default_map = os.path.expanduser("~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml")
+    default_experiment_output_root = os.path.expanduser("~/ros2_ws5/FSD_Vehicle/experiment_results")
     default_waypoints = os.path.join(share, "waypoints", "waver_real_0p5m_square_patrol.yaml")
 
     common = [
@@ -89,10 +90,14 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_camera_gimbal_controller", default_value="true"),
             DeclareLaunchArgument("enable_sound_deterrent", default_value="true"),
             DeclareLaunchArgument("enable_target_departure_monitor", default_value="true"),
+            DeclareLaunchArgument("enable_radar_command_bridge", default_value="true"),
+            DeclareLaunchArgument("enable_target_goal_manager", default_value="true"),
+            DeclareLaunchArgument("enable_mission_patrol_manager", default_value="true"),
             DeclareLaunchArgument("enable_auto_behavior_mux", default_value="true"),
             DeclareLaunchArgument("enable_experiment_logger", default_value="true"),
+            DeclareLaunchArgument("enable_battery_return", default_value="true"),
             DeclareLaunchArgument("experiment_name", default_value="waver_lidar_first_bird_deterrence"),
-            DeclareLaunchArgument("experiment_output_root", default_value="$HOME/ros2_ws5/FSD_Vehicle/experiment_results"),
+            DeclareLaunchArgument("experiment_output_root", default_value=default_experiment_output_root),
             DeclareLaunchArgument("enable_sound_output", default_value="false"),
             DeclareLaunchArgument("sound_safety_ack", default_value="false"),
             DeclareLaunchArgument("enable_robot_localization", default_value="true"),
@@ -128,6 +133,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("bird_model_path", default_value=""),
             DeclareLaunchArgument("bird_backend", default_value="yolo"),
             DeclareLaunchArgument("bird_confidence_threshold", default_value="0.65"),
+            DeclareLaunchArgument("use_rviz", default_value="false"),
             OpaqueFunction(function=_validate_real_profile),
             LogInfo(msg="[WAVER REAL] Branch must be jo. Check before wheel-on: git branch --show-current"),
             LogInfo(
@@ -153,8 +159,12 @@ def generate_launch_description() -> LaunchDescription:
                     "enable_sound_deterrent": LaunchConfiguration("enable_sound_deterrent"),
                     "enable_camera_gimbal_controller": LaunchConfiguration("enable_camera_gimbal_controller"),
                     "enable_target_departure_monitor": LaunchConfiguration("enable_target_departure_monitor"),
+                    "enable_radar_command_bridge": LaunchConfiguration("enable_radar_command_bridge"),
+                    "enable_target_goal_manager": LaunchConfiguration("enable_target_goal_manager"),
+                    "enable_mission_patrol_manager": LaunchConfiguration("enable_mission_patrol_manager"),
                     "enable_auto_behavior_mux": LaunchConfiguration("enable_auto_behavior_mux"),
                     "enable_experiment_logger": LaunchConfiguration("enable_experiment_logger"),
+                    "enable_battery_return": LaunchConfiguration("enable_battery_return"),
                     "experiment_name": LaunchConfiguration("experiment_name"),
                     "experiment_output_root": LaunchConfiguration("experiment_output_root"),
                     "enable_sound_output": LaunchConfiguration("enable_sound_output"),
@@ -228,7 +238,7 @@ def generate_launch_description() -> LaunchDescription:
                         ]
                     ),
                     "remap_nav2_cmd_vel": "true",
-                    "use_rviz": "false",
+                    "use_rviz": LaunchConfiguration("use_rviz"),
                 }.items(),
             ),
             Node(

@@ -3,15 +3,16 @@
 <package format="3">
   <name>ugv_lidar_detection</name>
   <version>0.0.1</version>
-  <description>4D LiDAR Object Detection package</description>
-  <maintainer email="user@todo.todo">User</maintainer>
-  <license>TODO</license>
+  <description>LiDAR object detection utilities for Waver UGV perception experiments.</description>
+  <maintainer email="whxogus4793@naver.com">Waver project maintainers</maintainer>
+  <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
   <depend>visualization_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
+  <exec_depend>python3-numpy</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

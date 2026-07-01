@@ -1,0 +1,55 @@
+gazebo_functional_scenarios:
+  defaults:
+    workspace_root: "~/ros2_ws5/FSD_Vehicle"
+    isolated_ros_domain_id: 83
+    use_sim_time: true
+    use_gui: false
+    start_rviz: false
+    timeout_sec: 90
+    no_real_hardware: true
+    evidence_root: "reports/gazebo_functional_validation"
+
+  scenarios:
+    keyboard_teleop_smoke:
+      purpose: "Validate Gazebo-only keyboard/manual command path through the safety mux."
+      command: "ros2 launch ugv_tools waver_gazebo_test.launch.py start_gazebo:=true use_minimal_model:=true gui:=false start_scripted_keyboard:=true start_patrol:=false start_remote_panel:=false require_scan:=false start_lidar_perception:=false start_lidar_target_follow:=false start_bird_manager:=false start_data_logger:=false"
+      expected:
+        - "/cmd_vel publisher is safety_cmd_mux_node when graph is visible"
+        - "keyboard script publishes candidate manual commands only"
+
+    autonomous_patrol_smoke:
+      purpose: "Validate Gazebo-only autonomous patrol helper path without real serial."
+      command: "ros2 launch ugv_tools waver_gazebo_test.launch.py start_gazebo:=true use_minimal_model:=true gui:=false start_scripted_keyboard:=false start_patrol:=true start_remote_panel:=false require_scan:=false loop_count:=1 start_lidar_perception:=false start_lidar_target_follow:=false start_bird_manager:=false start_data_logger:=false"
+      expected:
+        - "patrol helper starts and publishes candidate nav commands"
+        - "final /cmd_vel remains safety mux owned"
+
+    slam_mapping_smoke:
+      purpose: "Validate UI-triggered SLAM mapping, map save/check path, and static obstacle evidence when Gazebo is available."
+      command: "WAVER_SPAWN_TEST_OBSTACLE=true WAVER_USE_GUI=false WAVER_START_RVIZ=false bash scripts/run_ui_slam_mapping_gazebo_smoke.sh"
+      expected:
+        - "live map is produced or failure is recorded"
+        - "test obstacle is checked in saved map when supported"
+
+    remote_ui_smoke:
+      purpose: "Validate remote panel contracts in mock/no-motion mode."
+      command: "bash src/waver_patrol/scripts/waver_remote_ui_validation.sh --mock --cycles 1"
+      expected:
+        - "remote UI never publishes direct /cmd_vel by default"
+        - "mode commands go to /waver/mode_cmd"
+
+    safety_obstacle_smoke:
+      purpose: "Validate Gazebo mapping/obstacle smoke path with a static obstacle and no real hardware."
+      command: "WAVER_SPAWN_TEST_OBSTACLE=true WAVER_TEST_OBSTACLE_MIN_OCCUPIED=5 WAVER_USE_GUI=false bash scripts/run_ui_slam_mapping_gazebo_smoke.sh"
+      expected:
+        - "static obstacle spawn/check is attempted"
+        - "failure is reported if obstacle/map evidence is insufficient"
+
+    all:
+      purpose: "Run keyboard, patrol, SLAM, remote UI, and safety obstacle scenarios."
+      includes:
+        - keyboard_teleop_smoke
+        - autonomous_patrol_smoke
+        - slam_mapping_smoke
+        - remote_ui_smoke
+        - safety_obstacle_smoke
