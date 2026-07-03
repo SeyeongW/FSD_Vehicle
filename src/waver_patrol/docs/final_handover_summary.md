@@ -66,56 +66,23 @@ accepted as an elevated target because it has no real z-source provenance.
 provenance by default. LaserScan-only or unknown z sources are classified as
 height unknown and do not trigger a mission.
 
-## Latest Gazebo/UI Evidence
+## Gazebo/UI Evidence Policy
 
-Latest clean 10-run output:
+This handover no longer claims repeated-trial performance results. Historical
+Gazebo/UI outputs may remain in local development folders, but they are not paper
+results unless revalidated with the current schema and packaged as a separate
+evidence package.
 
-```text
-~/ros2_ws5/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs/
-```
+Allowed current wording:
 
-Summary:
+- Source/static contracts and unit tests passed when recorded in `reports/local_validation_summary.md`.
+- Optional single-run Gazebo smoke logs may support simulation-smoke claims only when `final_status=PASS`.
+- Raw experiment data is required before reporting performance tables, detector metrics, mission success rates, or map-quality statistics.
 
-- trials: 10
-- success_count: 10
-- success_rate: 1.0
-- Gazebo launch success rate: 1.0
-- operator UI launch success rate: 1.0
-- SLAM mode success rate: 1.0
-- save/apply map success rate: 1.0
-- `/cmd_vel` single-publisher success rate: 1.0
-- direct `/cmd_vel` violation count: 0
-- scan_hz_mean_avg: 13.236 Hz
-- map_known_ratio_mean: 0.2095
-- known_cell_count_mean: 125439.5
-- dots-only map count: 0
-- shutdown traceback count: 0
-- final_pass_label: `PASS`
-
-Additional SLAM quality fix validation after adding LiDAR-visible airport curbs
-and tuning the LiDAR-only gmapping range:
-
-```text
-~/ros2_ws5/FSD_Vehicle/experiments_result/paper_ready/slam_fix_full_coverage/
-```
-
-- trials: 1
-- success_rate: 1.0
-- scan_hz_mean_avg: 17.4 Hz
-- map_known_ratio: 0.3324
-- known_cell_count: 183633
-- occupied_cell_count: 2770
-- dots-only map count: 0
-- save/apply map success: true
-- `/cmd_vel` publisher: `safety_cmd_mux_node` exactly once
-
-This run was used to verify that the map no longer appears as only sparse dots;
-the saved PGM contains continuous runway/apron/service-road boundary lines from
-real `/scan` observations.
-
-The repeated `libros2_livox.so` plugin warning did not affect the validated
-Gazebo `/scan` source. Real 3D target work still needs the actual Livox/Mid360
-driver or another verified 3D source.
+The repeated `libros2_livox.so` plugin warning must not be hidden. If the Livox
+Gazebo plugin is unavailable, only scan-mapper fallback smoke behavior may be
+described. Real 3D target work still needs the actual Livox/Mid360 driver or
+another verified 3D source.
 
 ## Build Status
 
@@ -168,7 +135,8 @@ ros2 launch ugv_tools waver_operator_panel.launch.py \
   publish_direct_cmd_vel:=false
 ```
 
-Paper-ready 10-run Gazebo/UI validation:
+Optional local Gazebo/UI smoke runner. Do not cite this as paper performance
+evidence unless its raw outputs are packaged separately and audited:
 
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
@@ -176,17 +144,15 @@ source /opt/ros/humble/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=0
 
-RUNS=10 \
 TRIAL_TIMEOUT_SEC=220 \
-OUTPUT_ROOT=$HOME/ros2_ws5/FSD_Vehicle/experiments_result/paper_ready/ai_gazebo_ui_10runs \
+OUTPUT_ROOT=$HOME/ros2_ws5/FSD_Vehicle/experiments_result/local_ai_gazebo_ui_smoke \
 bash src/waver_patrol/scripts/run_ai_gazebo_ui_mapping_trials.sh
 ```
 
-View summary:
+View generated local summary if present:
 
 ```bash
-column -s, -t < experiments_result/paper_ready/ai_gazebo_ui_10runs/statistics_10runs.csv
-sed -n '1,120p' experiments_result/paper_ready/ai_gazebo_ui_10runs/final_judgement.md
+find experiments_result/local_ai_gazebo_ui_smoke -maxdepth 2 -type f | sort
 ```
 
 Safety check while backend is running:

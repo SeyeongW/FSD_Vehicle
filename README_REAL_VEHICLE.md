@@ -1,54 +1,77 @@
-# Waver Real-Vehicle Bird Autonomy Checklist
+# Waver Real-Vehicle Bringup
 
-This repository must be used on branch `jo` only. The real profile is designed for a low-speed, supervised, closed-area Waver UGV test. It does not enable wheel-on driving by default.
+This repository is prepared for ROS 2 Humble Waver UGV field bringup on the
+`jo` branch. It is not a one-command autonomous deployment. Real wheels,
+serial motor output, sound output, and GPIO-like actuators must stay disabled
+until the required readiness level passes.
 
-## Command Chain
+## 1. Safety Warning
 
-Default mode is `safety_mux_final`:
+- Keep the robot lifted or wheels disconnected for driver checks.
+- Keep a physical E-stop in the operator's hand for any wheel-on test.
+- Do not enable sound hardware unless the hardware and local safety/legal
+  acknowledgements are explicit.
+- Do not run Gazebo, fake, mock, or test publishers in a real profile.
+- Final `/cmd_vel` authority is `safety_cmd_mux_node` only.
+
+## 2. Hardware Assumptions
+
+Expected hardware path:
 
 ```text
-Nav2 controller
-  -> /waver/cmd_vel_nav2_raw
-  -> nav2_velocity_smoother
-  -> /waver/cmd_vel_nav2_smooth
-  -> safety_cmd_mux_node
-  -> /cmd_vel
-  -> waver_base_driver_node or serial_cmd_vel_bridge
+Local PC UI
+  -> SSH
+  -> Jetson host
+  -> Docker container fsd_dev_jetson
+  -> ROS 2 nodes
+  -> Waver USB serial or future UART serial
 ```
 
-The final `/cmd_vel` publisher must be exactly one node: `safety_cmd_mux_node`. The operator UI publishes WASD/manual commands only to `/waver/manual_cmd_vel` and mode requests to `/waver/mode_cmd`; `mission_patrol_manager_node` owns `/waver/mode`.
+Expected real sensor topics:
 
-For real wheel-off/wheel-on tests, prefer `enable_waver_base_driver:=true`. It owns one serial port, subscribes only to final `/cmd_vel`, and publishes `/odom_raw`, `/imu/data_raw`, `/voltage`, `/waver/base_driver_state`, and `/waver/serial_owner_state`.
+- Mid360 pointcloud: `/livox/lidar`
+- Mid360 IMU: `/livox/imu`
+- Safety scan: `/scan_safety` or `/scan`
+- EKF odom: `/odom`
+- Base feedback: `/odom_raw`, `/imu/data_raw`, `/voltage`,
+  `/waver/base_driver_state`, `/waver/serial_owner_state`
 
-## Build
+Use `/dev/serial/by-id/...` for motor serial. Avoid `/dev/ttyUSB0` in final
+wheel-on work unless a single connected serial device has been verified.
+
+## 3. Readiness Levels
+
+The canonical level definitions are in
+`docs/hardware_readiness_levels.md`.
+
+- `L0_SOURCE_CHECK`: source/static/package checks, no hardware access.
+- `L1_ROS_GRAPH_DRY_RUN`: real-profile graph, serial and sound disabled.
+- `L2_SENSOR_ONLY_LIVE`: live LiDAR/TF with motors disabled.
+- `L3_WHEEL_OFF_DRIVER`: base driver feedback with wheels off ground.
+- `L4_WHEEL_ON_LOW_SPEED`: closed-area supervised low-speed wheel-on.
+- `L5_AUTONOMOUS_PATROL`: guarded autonomous patrol after L4 evidence.
+
+## 4. L0 Source Check
 
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
-rosdep install --from-paths src --ignore-src -r -y
-bash src/waver_patrol/scripts/waver_duplicate_package_check.sh
-colcon build --symlink-install --packages-select \
-  waver_patrol ugv_bringup ugv_base_node ugv_tools ugv_nav
-source install/setup.bash
+
+python3 -m compileall -q scripts src/waver_patrol/waver_patrol
+bash scripts/run_no_ros_unit_tests.sh
+python3 scripts/waver_contract_check.py --require-git-branch jo
+python3 scripts/waver_field_readiness_check.py --level L0 --strict --no-hardware
 ```
 
-## Indoor Low-Speed Profile
+Expected final line:
 
-Use this launch before enabling the full bird-autonomy stack indoors:
-
-```bash
-ros2 launch waver_patrol waver_indoor_patrol_real.launch.py \
-  default_mode:=STANDBY \
-  safety_max_linear_speed:=0.05 \
-  safety_max_angular_speed:=0.20 \
-  enable_waver_base_driver:=false
+```text
+FIELD_READINESS=PASS
 ```
 
-It keeps scan/safety/Nav2 wiring while disabling bird detector, bird 3D fusion,
-sound, target-departure, experiment logger, and battery-return manager by
-default. See `src/waver_patrol/docs/indoor_real_patrol_runbook.md`.
+## 5. L1 Dry Run
 
-## Dry Run, No Serial
+L1 must not open the motor serial port.
 
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
@@ -59,61 +82,53 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   start_serial_bridge:=false \
   enable_waver_base_driver:=false \
   default_mode:=STANDBY \
-  safety_max_linear_speed:=0.05 \
-  scan_source:=mid360 \
-  odom_source:=ekf \
-  map:=$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml \
-  bird_model_path:=$HOME/models/bird_yolov8n.pt
+  require_scan:=false \
+  enable_sound_deterrent:=false \
+  enable_sound_output:=false \
+  enable_bird_detector:=false \
+  enable_bird_3d_fusion:=false
+
+python3 scripts/waver_field_readiness_check.py --level L1 --strict
 ```
 
-If `bird_model_path` is empty or missing, the detector publishes `MODEL_MISSING` and `bird_confirmed=false`; patrol can be checked, but bird approach is blocked.
+## 6. L2 Sensor-Only
 
-## Operator UI
+Motors stay disabled. Verify LiDAR, scan conversion, and TF.
 
 ```bash
-ros2 launch ugv_tools waver_operator_panel.launch.py \
-  profile:=real \
-  publish_direct_cmd_vel:=false \
-  map_topic:=/map \
-  map_display_mode:=auto \
-  global_path_topic:=/plan \
-  local_path_topic:=/local_plan \
-  camera_detection_status_topic:=/waver/bird_detector_state
+python3 scripts/waver_field_readiness_check.py \
+  --level L2 \
+  --strict \
+  --scan-topic /scan_safety \
+  --require-scan true
 ```
 
-## Preflight Checks
+If `/scan_safety` is not produced yet, do not proceed to wheel checks.
+
+## 7. L3 Wheel-Off Driver Check
+
+Only run this with wheels lifted.
 
 ```bash
-bash FSD_Vehicle/src/waver_patrol/scripts/waver_real_preflight_check.sh --strict
-bash FSD_Vehicle/src/waver_patrol/scripts/waver_cmd_chain_check.sh
-bash FSD_Vehicle/src/waver_patrol/scripts/waver_bird_autonomy_health_check.sh
+python3 scripts/waver_base_feedback_probe.py \
+  --serial-port /dev/serial/by-id/<WAVER_SERIAL_ID>
+
+python3 scripts/waver_motor_calibration_wizard.py \
+  --serial-port /dev/serial/by-id/<WAVER_SERIAL_ID> \
+  --allow-hardware \
+  --wheel-off-confirm
+
+python3 scripts/waver_field_readiness_check.py \
+  --level L3 \
+  --strict \
+  --serial-port /dev/serial/by-id/<WAVER_SERIAL_ID> \
+  --enable-waver-base-driver true
 ```
 
-Do not enable serial if any check fails.
+## 8. L4 Closed-Area Low-Speed Wheel-On
 
-## Wheel-Off Test
-
-Only run this with wheels off the ground and a physical E-stop available.
-
-```bash
-ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
-  enable_waver_base_driver:=true \
-  start_serial_bridge:=false \
-  serial_port:=/dev/serial/by-id/<WAVER_SERIAL_ID> \
-  default_mode:=STANDBY \
-  safety_max_linear_speed:=0.05 \
-  safety_max_angular_speed:=0.20 \
-  scan_source:=mid360 \
-  odom_source:=ekf \
-  map:=$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml \
-  bird_model_path:=$HOME/models/bird_yolov8n.pt
-```
-
-Verify manual direction, STOP, E-stop, serial reconnect stop burst, scan stale stop, and `/cmd_vel` single publisher before any wheel-on test.
-
-## Closed-Area Low-Speed Wheel-On
-
-Only after dry-run, preflight, and wheel-off tests pass:
+Wheel-on starts only after L3 PASS and the hardware acceptance matrix has
+evidence for required L4 items.
 
 ```bash
 ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
@@ -125,16 +140,63 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   safety_max_angular_speed:=0.20 \
   scan_source:=mid360 \
   odom_source:=ekf \
-  map:=$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml \
+  map:=$HOME/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml
+
+python3 scripts/waver_field_readiness_check.py \
+  --level L4 \
+  --strict \
+  --serial-port /dev/serial/by-id/<WAVER_SERIAL_ID>
+```
+
+Bird detector, 3D fusion, sound deterrent, target approach, gimbal, and
+experiment logging remain disabled by default in the real bird launch. Enable
+them only for an explicitly approved experimental profile, for example:
+
+```bash
+ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
+  enable_bird_detector:=true \
+  enable_bird_3d_fusion:=true \
+  enable_camera_gimbal_controller:=true \
+  enable_target_goal_manager:=true \
+  enable_target_departure_monitor:=true \
+  enable_radar_command_bridge:=true \
+  enable_experiment_logger:=true \
+  enable_sound_deterrent:=true \
+  enable_sound_output:=false \
   bird_model_path:=$HOME/models/bird_yolov8n.pt
 ```
 
-Start in `STANDBY`. The operator must explicitly press START PATROL in the UI. Bird approach requires `bird_confirmed=true`, valid 3D fusion, elevated height, dynamic motion, fresh robot pose, and a passing safety state.
+## 9. Emergency Stop And Shutdown
 
-## Known Remaining Risks
+Use this software stop helper before killing terminals:
 
-- Camera-LiDAR extrinsic calibration must be measured on the real vehicle.
-- Bird model quality depends on an airport/runway dataset and false-positive testing.
-- Mid360 frame axes must be verified with TF and pointcloud visualization.
-- Battery thresholds must be calibrated under load.
-- Hardware E-stop and serial protocol direction must be validated wheel-off first.
+```bash
+bash scripts/waver_field_stop_all.sh
+```
+
+The physical E-stop remains the primary stop method. The helper publishes zero
+velocity and stops common Waver field nodes, but it is not a substitute for a
+hardware stop.
+
+## 10. Troubleshooting
+
+- If `/cmd_vel` has more than one publisher, stop immediately and run
+  `bash src/waver_patrol/scripts/waver_cmd_chain_check.sh`.
+- If `/waver/mode` has more than one publisher, stop mission testing.
+- If `/voltage` is implausible, verify USB power/backfeed and battery scale.
+- If odom does not update, inspect `config/waver_base_feedback_schema.yaml`
+  and `/waver/base_driver_state`.
+- If LiDAR is present but no scan exists, check `/livox/lidar`, `/livox/imu`,
+  TF, and the scan adapter launch.
+- If a field UI opens without Jetson reachability, close it. A local-only UI
+  can show changing values without moving the robot.
+
+## 11. Known Limitations
+
+- Real camera-LiDAR extrinsics are not proven by source checks.
+- Battery voltage scaling must be calibrated under load.
+- `nav2_collision_monitor` is not the current final command authority.
+  `safety_cmd_mux_node` is the implemented final gate.
+- Full L5 bird autonomy requires detector model validation, 3D fusion
+  evidence, target association evidence, sound-output acknowledgement, and
+  blackbox logs.

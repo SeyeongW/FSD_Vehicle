@@ -1,0 +1,28 @@
+profile: wheel_off_driver_check
+enable_waver_base_driver: true
+start_serial_bridge: false
+serial_port_required: true
+scan_source: mid360
+pointcloud_topic: /livox/lidar
+odom_source: base
+enable_robot_localization: false
+enable_nav2: false
+enable_mission_patrol_manager: false
+enable_auto_behavior_mux: false
+enable_bird_detector: false
+enable_pointcloud_lidar_objects: false
+enable_bird_3d_fusion: false
+enable_sound_deterrent: false
+enable_sound_output: false
+max_linear_speed: 0.03
+max_angular_speed: 0.10
+require_scan: false
+require_odom: true
+require_battery: true
+forbidden_nodes:
+  - gazebo
+  - fake
+  - mock
+  - test_publisher
+  - nav2
+manual_ack_required: true

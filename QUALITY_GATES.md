@@ -35,6 +35,7 @@ WAVER_DISABLE_SOUND_OUTPUT=1
 - `contract_report.json` contains `safety_regression: false`.
 - Release archives are created only by `scripts/make_source_archive.py`, which
   excludes `.git`, `.env`, build outputs, logs, rosbags, and experiment outputs.
+- Final paper/public packages must pass `scripts/check_submission_package.py`.
 - ROS-dependent tests are marked `ros_required`; no-ROS tests can be run without
   importing `rclpy` or ROS message packages.
 
@@ -53,7 +54,16 @@ python3 scripts/make_source_archive.py --root .
 ```
 
 The archive is for source handoff only. It intentionally excludes generated
-maps, bags, experiment outputs, logs, local `.env` files, and `.git`.
+deployment maps, bags, experiment outputs, logs, local `.env` files, and `.git`.
+Documented sample map fixtures under `maps/` and `map_points.txt` may be
+included when accompanied by `docs/sample_map_metadata.md`; stale map archives
+such as `maps/archive/` are excluded from the source release.
+
+Before submitting or sharing an archive:
+
+```bash
+python3 scripts/check_submission_package.py --path <archive>
+```
 
 ## Test Commands
 

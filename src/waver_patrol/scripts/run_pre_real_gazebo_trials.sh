@@ -9,7 +9,9 @@ set -eo pipefail
 #   - fake cluster publisher는 실제 cluster_node.py와 같은 `/waver/lidar_objects` 인터페이스를 낸다.
 #   - serial bridge, real sound output, direct motor control은 켜지지 않는다.
 
-WS="${WAVER_WS:-$HOME/ros2_ws5/FSD_Vehicle}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+WS="${WAVER_WS:-$ROOT}"
 TRIALS="${TRIALS:-1 2 3}"
 REQUIRED_SUCCESSES="${REQUIRED_SUCCESSES:-3}"
 MAX_WAIT_SEC="${MAX_WAIT_SEC:-150}"
@@ -108,7 +110,7 @@ if [ "$RUN_MODE" = "single_session" ]; then
 
   sleep 18
   set +e
-  python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/run_pre_real_sequence_validator.py" \
+  python3 "$SCRIPT_DIR/run_pre_real_sequence_validator.py" \
     --output-root "$OUTPUT_ROOT" \
     --experiment-name "$run_name" \
     --duration-sec "$SEQUENCE_DURATION_SEC" \
@@ -125,10 +127,10 @@ if [ "$RUN_MODE" = "single_session" ]; then
     echo "missing summary: $summary"
     tail -160 "$log_path" || true
   fi
-  python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/generate_pre_real_report.py" \
+  python3 "$SCRIPT_DIR/generate_pre_real_report.py" \
   --results_dir "$OUTPUT_ROOT/$run_name/results" \
     --output "$OUTPUT_ROOT/$run_name/results/final_pass_fail_report.md" || true
-  python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/prepare_paper_results.py" \
+  python3 "$SCRIPT_DIR/prepare_paper_results.py" \
     --input-dir "$OUTPUT_ROOT" \
     --output-root "$OUTPUT_ROOT/paper_ready" || true
   exit "$validator_rc"
@@ -161,7 +163,7 @@ for trial_id in $TRIALS; do
 
   sleep 18
   set +e
-  ROS_DOMAIN_ID="$trial_domain" python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/run_pre_real_sequence_validator.py" \
+  ROS_DOMAIN_ID="$trial_domain" python3 "$SCRIPT_DIR/run_pre_real_sequence_validator.py" \
     --output-root "$OUTPUT_ROOT" \
     --experiment-name "$run_name" \
     --duration-sec "$SEQUENCE_DURATION_SEC" \
@@ -190,15 +192,15 @@ for trial_id in $TRIALS; do
 done
 
 echo "Pre-real Gazebo validation successful: $success_count / $total_count"
-python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/analyze_pre_real_gazebo_trials.py" \
+python3 "$SCRIPT_DIR/analyze_pre_real_gazebo_trials.py" \
   --input_dir "$OUTPUT_ROOT" \
   --output_dir "$OUTPUT_ROOT/results" || true
-python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/plot_pre_real_gazebo_results.py" \
+python3 "$SCRIPT_DIR/plot_pre_real_gazebo_results.py" \
   --results_dir "$OUTPUT_ROOT/results" || true
-python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/generate_pre_real_report.py" \
+python3 "$SCRIPT_DIR/generate_pre_real_report.py" \
   --results_dir "$OUTPUT_ROOT/results" \
   --output "$OUTPUT_ROOT/results/final_pass_fail_report.md" || true
-python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/prepare_paper_results.py" \
+python3 "$SCRIPT_DIR/prepare_paper_results.py" \
   --input-dir "$OUTPUT_ROOT" \
   --output-root "$OUTPUT_ROOT/paper_ready" || true
 

@@ -34,7 +34,7 @@ REQUIRED_SUCCESSES=3 \
 TARGET_MIN_HEIGHT_M=3.0 \
 MIN_DYNAMIC_MOTION_M=0.2 \
 MIN_DYNAMIC_VELOCITY_MPS=0.05 \
-bash src/FSD_Vehicle/src/waver_patrol/scripts/run_pre_real_gazebo_trials.sh
+bash src/waver_patrol/scripts/run_pre_real_gazebo_trials.sh
 ```
 
 For a stronger stability check:
@@ -45,7 +45,7 @@ ROS_DOMAIN_BASE=190 \
 TRIALS="1 2 3 1 2" \
 REQUIRED_SUCCESSES=5 \
 SEQUENCE_DURATION_SEC=5.0 \
-bash src/FSD_Vehicle/src/waver_patrol/scripts/run_pre_real_gazebo_trials.sh
+bash src/waver_patrol/scripts/run_pre_real_gazebo_trials.sh
 ```
 
 ## Success Criteria

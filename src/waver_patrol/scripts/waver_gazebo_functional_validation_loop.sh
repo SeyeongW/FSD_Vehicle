@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 SCENARIO="all"
 CYCLES=2
+PAPER_STRICT=false
 TIMEOUT_SEC="${WAVER_GAZEBO_VALIDATION_TIMEOUT_SEC:-120}"
 ROS_DOMAIN_ID_BASE="${WAVER_GAZEBO_VALIDATION_DOMAIN_BASE:-83}"
 REPORT_ROOT="${WAVER_GAZEBO_REPORT_ROOT:-${ROOT}/reports/gazebo_functional_validation/$(date +%Y%m%d_%H%M%S)}"
 
 usage() {
   cat <<'EOF'
-Usage: bash src/waver_patrol/scripts/waver_gazebo_functional_validation_loop.sh [--scenario NAME] [--cycles N]
+Usage: bash src/waver_patrol/scripts/waver_gazebo_functional_validation_loop.sh [--scenario NAME] [--cycles N] [--paper-strict]
 
 Scenarios:
   keyboard_teleop_smoke
@@ -30,6 +32,7 @@ while [ "$#" -gt 0 ]; do
     --scenario) SCENARIO="${2:?missing scenario}"; shift 2 ;;
     --cycles) CYCLES="${2:?missing cycles}"; shift 2 ;;
     --timeout-sec) TIMEOUT_SEC="${2:?missing timeout}"; shift 2 ;;
+    --paper-strict) PAPER_STRICT=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage; exit 2 ;;
   esac
@@ -37,7 +40,7 @@ done
 
 mkdir -p "${REPORT_ROOT}"
 summary="${REPORT_ROOT}/summary.csv"
-echo "cycle,scenario,status,command,evidence,key_output" > "${summary}"
+echo "cycle,scenario,raw_status,final_status,limitation,command_rc,command,evidence_path,key_output" > "${summary}"
 
 scenario_list() {
   case "$1" in
@@ -83,7 +86,7 @@ cleanup_gazebo_validation() {
 
 fatal_log_patterns() {
   grep -Eiq \
-    "Unable to start server|Spawn service failed|process has died|Caught exception in launch|package .* not found|Traceback \\(most recent call last\\)" \
+    "Unable to start server|Address already in use|Spawn service failed|process has died|Failed to load plugin|Traceback|package .* not found|Service /spawn_entity unavailable|Caught exception in launch" \
     "$1"
 }
 
@@ -115,6 +118,10 @@ run_one() {
   cmd="$(scenario_command "${scenario}")"
   local domain=$((ROS_DOMAIN_ID_BASE + cycle))
   local status="PASS"
+  local raw_status="PASS"
+  local final_status="PASS"
+  local limitation=""
+  local command_rc=""
   local key="completed"
 
   if ! can_run_ros; then
@@ -123,6 +130,7 @@ run_one() {
     {
       echo "GAZEBO_FUNCTIONAL_VALIDATION ${scenario}"
       echo "STATUS=${status}"
+      echo "FINAL_STATUS=${status}"
       echo "REASON=${key}"
       echo "COMMAND=${cmd}"
     } >"${log}"
@@ -158,38 +166,57 @@ run_one() {
     } >"${log}" 2>&1 || {
       status="FAIL"
       key="$(tail -1 "${log}" | tr ',' ';')"
+      echo "FINAL_STATUS=FAIL" >> "${log}"
     }
     cleanup_gazebo_validation
-    if grep -q "STATUS=SKIP_WITH_REASON" "${log}" && [ "${status}" = "PASS" ]; then
-      status="SKIP_WITH_REASON"
-      key="$(grep 'STATUS=SKIP_WITH_REASON' "${log}" | tail -1 | tr ',' ';')"
-    fi
-    if [ "${status}" = "PASS" ] && fatal_log_patterns "${log}"; then
-      status="FAIL"
-      key="fatal Gazebo/launch error pattern in log"
-    fi
-    if [ "${status}" = "SKIP_WITH_REASON" ] && ! fatal_log_patterns "${log}" && timeout_success_markers "${scenario}" "${log}"; then
-      status="PASS"
-      key="timeout_after_expected_success_markers"
-    fi
   fi
 
-  echo "${cycle},${scenario},${status},\"${cmd}\",${log},\"${key}\"" >> "${summary}"
-  echo "GAZEBO_FUNCTIONAL_${scenario}_CYCLE_${cycle}=${status} evidence=${log}"
-  [ "${status}" != "FAIL" ]
+  local classification
+  classification="$(python3 "${SCRIPT_DIR}/validation_status_utils.py" --log "${log}" --scenario "${scenario}" 2>/dev/null || true)"
+  raw_status="$(printf '%s\n' "${classification}" | awk -F= '$1=="raw_status"{print $2}' | tail -1)"
+  final_status="$(printf '%s\n' "${classification}" | awk -F= '$1=="final_status"{print $2}' | tail -1)"
+  limitation="$(printf '%s\n' "${classification}" | awk -F= '$1=="limitation"{print $2}' | tail -1)"
+  command_rc="$(printf '%s\n' "${classification}" | awk -F= '$1=="command_rc"{print $2}' | tail -1)"
+  raw_status="${raw_status:-${status}}"
+  final_status="${final_status:-${status}}"
+  limitation="${limitation:-${key}}"
+  command_rc="${command_rc:-}"
+  if ! grep -q '^FINAL_STATUS=' "${log}"; then
+    echo "FINAL_STATUS=${final_status}" >> "${log}"
+    [ -n "${limitation}" ] && echo "FINAL_REASON=${limitation}" >> "${log}"
+  fi
+
+  echo "${cycle},${scenario},${raw_status},${final_status},\"${limitation}\",${command_rc},\"${cmd}\",${log},\"${key}\"" >> "${summary}"
+  echo "GAZEBO_FUNCTIONAL_${scenario}_CYCLE_${cycle}=${final_status} evidence=${log}"
+  if [ "${PAPER_STRICT}" = "true" ]; then
+    [ "${final_status}" = "PASS" ]
+  else
+    [ "${final_status}" != "FAIL" ]
+  fi
 }
 
 overall=0
+skip_seen=0
 scenarios="$(scenario_list "${SCENARIO}")"
 for cycle in $(seq 1 "${CYCLES}"); do
   for s in ${scenarios}; do
-    run_one "${cycle}" "${s}" || overall=1
+    if ! run_one "${cycle}" "${s}"; then
+      overall=1
+    fi
+    last_status="$(tail -n 1 "${summary}" | awk -F, '{print $4}')"
+    if [ "${last_status}" != "PASS" ] && [ "${last_status}" != "FAIL" ]; then
+      skip_seen=1
+    fi
   done
 done
 
 echo "GAZEBO_FUNCTIONAL_REPORT=${REPORT_ROOT}"
 if [ "${overall}" -eq 0 ]; then
-  echo "GAZEBO_FUNCTIONAL_VALIDATION=PASS_OR_SKIP"
+  if [ "${skip_seen}" -eq 1 ]; then
+    echo "GAZEBO_FUNCTIONAL_VALIDATION=PASS_WITH_SKIPS"
+  else
+    echo "GAZEBO_FUNCTIONAL_VALIDATION=PASS"
+  fi
 else
   echo "GAZEBO_FUNCTIONAL_VALIDATION=FAIL"
 fi

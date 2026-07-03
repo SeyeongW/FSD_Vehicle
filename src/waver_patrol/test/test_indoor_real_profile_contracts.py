@@ -47,7 +47,7 @@ def test_real_launch_exposes_battery_return_and_rviz_passthrough():
     launch = text("src/waver_patrol/launch/waver_real_bird_autonomy.launch.py")
     assert 'DeclareLaunchArgument("enable_battery_return", default_value="true")' in launch
     assert '"enable_battery_return": LaunchConfiguration("enable_battery_return")' in launch
-    assert 'DeclareLaunchArgument("enable_target_goal_manager", default_value="true")' in launch
+    assert 'DeclareLaunchArgument("enable_target_goal_manager", default_value="false")' in launch
     assert '"enable_target_goal_manager": LaunchConfiguration("enable_target_goal_manager")' in launch
     assert 'DeclareLaunchArgument("use_rviz", default_value="false")' in launch
     assert '"use_rviz": LaunchConfiguration("use_rviz")' in launch

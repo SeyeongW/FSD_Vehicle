@@ -18,3 +18,5 @@ This audit records package metadata state without inventing license claims.
 - Do not guess legal license terms.
 - For Waver-owned packages, descriptions should say whether a package is real,
   Gazebo-only, evaluation-only, or operator UI.
+- `livox_laser_simulation_RO2` has unresolved upstream package metadata; not
+  part of Waver original contribution claim.

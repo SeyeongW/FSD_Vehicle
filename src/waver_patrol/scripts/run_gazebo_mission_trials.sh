@@ -9,7 +9,9 @@ set -eo pipefail
 #     다음 trial로 넘어간다.
 #   - 실차 주행용이 아니며, require_scan=false와 sim goal arrival을 쓰는 Gazebo 검증 전용이다.
 
-WS="${WAVER_WS:-$HOME/ros2_ws5/FSD_Vehicle}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+WS="${WAVER_WS:-$ROOT}"
 TRIALS="${TRIALS:-1 2 3}"
 MAX_WAIT_SEC="${MAX_WAIT_SEC:-150}"
 USE_GUI="${USE_GUI:-false}"
@@ -155,7 +157,7 @@ for trial_id in $TRIALS; do
 done
 
 echo "Gazebo mission trials successful: $success_count / $total_count"
-python3 "$WS/src/FSD_Vehicle/src/waver_patrol/scripts/analyze_gazebo_trials.py" \
+python3 "$SCRIPT_DIR/analyze_gazebo_trials.py" \
   --input_dir "$OUTPUT_ROOT" \
   --output_dir "$OUTPUT_ROOT/results" || true
 

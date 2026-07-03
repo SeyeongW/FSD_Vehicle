@@ -48,7 +48,7 @@ colcon source space first:
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
 mkdir -p src
-rsync -a _waver_archived_non_ugv_tools_20260519/src/waver_patrol/ src/FSD_Vehicle/src/waver_patrol/
+rsync -a _waver_archived_non_ugv_tools_20260519/src/waver_patrol/ src/waver_patrol/
 ```
 
 Do not move or symlink the `FSD_Vehicle` trees while doing this; duplicate packages can break
@@ -57,7 +57,7 @@ Do not move or symlink the `FSD_Vehicle` trees while doing this; duplicate packa
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
-rosdep install -i --from-paths src/FSD_Vehicle/src/waver_patrol --rosdistro humble -y
+rosdep install -i --from-paths src/waver_patrol --rosdistro humble -y
 colcon build --packages-select waver_patrol --symlink-install
 source install/setup.bash
 ```
@@ -127,7 +127,7 @@ ros2 launch waver_patrol waver_localization.launch.py map:=/path/to/map.yaml use
 
 ```bash
 ros2 launch waver_patrol waver_nav2.launch.py use_localization:=amcl use_localplan:=dwa use_rviz:=true
-ros2 launch waver_patrol waver_patrol.launch.py waypoints:=src/FSD_Vehicle/src/waver_patrol/waypoints/patrol_outdoor_demo.yaml use_rviz:=true
+ros2 launch waver_patrol waver_patrol.launch.py waypoints:=src/waver_patrol/waypoints/patrol_outdoor_demo.yaml use_rviz:=true
 ```
 
 Important command-path rule: enable only one base-control path. If existing `ugv_nav` or
@@ -270,7 +270,7 @@ against the actual map/localization origin before wheel-on testing.
 
 ## Final Real-Robot Safety Checklist
 
-1. Confirm exactly one build-visible `waver_patrol` exists, preferably `src/FSD_Vehicle/src/waver_patrol`.
+1. Confirm exactly one build-visible `waver_patrol` exists, preferably `src/waver_patrol`.
 2. Build with `colcon build --packages-select waver_patrol --symlink-install`.
 3. Confirm `/cmd_vel` publisher is only `safety_cmd_mux_node`.
 4. Confirm `ugv_driver` and `serial_cmd_vel_bridge` are not both running.
@@ -493,7 +493,7 @@ ros2 launch waver_patrol waver_gazebo_nav2_radar_bird_mission.launch.py \
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
-rosdep install -i --from-paths src/FSD_Vehicle/src/waver_patrol --rosdistro humble -y
+rosdep install -i --from-paths src/waver_patrol --rosdistro humble -y
 colcon build --packages-select waver_patrol --symlink-install
 source install/setup.bash
 ```
@@ -615,7 +615,7 @@ commands go through `auto_behavior_mux_node`, then `safety_cmd_mux_node`, and on
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
-colcon build --paths src/FSD_Vehicle/src/waver_patrol src/FSD_Vehicle/src/ugv_main/ugv_gazebo \
+colcon build --paths src/waver_patrol src/FSD_Vehicle/src/ugv_main/ugv_gazebo \
   --packages-select waver_patrol ugv_gazebo --symlink-install
 source install/setup.bash
 
@@ -698,13 +698,13 @@ Run the required three headless trials:
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-bash src/FSD_Vehicle/src/waver_patrol/scripts/run_gazebo_mission_trials.sh
+bash src/waver_patrol/scripts/run_gazebo_mission_trials.sh
 ```
 
 Analyze results:
 
 ```bash
-python3 src/FSD_Vehicle/src/waver_patrol/scripts/analyze_gazebo_trials.py \
+python3 src/waver_patrol/scripts/analyze_gazebo_trials.py \
   --input_dir ~/ros2_ws5/FSD_Vehicle/experiments_result \
   --output_dir ~/ros2_ws5/FSD_Vehicle/experiments_result/results
 ```

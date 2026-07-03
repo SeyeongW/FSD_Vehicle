@@ -108,13 +108,13 @@ Run the 3-trial headless sequence:
 cd ~/ros2_ws5/FSD_Vehicle
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-bash src/FSD_Vehicle/src/waver_patrol/scripts/run_gazebo_mission_trials.sh
+bash src/waver_patrol/scripts/run_gazebo_mission_trials.sh
 ```
 
 Optional rosbag recording can create large files:
 
 ```bash
-RECORD_BAG=true bash src/FSD_Vehicle/src/waver_patrol/scripts/run_gazebo_mission_trials.sh
+RECORD_BAG=true bash src/waver_patrol/scripts/run_gazebo_mission_trials.sh
 ```
 
 Do not commit `experiments_result/rosbag`, `build`, `install`, or `log`.
@@ -180,7 +180,7 @@ The key summary columns are:
 Analyze all trials:
 
 ```bash
-python3 src/FSD_Vehicle/src/waver_patrol/scripts/analyze_gazebo_trials.py \
+python3 src/waver_patrol/scripts/analyze_gazebo_trials.py \
   --input_dir ~/ros2_ws5/FSD_Vehicle/experiments_result \
   --output_dir ~/ros2_ws5/FSD_Vehicle/experiments_result/results
 ```
@@ -188,7 +188,7 @@ python3 src/FSD_Vehicle/src/waver_patrol/scripts/analyze_gazebo_trials.py \
 Optional plots:
 
 ```bash
-python3 src/FSD_Vehicle/src/waver_patrol/scripts/plot_gazebo_trial_results.py \
+python3 src/waver_patrol/scripts/plot_gazebo_trial_results.py \
   --input_dir ~/ros2_ws5/FSD_Vehicle/experiments_result/results \
   --output_dir ~/ros2_ws5/FSD_Vehicle/experiments_result/results
 ```

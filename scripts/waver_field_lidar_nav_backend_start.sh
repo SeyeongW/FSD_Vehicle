@@ -21,7 +21,7 @@ MAP_PATH="${MAP_PATH:-/ros2_ws/ros2_ws5/maps/waver_latest_map.yaml}"
 WAYPOINT_FILE="${WAYPOINT_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/waypoints/waver_real_0p5m_square_patrol.yaml}"
 MISSION_PARAMS_FILE="${MISSION_PARAMS_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/config/waver_nav2_radar_bird_mission_real.yaml}"
 NAV2_PARAMS_FILE="${NAV2_PARAMS_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/config/nav2_params_waver_real.yaml}"
-ODOM_SOURCE="${ODOM_SOURCE:-base}"
+ODOM_SOURCE="${ODOM_SOURCE:-ekf}"
 POINTCLOUD_TOPIC="${POINTCLOUD_TOPIC:-${LIVOX_POINTCLOUD_TOPIC:-/livox/lidar}}"
 SCAN_TOPIC="${SCAN_TOPIC:-/scan}"
 START_LIVOX_DRIVER="${START_LIVOX_DRIVER:-true}"
@@ -39,6 +39,11 @@ SAFETY_MAX_LINEAR_SPEED="${SAFETY_MAX_LINEAR_SPEED:-0.05}"
 SAFETY_MAX_ANGULAR_SPEED="${SAFETY_MAX_ANGULAR_SPEED:-0.20}"
 ENABLE_BIRD_STACK="${ENABLE_BIRD_STACK:-false}"
 ENABLE_SOUND_STACK="${ENABLE_SOUND_STACK:-false}"
+ENABLE_WAVER_BASE_DRIVER="${ENABLE_WAVER_BASE_DRIVER:-true}"
+REQUIRE_SCAN="${REQUIRE_SCAN:-true}"
+WAVER_FIELD_MODE="${WAVER_FIELD_MODE:-production}"
+FIELD_READINESS_LEVEL="${FIELD_READINESS_LEVEL:-L3}"
+FIELD_READINESS_STRICT="${FIELD_READINESS_STRICT:-true}"
 SERIAL_PORT_BY_ID_PATTERN="${SERIAL_PORT_BY_ID_PATTERN:-/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_*}"
 SERIAL_PORT_ALLOW_TTYUSB_FALLBACK="${SERIAL_PORT_ALLOW_TTYUSB_FALLBACK:-false}"
 SERIAL_PORT_ALLOW_TTYTHS_FALLBACK="${SERIAL_PORT_ALLOW_TTYTHS_FALLBACK:-false}"
@@ -87,6 +92,9 @@ SYNC_PATHS=(
   "src/ugv_main/ugv_nav/launch"
   "src/ugv_main/ugv_nav/param"
   "maps"
+  "scripts"
+  "docs"
+  "config/real_profiles"
 )
 
 for rel in "${SYNC_PATHS[@]}"; do
@@ -106,7 +114,8 @@ done
   "${LIVOX_FRAME_ID}" "${LIVOX_PUBLISH_FREQ}" "${LIVOX_BD_CODE}" \
   "${LIVOX_HOST_IP}" "${LIVOX_SENSOR_IP}" "${BIRD_MODEL_PATH}" \
   "${CAMERA_IMAGE_TOPIC}" "${CAMERA_INFO_TOPIC}" \
-  "${SERIAL_PORT_BY_ID_PATTERN}" "${SERIAL_PORT_ALLOW_TTYUSB_FALLBACK}" "${SERIAL_PORT_ALLOW_TTYTHS_FALLBACK}" <<'REMOTE'
+  "${SERIAL_PORT_BY_ID_PATTERN}" "${SERIAL_PORT_ALLOW_TTYUSB_FALLBACK}" "${SERIAL_PORT_ALLOW_TTYTHS_FALLBACK}" \
+  "${ENABLE_WAVER_BASE_DRIVER}" "${REQUIRE_SCAN}" "${WAVER_FIELD_MODE}" "${FIELD_READINESS_LEVEL}" "${FIELD_READINESS_STRICT}" <<'REMOTE'
 set -euo pipefail
 
 JETSON_WS="$1"
@@ -138,6 +147,11 @@ CAMERA_INFO_TOPIC="${26}"
 SERIAL_PORT_BY_ID_PATTERN="${27}"
 SERIAL_PORT_ALLOW_TTYUSB_FALLBACK="${28}"
 SERIAL_PORT_ALLOW_TTYTHS_FALLBACK="${29}"
+ENABLE_WAVER_BASE_DRIVER="${30}"
+REQUIRE_SCAN="${31}"
+WAVER_FIELD_MODE="${32}"
+FIELD_READINESS_LEVEL="${33}"
+FIELD_READINESS_STRICT="${34}"
 BIRD_MODEL_LAUNCH_ARG=""
 if [ -n "${BIRD_MODEL_PATH}" ]; then
   BIRD_MODEL_LAUNCH_ARG="bird_model_path:=${BIRD_MODEL_PATH}"
@@ -211,8 +225,9 @@ if [ "${FIELD_BUILD_IN_DOCKER}" = "true" ]; then
   '
 fi
 
-echo "[JETSON] overlaying source launch/config/python into install_docker"
-docker exec "${CONTAINER}" bash -lc '
+if [ "${WAVER_FIELD_MODE}" = "dev" ]; then
+  echo "[JETSON][DEV] overlaying source launch/config/python into install_docker"
+  docker exec "${CONTAINER}" bash -lc '
 set -e
 cd /ros2_ws/ros2_ws5
 if [ -d install_docker/waver_patrol/share/waver_patrol ]; then
@@ -227,6 +242,13 @@ if [ -d install_docker/waver_patrol/lib/python3.10/site-packages/waver_patrol ];
   cp -r src/waver_patrol/waver_patrol/* install_docker/waver_patrol/lib/python3.10/site-packages/waver_patrol/
 fi
 '
+else
+  echo "[JETSON] production mode: hot overlay disabled; using built install_docker artifacts"
+  docker exec "${CONTAINER}" bash -lc 'cd /ros2_ws/ros2_ws5 && test -f install_docker/setup.bash && source /opt/ros/humble/setup.bash && source install_docker/setup.bash && ros2 pkg prefix waver_patrol >/dev/null && ros2 pkg executables waver_patrol >/dev/null' || {
+    echo "[JETSON][ERROR] production mode requires built install_docker artifacts. Set FIELD_BUILD_IN_DOCKER=true or WAVER_FIELD_MODE=dev for development overlay." >&2
+    exit 31
+  }
+fi
 
 echo "[JETSON] stopping stale Waver/Nav2 processes"
 pkill -f "docker exec -i ${CONTAINER}.*WAVER_REMOTE_BRIDGE_TIMEOUT_S" 2>/dev/null || true
@@ -327,7 +349,7 @@ exec ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   real_profile:=true \
   use_nav2:=true \
   default_mode:=STANDBY \
-  enable_waver_base_driver:=true \
+  enable_waver_base_driver:=${ENABLE_WAVER_BASE_DRIVER} \
   serial_port:=${SERIAL_PORT} \
   start_serial_bridge:=false \
   start_base_feedback:=false \
@@ -335,7 +357,7 @@ exec ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   odom_source:=${ODOM_SOURCE} \
   enable_robot_localization:=${ENABLE_RL} \
   enable_velocity_smoother:=true \
-  require_scan:=true \
+  require_scan:=${REQUIRE_SCAN} \
   scan_source:=mid360 \
   scan_source_safety:=mid360 \
   scan_source_slam:=mid360 \
@@ -405,10 +427,41 @@ docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} &&
 echo "[JETSON] serial owner after launch:"
 fuser -v "${SERIAL_PORT}" 2>&1 || true
 
-echo "[JETSON] LIDAR_NAV_BACKEND_READY=YES"
+READINESS_ARGS=(--level "${FIELD_READINESS_LEVEL}" --scan-topic "${SCAN_TOPIC}" --odom-source "${ODOM_SOURCE}" --require-scan "${REQUIRE_SCAN}" --enable-waver-base-driver "${ENABLE_WAVER_BASE_DRIVER}" --enable-bird-stack "${ENABLE_BIRD_STACK}" --enable-sound-output "false" --serial-port "${SERIAL_PORT}")
+if [ "${FIELD_READINESS_STRICT}" = "true" ]; then
+  READINESS_ARGS+=(--strict)
+fi
+echo "[JETSON] running field readiness checker: ${READINESS_ARGS[*]}"
+if docker exec \
+  -e ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}" \
+  -e RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}" \
+  -e SERIAL_PORT="${SERIAL_PORT}" \
+  -e ODOM_SOURCE="${ODOM_SOURCE}" \
+  -e REQUIRE_SCAN="${REQUIRE_SCAN}" \
+  -e ENABLE_WAVER_BASE_DRIVER="${ENABLE_WAVER_BASE_DRIVER}" \
+  -e ENABLE_BIRD_STACK="${ENABLE_BIRD_STACK}" \
+  -e ENABLE_SOUND_OUTPUT="false" \
+  "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && python3 scripts/waver_field_readiness_check.py ${READINESS_ARGS[*]}" | tee /tmp/waver_lidar_nav_readiness.log; then
+  readiness_status="$(awk -F= '/^FIELD_READINESS=/{print $2}' /tmp/waver_lidar_nav_readiness.log | tail -1)"
+else
+  readiness_status="FAIL"
+fi
+case "${readiness_status}" in
+  PASS)
+    echo "[JETSON] LIDAR_NAV_BACKEND_READY=PASS"
+    ;;
+  PASS_LIMITED)
+    echo "[JETSON] LIDAR_NAV_BACKEND_READY=PASS_LIMITED"
+    ;;
+  *)
+    echo "[JETSON] LIDAR_NAV_BACKEND_READY=FAIL"
+    exit 40
+    ;;
+esac
 REMOTE
 
-echo "[LOCAL] LIDAR_NAV_BACKEND_READY=YES"
+echo "[LOCAL] LIDAR_NAV_BACKEND_STARTED=YES"
+echo "[LOCAL] Backend final readiness is printed by Jetson as LIDAR_NAV_BACKEND_READY=PASS|PASS_LIMITED|FAIL"
 echo "[LOCAL] Open the local UI in another terminal:"
 echo "  cd ~/ros2_ws5/FSD_Vehicle"
 echo "  JETSON_HOST=${JETSON_HOST} bash scripts/waver_field_local_ui_start.sh"

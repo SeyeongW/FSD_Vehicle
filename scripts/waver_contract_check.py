@@ -56,6 +56,13 @@ def git_branch(root: Path) -> str:
         return ""
 
 
+def load_json(path: Path) -> dict[str, object]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def source_files(root: Path, patterns: Iterable[str]) -> list[Path]:
     out: list[Path] = []
     ignored = {
@@ -79,13 +86,22 @@ def source_files(root: Path, patterns: Iterable[str]) -> list[Path]:
 
 
 class ContractCheck:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, require_git_branch: str = "", allow_source_archive_without_git: bool = False) -> None:
         self.root = root.resolve()
+        self.git_dir = self.root / ".git"
+        self.has_git = self.git_dir.exists()
+        self.require_git_branch = require_git_branch
+        self.allow_source_archive_without_git = allow_source_archive_without_git
+        self.source_manifest = load_json(self.root / "reports/source_manifest.json")
+        branch = git_branch(self.root) if self.has_git else str(self.source_manifest.get("git_branch_or_unknown", ""))
         self.issues: list[Issue] = []
         self.summary: dict[str, object] = {
             "workspace_root": str(self.root),
             "timestamp": datetime.now().isoformat(timespec="seconds"),
-            "branch": git_branch(self.root),
+            "branch": branch,
+            "git_present": self.has_git,
+            "source_manifest_present": bool(self.source_manifest),
+            "artifact_type": self.source_manifest.get("artifact_type", "dev_workspace" if self.has_git else "source_archive_unknown"),
         }
 
     def add(self, severity: str, category: str, message: str, path: Path | str = "", recommendation: str = "") -> None:
@@ -98,8 +114,43 @@ class ContractCheck:
         return p
 
     def check_workspace(self) -> None:
-        if self.summary["branch"] != "jo":
-            self.add("CRITICAL", "workspace", f"Current git branch is {self.summary['branch']!r}, expected 'jo'.")
+        if self.has_git:
+            if self.require_git_branch and self.summary["branch"] != self.require_git_branch:
+                self.add(
+                    "CRITICAL",
+                    "workspace",
+                    f"Current git branch is {self.summary['branch']!r}, expected {self.require_git_branch!r}.",
+                )
+            elif not self.require_git_branch and self.summary["branch"] != "jo":
+                self.add("INFO", "workspace", f"Current git branch is {self.summary['branch']!r}; jo is expected for release work.")
+        else:
+            if self.allow_source_archive_without_git:
+                if self.source_manifest:
+                    self.add(
+                        "INFO",
+                        "workspace",
+                        "No .git directory found; using reports/source_manifest.json metadata for source archive verification.",
+                        "reports/source_manifest.json",
+                    )
+                    if self.require_git_branch and self.summary["branch"] != self.require_git_branch:
+                        self.add(
+                            "LOW",
+                            "workspace",
+                            f"Source manifest branch is {self.summary['branch']!r}, expected {self.require_git_branch!r}.",
+                            "reports/source_manifest.json",
+                        )
+                else:
+                    self.add(
+                        "LOW",
+                        "workspace",
+                        "No .git directory and no reports/source_manifest.json; source archive provenance is limited.",
+                    )
+            else:
+                self.add(
+                    "INFO",
+                    "workspace",
+                    "No .git directory found. Use --allow-source-archive-without-git for extracted source release checks.",
+                )
         if not (self.root / "src/waver_patrol/package.xml").exists():
             self.add("CRITICAL", "workspace", "src/waver_patrol/package.xml was not found.")
         for artifact in ("build", "install", "log", "experiment_results"):
@@ -129,7 +180,9 @@ class ContractCheck:
             ".dockerignore": "release_hygiene",
             "pytest.ini": "test_hygiene",
             "scripts/make_source_archive.py": "release_hygiene",
+            "scripts/check_submission_package.py": "release_hygiene",
             "scripts/run_no_ros_unit_tests.sh": "test_hygiene",
+            "docs/artifact_policy.md": "release_hygiene",
             "src/waver_patrol/docs/operator_modes.md": "operator_docs",
             "src/waver_patrol/docs/real_bird_detector_contract.md": "detector_contract",
             "src/waver_patrol/docs/evidence_levels.md": "evidence_contract",
@@ -442,10 +495,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Hardware-free Waver real/sim contract checker.")
     parser.add_argument("--root", default=".", help="Workspace root")
     parser.add_argument("--report-dir", default="", help="Directory for contract_report.txt/json")
+    parser.add_argument("--require-git-branch", default="", help="Require this git branch when .git is present")
+    parser.add_argument(
+        "--allow-source-archive-without-git",
+        action="store_true",
+        help="Allow extracted source release checks without a .git directory by using reports/source_manifest.json.",
+    )
     args = parser.parse_args()
 
     root = Path(args.root).expanduser().resolve()
-    checker = ContractCheck(root)
+    checker = ContractCheck(
+        root,
+        require_git_branch=args.require_git_branch,
+        allow_source_archive_without_git=args.allow_source_archive_without_git,
+    )
     report = checker.run()
     if args.report_dir:
         write_reports(report, Path(args.report_dir).expanduser())

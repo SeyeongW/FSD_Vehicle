@@ -4,6 +4,7 @@ import json
 import math
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import rclpy
@@ -70,6 +71,8 @@ class WaverBaseDriverNode(Node):
         self.declare_parameter("max_encoder_delta_m", 0.5)
         self.declare_parameter("voltage_scale", 1.0)
         self.declare_parameter("voltage_offset_v", 0.0)
+        self.declare_parameter("feedback_schema_path", "")
+        self.declare_parameter("odom_feedback_stale_s", 1.0)
 
         self.serial_port = str(self.get_parameter("serial_port").value).strip()
         if not self.serial_port:
@@ -94,6 +97,18 @@ class WaverBaseDriverNode(Node):
         self.max_encoder_delta_m = float(self.get_parameter("max_encoder_delta_m").value)
         self.voltage_scale = float(self.get_parameter("voltage_scale").value)
         self.voltage_offset_v = float(self.get_parameter("voltage_offset_v").value)
+        self.odom_feedback_stale_s = float(self.get_parameter("odom_feedback_stale_s").value)
+        self.feedback_schema = self.load_feedback_schema(str(self.get_parameter("feedback_schema_path").value))
+        self.feedback_packet_type = int(self.feedback_schema.get("packet_type", 1001))
+        self.left_odom_field = str(self.feedback_schema.get("left_odom_field", "odl"))
+        self.right_odom_field = str(self.feedback_schema.get("right_odom_field", "odr"))
+        self.feedback_unit = str(self.feedback_schema.get("unit", "cm")).lower()
+        self.scale_left = float(self.feedback_schema.get("scale_left", 1.0))
+        self.scale_right = float(self.feedback_schema.get("scale_right", 1.0))
+        self.invert_left = bool(self.feedback_schema.get("invert_left", False))
+        self.invert_right = bool(self.feedback_schema.get("invert_right", False))
+        if "wheel_base_m" in self.feedback_schema:
+            self.wheel_base_m = max(0.05, float(self.feedback_schema.get("wheel_base_m", self.wheel_base_m)))
 
         self.converter = CmdVelToJson(
             CmdVelToJsonConfig(
@@ -134,6 +149,7 @@ class WaverBaseDriverNode(Node):
         self.last_payload = {"T": 1, "L": 0.0, "R": 0.0}
         self.last_cmd_time = 0.0
         self.last_feedback_time = 0.0
+        self.last_odom_feedback_time = 0.0
         self.last_feedback_request_time = 0.0
         self.last_voltage_v = 0.0
         self.state = "STARTUP_STOP"
@@ -145,6 +161,8 @@ class WaverBaseDriverNode(Node):
         self.odom_x = 0.0
         self.odom_y = 0.0
         self.odom_yaw = 0.0
+        self.odom_feedback_status = "ODOM_FEEDBACK_MISSING"
+        self.odom_feedback_error = ""
 
         self.legacy_odom_raw_pub = (
             self.create_publisher(Float32MultiArray, self.legacy_float32_odom_topic, 50)
@@ -172,6 +190,25 @@ class WaverBaseDriverNode(Node):
             f"waver_base_driver_node owns serial port {self.serial_port}. "
             "Do not run ugv_bringup feedback, ugv_driver, or serial_cmd_vel_bridge on this port."
         )
+
+    def load_feedback_schema(self, path_text: str) -> dict[str, Any]:
+        if not path_text:
+            return {}
+        path = Path(path_text).expanduser()
+        if not path.exists():
+            self.get_logger().warn(f"feedback_schema_path does not exist: {path}")
+            return {}
+        try:
+            import yaml
+
+            data = yaml.safe_load(path.read_text()) or {}
+            if not isinstance(data, dict):
+                self.get_logger().warn(f"feedback schema is not a YAML mapping: {path}")
+                return {}
+            return data
+        except Exception as exc:
+            self.get_logger().warn(f"failed to load feedback schema {path}: {exc}")
+            return {}
 
     def open_serial(self) -> bool:
         try:
@@ -220,17 +257,11 @@ class WaverBaseDriverNode(Node):
                 time.sleep(0.05)
 
     def publish_feedback(self, data: dict[str, Any]) -> None:
-        if int(data.get("T", 1001)) != 1001:
+        if int(data.get("T", self.feedback_packet_type)) != self.feedback_packet_type:
             return
         self.last_feedback_time = time.monotonic()
 
-        if "odl" in data and "odr" in data:
-            self.wheel_odom_feedback_seen = True
-            odom_left = float(data.get("odl", 0.0)) / 100.0
-            odom_right = float(data.get("odr", 0.0)) / 100.0
-            if self.legacy_odom_raw_pub is not None:
-                self.legacy_odom_raw_pub.publish(Float32MultiArray(data=[odom_left, odom_right]))
-            self.publish_wheel_odom(odom_left, odom_right)
+        self.handle_odom_feedback(data)
 
         imu = Imu()
         imu.header.stamp = self.get_clock().now().to_msg()
@@ -253,6 +284,45 @@ class WaverBaseDriverNode(Node):
         raw_voltage_v = float(data.get("v", 0.0))
         self.last_voltage_v = raw_voltage_v * self.voltage_scale + self.voltage_offset_v
         self.voltage_pub.publish(Float32(data=self.last_voltage_v))
+
+    def odom_unit_scale(self) -> float:
+        if self.feedback_unit in {"m", "meter", "meters"}:
+            return 1.0
+        if self.feedback_unit in {"cm", "centimeter", "centimeters"}:
+            return 0.01
+        if self.feedback_unit in {"mm", "millimeter", "millimeters"}:
+            return 0.001
+        if self.feedback_unit in {"tick", "ticks"}:
+            return 1.0
+        self.odom_feedback_status = "ODOM_FEEDBACK_SCHEMA_ERROR"
+        self.odom_feedback_error = f"unknown_unit={self.feedback_unit}"
+        return 0.0
+
+    def handle_odom_feedback(self, data: dict[str, Any]) -> None:
+        if self.left_odom_field not in data or self.right_odom_field not in data:
+            self.odom_feedback_status = "ODOM_FEEDBACK_MISSING"
+            self.odom_feedback_error = f"missing {self.left_odom_field}/{self.right_odom_field}"
+            return
+        try:
+            unit_scale = self.odom_unit_scale()
+            if unit_scale <= 0.0:
+                return
+            left = float(data[self.left_odom_field]) * unit_scale * self.scale_left
+            right = float(data[self.right_odom_field]) * unit_scale * self.scale_right
+            if self.invert_left:
+                left = -left
+            if self.invert_right:
+                right = -right
+            self.wheel_odom_feedback_seen = True
+            self.last_odom_feedback_time = time.monotonic()
+            self.odom_feedback_status = "ODOM_FEEDBACK_OK"
+            self.odom_feedback_error = ""
+            if self.legacy_odom_raw_pub is not None:
+                self.legacy_odom_raw_pub.publish(Float32MultiArray(data=[left, right]))
+            self.publish_wheel_odom(left, right)
+        except Exception as exc:
+            self.odom_feedback_status = "ODOM_FEEDBACK_SCHEMA_ERROR"
+            self.odom_feedback_error = str(exc)
 
     def on_cmd_vel(self, msg: Twist) -> None:
         if not math.isfinite(msg.linear.x) or not math.isfinite(msg.angular.z):
@@ -438,6 +508,9 @@ class WaverBaseDriverNode(Node):
 
     def publish_state(self) -> None:
         age = time.monotonic() - self.last_feedback_time if self.last_feedback_time else -1.0
+        odom_age = time.monotonic() - self.last_odom_feedback_time if self.last_odom_feedback_time else -1.0
+        if self.odom_feedback_status == "ODOM_FEEDBACK_OK" and odom_age > self.odom_feedback_stale_s:
+            self.odom_feedback_status = "ODOM_FEEDBACK_STALE"
         connected = self.serial is not None and getattr(self.serial, "is_open", False)
         if self.last_feedback_time == 0.0:
             motor_power = "UNKNOWN"
@@ -450,6 +523,8 @@ class WaverBaseDriverNode(Node):
             f"feedback_age_sec={age:.2f} protocol={self.command_protocol} "
             f"voltage_v={self.last_voltage_v:.3f} motor_power={motor_power} "
             f"odom_ok={self.wheel_odom_feedback_seen and self.odom_initialized} "
+            f"odom_feedback_status={self.odom_feedback_status} odom_feedback_age_sec={odom_age:.2f} "
+            f"odom_feedback_error={self.odom_feedback_error or 'none'} "
             f"odom=({self.odom_x:.3f},{self.odom_y:.3f},{self.odom_yaw:.3f}) "
             f"left={self.latest.left:.3f} right={self.latest.right:.3f} "
             f"x={self.latest_twist.linear_x:.3f} z={self.latest_twist.angular_z:.3f} "

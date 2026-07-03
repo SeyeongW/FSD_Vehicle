@@ -44,6 +44,11 @@ map_points.txt
 !src/**/*.yaml
 !src/**/*.yml
 
+# Root-level Waver real-vehicle profile/schema YAML files are source contracts.
+!config/real_profiles/
+!config/real_profiles/*.yaml
+!config/waver_base_feedback_schema.yaml
+
 # Gazebo 임시 파일
 .gazebo/
 .tmp/

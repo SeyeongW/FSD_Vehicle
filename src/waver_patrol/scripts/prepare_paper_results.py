@@ -6,12 +6,20 @@ import csv
 import math
 import os
 import shutil
+import statistics
+from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
 
-HEIGHT_FIELDS = [
+REQUIRED_SCENARIOS_DEFAULT = (
+    "H1_elevated_dynamic",
+    "H2_elevated_static",
+    "H3_low_altitude_dynamic",
+)
+
+BASE_HEIGHT_FIELDS = [
     "source_run",
     "source_summary",
     "sequence_index",
@@ -43,6 +51,17 @@ HEIGHT_FIELDS = [
     "failure_reason",
 ]
 
+EVIDENCE_FIELDS = [
+    "sim_or_real",
+    "fake_detector_used",
+    "fake_sound_used",
+    "serial_enabled",
+    "ground_truth_source",
+    "evidence_level",
+]
+
+HEIGHT_FIELDS = BASE_HEIGHT_FIELDS + EVIDENCE_FIELDS
+
 UI_FIELDS = [
     "source_run",
     "source_summary",
@@ -72,11 +91,11 @@ UI_FIELDS = [
     "emergency_stop_seen",
     "cmd_vel_publishers",
     "overall_ui_success",
-]
+] + EVIDENCE_FIELDS
 
 
 def truth(value: object) -> bool:
-    return str(value).strip().lower() in {"1", "true", "yes", "y"}
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "pass", "passed"}
 
 
 def as_float(value: object, default: float = math.nan) -> float:
@@ -109,149 +128,222 @@ def normalize_row(row: dict[str, str], summary: Path, root: Path, fields: list[s
         run_name = summary.parent.name
     out["source_run"] = run_name
     out["source_summary"] = str(summary)
+    out["sim_or_real"] = row.get("sim_or_real") or "sim"
+    out["fake_detector_used"] = row.get("fake_detector_used") or "UNKNOWN"
+    out["fake_sound_used"] = row.get("fake_sound_used") or "UNKNOWN"
+    out["serial_enabled"] = row.get("serial_enabled") or "false"
+    out["ground_truth_source"] = row.get("ground_truth_source") or "N/A"
+    out["evidence_level"] = row.get("evidence_level") or "L2_GAZEBO_FUNCTIONAL"
     return out
+
+
+def _candidate_summaries(root: Path, names: tuple[str, ...]) -> list[Path]:
+    blocked = {"paper_ready", "results", "bags", "rosbag", "rosbags"}
+    summaries: list[Path] = []
+    for path in sorted(root.rglob("*.csv")):
+        if set(path.relative_to(root).parts) & blocked:
+            continue
+        if path.name in names:
+            summaries.append(path)
+    return summaries
 
 
 def find_height_rows(root: Path) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    for summary in sorted(root.glob("pre_real_height_*/experiment_summary.csv")):
-        for row in read_csv(summary):
-            rows.append(normalize_row(row, summary, root, HEIGHT_FIELDS))
+    for summary in _candidate_summaries(root, ("experiment_summary.csv",)):
+        try:
+            csv_rows = read_csv(summary)
+        except Exception:
+            continue
+        for row in csv_rows:
+            if row.get("scenario") or row.get("expected_elevated_dynamic_target_valid") or row.get("target_object_height_m"):
+                rows.append(normalize_row(row, summary, root, HEIGHT_FIELDS))
     return rows
 
 
 def find_ui_rows(root: Path) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    summaries = list(root.glob("ui_validation_*/experiment_summary.csv"))
-    if not summaries:
-        summaries = list(root.glob("ui_validation_*/csv/ui_visualization_check.csv"))
-    for summary in sorted(summaries):
-        for row in read_csv(summary):
-            rows.append(normalize_row(row, summary, root, UI_FIELDS))
+    for summary in _candidate_summaries(root, ("ui_visualization_check.csv", "experiment_summary.csv")):
+        try:
+            csv_rows = read_csv(summary)
+        except Exception:
+            continue
+        for row in csv_rows:
+            if row.get("overall_ui_success") or row.get("map_received") or row.get("ui_command_panel_alive"):
+                rows.append(normalize_row(row, summary, root, UI_FIELDS))
     return rows
 
 
-def latest_by_key(rows: list[dict[str, object]], key_field: str) -> list[dict[str, object]]:
-    latest: dict[str, dict[str, object]] = {}
+def scenario_key(row: dict[str, object]) -> str:
+    text = str(row.get("scenario", "")).strip()
+    for scenario in REQUIRED_SCENARIOS_DEFAULT:
+        if text == scenario or text.startswith(scenario) or scenario in text:
+            return scenario
+    if text:
+        return text
+    trial_id = str(row.get("trial_id", "")).strip()
+    return trial_id or "UNKNOWN"
+
+
+def ratio(num: int, den: int) -> float | str:
+    return round(num / den, 4) if den else "N/A"
+
+
+def summary_stats(values: list[float]) -> dict[str, object]:
+    finite = [v for v in values if math.isfinite(v)]
+    if not finite:
+        return {"n": 0, "mean": "N/A", "std": "N/A", "min": "N/A", "max": "N/A", "ci95": "N/A"}
+    mean = statistics.fmean(finite)
+    std = statistics.stdev(finite) if len(finite) >= 2 else 0.0
+    ci = 1.96 * std / math.sqrt(len(finite)) if len(finite) >= 2 else "N/A"
+    return {"n": len(finite), "mean": mean, "std": std, "min": min(finite), "max": max(finite), "ci95": ci}
+
+
+def latency_fields(rows: list[dict[str, object]]) -> list[str]:
+    fields: set[str] = set()
     for row in rows:
-        key = str(row.get(key_field, "")).strip() or str(row.get("trial_id", "")).strip()
-        path = Path(str(row.get("source_summary", "")))
-        stamp = path.stat().st_mtime if path.exists() else 0.0
-        previous = latest.get(key)
-        if previous is None:
-            row["_mtime"] = stamp
-            latest[key] = row
-            continue
-        if stamp >= float(previous.get("_mtime", 0.0)):
-            row["_mtime"] = stamp
-            latest[key] = row
-    return [latest[key] for key in sorted(latest)]
+        for key in row:
+            low = key.lower()
+            if "latency" in low or low.endswith("_sec") or low.endswith("_s"):
+                if key not in {"source_run", "source_summary"}:
+                    fields.add(key)
+    return sorted(fields)
 
 
-def metric_rows(height_rows: list[dict[str, object]], ui_rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    def ratio(num: int, den: int) -> float:
-        return round(num / den, 4) if den else 0.0
+def scenario_summary_rows(height_rows: list[dict[str, object]], required: list[str]) -> list[dict[str, object]]:
+    by_scenario: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for row in height_rows:
+        by_scenario[scenario_key(row)].append(row)
+    rows: list[dict[str, object]] = []
+    for scenario in required:
+        group = by_scenario.get(scenario, [])
+        success = sum(1 for row in group if truth(row.get("overall_success")))
+        failures = Counter(str(row.get("failure_reason", "") or "none") for row in group if not truth(row.get("overall_success")))
+        rows.append(
+            {
+                "scenario": scenario,
+                "n_total": len(group),
+                "n_success": success,
+                "success_rate": ratio(success, len(group)),
+                "failure_reasons": ";".join(f"{k}:{v}" for k, v in sorted(failures.items())),
+            }
+        )
+    return rows
 
-    height_total = len(height_rows)
-    height_success = sum(1 for row in height_rows if truth(row.get("overall_success")))
-    ui_total = len(ui_rows)
-    ui_success = sum(1 for row in ui_rows if truth(row.get("overall_ui_success")))
+
+def confusion_rows(height_rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    labels = ("expected_true_predicted_true", "expected_true_predicted_false", "expected_false_predicted_true", "expected_false_predicted_false")
+    counts = dict.fromkeys(labels, 0)
+    for row in height_rows:
+        expected = truth(row.get("expected_elevated_dynamic_target_valid"))
+        predicted = truth(row.get("elevated_dynamic_target_valid"))
+        if expected and predicted:
+            counts["expected_true_predicted_true"] += 1
+        elif expected and not predicted:
+            counts["expected_true_predicted_false"] += 1
+        elif not expected and predicted:
+            counts["expected_false_predicted_true"] += 1
+        else:
+            counts["expected_false_predicted_false"] += 1
+    return [{"cell": key, "count": value} for key, value in counts.items()]
+
+
+def failure_reason_rows(height_rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    counts: Counter[str] = Counter()
+    for row in height_rows:
+        if not truth(row.get("overall_success")):
+            counts[str(row.get("failure_reason", "") or "unknown")] += 1
+    return [{"failure_reason": key, "count": value} for key, value in sorted(counts.items())] or [{"failure_reason": "none", "count": 0}]
+
+
+def evidence_summary_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    counter: Counter[tuple[str, str, str, str, str, str]] = Counter()
+    for row in rows:
+        counter[
+            (
+                str(row.get("evidence_level", "UNKNOWN")),
+                str(row.get("sim_or_real", "UNKNOWN")),
+                str(row.get("fake_detector_used", "UNKNOWN")),
+                str(row.get("fake_sound_used", "UNKNOWN")),
+                str(row.get("serial_enabled", "UNKNOWN")),
+                str(row.get("ground_truth_source", "N/A")),
+            )
+        ] += 1
+    return [
+        {
+            "evidence_level": key[0],
+            "sim_or_real": key[1],
+            "fake_detector_used": key[2],
+            "fake_sound_used": key[3],
+            "serial_enabled": key[4],
+            "ground_truth_source": key[5],
+            "count": count,
+        }
+        for key, count in sorted(counter.items())
+    ]
+
+
+def metric_rows(height_rows: list[dict[str, object]], ui_rows: list[dict[str, object]], required: list[str]) -> list[dict[str, object]]:
+    total = len(height_rows)
+    success = sum(1 for row in height_rows if truth(row.get("overall_success")))
+    by_scenario = {row["scenario"]: row for row in scenario_summary_rows(height_rows, required)}
 
     actual_valid = [row for row in height_rows if truth(row.get("expected_elevated_dynamic_target_valid"))]
     predicted_valid = [row for row in height_rows if truth(row.get("elevated_dynamic_target_valid"))]
-    true_positive = [
-        row for row in height_rows
-        if truth(row.get("expected_elevated_dynamic_target_valid"))
-        and truth(row.get("elevated_dynamic_target_valid"))
-    ]
-    false_positive = [
-        row for row in height_rows
-        if not truth(row.get("expected_elevated_dynamic_target_valid"))
-        and truth(row.get("elevated_dynamic_target_valid"))
-    ]
-    false_negative = [
-        row for row in height_rows
-        if truth(row.get("expected_elevated_dynamic_target_valid"))
-        and not truth(row.get("elevated_dynamic_target_valid"))
-    ]
+    true_positive = [row for row in height_rows if truth(row.get("expected_elevated_dynamic_target_valid")) and truth(row.get("elevated_dynamic_target_valid"))]
+    false_positive = [row for row in height_rows if not truth(row.get("expected_elevated_dynamic_target_valid")) and truth(row.get("elevated_dynamic_target_valid"))]
 
-    height_correct = 0
-    height_known = 0
-    dynamic_correct = 0
-    dynamic_known = 0
-    static_high_total = 0
-    static_high_fp = 0
-    low_dynamic_total = 0
-    low_dynamic_fp = 0
-    mission_trigger_success = 0
-    for row in height_rows:
-        z_valid = truth(row.get("z_valid"))
-        if z_valid:
-            height_known += 1
-            min_height = as_float(row.get("target_min_height_m"), 3.0)
-            height = as_float(row.get("target_object_height_m"))
-            expected_height = height >= min_height
-            if truth(row.get("height_filter_pass")) == expected_height:
-                height_correct += 1
-        expected_class = str(row.get("expected_classification", ""))
-        if expected_class:
-            dynamic_known += 1
-            expected_dynamic = expected_class in {"elevated_dynamic_object", "low_altitude_object"}
-            if truth(row.get("dynamic_filter_pass")) == expected_dynamic:
-                dynamic_correct += 1
-        scenario = str(row.get("scenario", ""))
-        if "elevated_static" in scenario:
-            static_high_total += 1
-            if truth(row.get("elevated_dynamic_target_valid")):
-                static_high_fp += 1
-        if "low_altitude_dynamic" in scenario:
-            low_dynamic_total += 1
-            if truth(row.get("elevated_dynamic_target_valid")):
-                low_dynamic_fp += 1
-        if truth(row.get("expected_elevated_dynamic_target_valid")) and truth(row.get("target_goal_success")):
-            mission_trigger_success += 1
+    h2_rows = [row for row in height_rows if scenario_key(row) == "H2_elevated_static"]
+    h3_rows = [row for row in height_rows if scenario_key(row) == "H3_low_altitude_dynamic"]
+    ui_success = sum(1 for row in ui_rows if truth(row.get("overall_ui_success")))
 
-    metrics = [
-        ("height_trial_count", height_total),
-        ("height_trial_success_count", height_success),
-        ("gazebo_simulation_success_rate", ratio(height_success, height_total)),
-        ("height_filter_accuracy", ratio(height_correct, height_known)),
-        ("dynamic_classification_accuracy", ratio(dynamic_correct, dynamic_known)),
-        ("elevated_dynamic_target_precision", ratio(len(true_positive), len(predicted_valid))),
-        ("elevated_dynamic_target_recall", ratio(len(true_positive), len(actual_valid))),
-        ("elevated_dynamic_target_false_positive_count", len(false_positive)),
-        ("elevated_dynamic_target_false_negative_count", len(false_negative)),
-        ("static_elevated_false_positive_rate", ratio(static_high_fp, static_high_total)),
-        ("low_altitude_dynamic_false_positive_rate", ratio(low_dynamic_fp, low_dynamic_total)),
-        ("target_mission_trigger_success_rate", ratio(mission_trigger_success, len(actual_valid))),
-        ("ui_trial_count", ui_total),
-        ("ui_success_count", ui_success),
-        ("ui_visualization_success_rate", ratio(ui_success, ui_total)),
-        (
-            "ui_direct_cmd_vel_disabled_rate",
-            ratio(sum(1 for row in ui_rows if truth(row.get("ui_direct_cmd_vel_disabled"))), ui_total),
-        ),
+    safety_gate_total = sum(1 for row in height_rows if str(row.get("safety_gate_pass", "")).strip() != "")
+    safety_gate_success = sum(1 for row in height_rows if truth(row.get("safety_gate_pass")))
+    mission_trigger_success = sum(1 for row in actual_valid if truth(row.get("target_goal_success")))
+
+    metrics: list[dict[str, object]] = [
+        {"metric": "n_total", "value": total, "n": total, "notes": ""},
+        {"metric": "n_by_scenario", "value": ";".join(f"{s}:{by_scenario.get(s, {}).get('n_total', 0)}" for s in required), "n": total, "notes": ""},
+        {"metric": "overall_success_rate", "value": ratio(success, total), "n": total, "notes": ""},
+        {"metric": "elevated_dynamic_target_precision", "value": ratio(len(true_positive), len(predicted_valid)), "n": len(predicted_valid), "notes": "N/A - no predictions" if not predicted_valid else ""},
+        {"metric": "elevated_dynamic_target_recall", "value": ratio(len(true_positive), len(actual_valid)), "n": len(actual_valid), "notes": "N/A - no expected positives" if not actual_valid else ""},
+        {"metric": "false_positive_rate_H2_elevated_static", "value": ratio(sum(1 for r in h2_rows if truth(r.get("elevated_dynamic_target_valid"))), len(h2_rows)), "n": len(h2_rows), "notes": ""},
+        {"metric": "false_positive_rate_H3_low_altitude_dynamic", "value": ratio(sum(1 for r in h3_rows if truth(r.get("elevated_dynamic_target_valid"))), len(h3_rows)), "n": len(h3_rows), "notes": ""},
+        {"metric": "target_mission_trigger_success_rate", "value": ratio(mission_trigger_success, len(actual_valid)), "n": len(actual_valid), "notes": ""},
+        {"metric": "safety_gate_pass_rate", "value": ratio(safety_gate_success, safety_gate_total), "n": safety_gate_total, "notes": "N/A - no safety gate column" if not safety_gate_total else ""},
+        {"metric": "ui_visualization_success_rate", "value": ratio(ui_success, len(ui_rows)), "n": len(ui_rows), "notes": "N/A - no UI rows" if not ui_rows else ""},
     ]
-    return [{"metric": name, "value": value} for name, value in metrics]
+    for scenario, row in by_scenario.items():
+        metrics.append({"metric": f"success_rate_by_scenario_{scenario}", "value": row["success_rate"], "n": row["n_total"], "notes": ""})
+
+    for field in latency_fields(height_rows):
+        stats = summary_stats([as_float(row.get(field)) for row in height_rows])
+        metrics.append({"metric": f"latency_{field}", "value": stats["mean"], **stats, "notes": "CI=N/A for n<2" if stats["ci95"] == "N/A" else ""})
+
+    has_external_gt = any(str(row.get("ground_truth_source", "")).strip() not in {"", "N/A", "UNKNOWN"} for row in height_rows)
+    if not has_external_gt:
+        metrics.extend(
+            [
+                {"metric": "classification_precision", "value": "N/A", "n": 0, "notes": "no external ground truth"},
+                {"metric": "classification_recall", "value": "N/A", "n": 0, "notes": "no external ground truth"},
+                {"metric": "classification_mAP", "value": "N/A", "n": 0, "notes": "no external ground truth"},
+            ]
+        )
+    return metrics
 
 
 def copy_selected_sources(rows: list[dict[str, object]], dst: Path) -> list[dict[str, object]]:
     manifest: list[dict[str, object]] = []
     dst.mkdir(parents=True, exist_ok=True)
+    seen: set[Path] = set()
     for index, row in enumerate(rows, start=1):
         src = Path(str(row.get("source_summary", "")))
-        if not src.exists():
+        if not src.exists() or src in seen:
             continue
-        name = f"{index:02d}_{row.get('source_run', src.parent.name)}_{src.name}"
-        target = dst / sanitize_filename(name)
+        seen.add(src)
+        target = dst / sanitize_filename(f"{index:03d}_{row.get('source_run', src.parent.name)}_{src.name}")
         shutil.copyfile(src, target)
-        manifest.append(
-            {
-                "artifact_type": "selected_source_csv",
-                "source": str(src),
-                "paper_copy": str(target),
-            }
-        )
+        manifest.append({"artifact_type": "source_csv", "source": str(src), "paper_copy": str(target)})
     return manifest
 
 
@@ -259,53 +351,19 @@ def sanitize_filename(name: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name)
 
 
-def write_report(
-    path: Path,
-    selected_height: list[dict[str, object]],
-    selected_ui: list[dict[str, object]],
-    metrics: list[dict[str, object]],
-) -> None:
-    metrics_map = {str(row["metric"]): row["value"] for row in metrics}
-    decision = (
-        "PASS"
-        if float(metrics_map.get("gazebo_simulation_success_rate", 0.0)) >= 1.0
-        and float(metrics_map.get("ui_visualization_success_rate", 0.0)) >= 1.0
-        and int(metrics_map.get("elevated_dynamic_target_false_positive_count", 1)) == 0
-        and int(metrics_map.get("elevated_dynamic_target_false_negative_count", 1)) == 0
-        else "REVIEW"
-    )
+def write_report(path: Path, status: str, reasons: list[str], metrics: list[dict[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
-        f.write("# Paper-Ready Waver Experiment Results\n\n")
+        f.write("# Paper Result Preparation Report\n\n")
         f.write(f"- Prepared at: {datetime.now().isoformat(timespec='seconds')}\n")
-        f.write(f"- Decision from selected data: **{decision}**\n")
-        f.write("- Target rule: height >= 3.0 m, z_valid=true, dynamic_filter_pass=true, ego-motion compensated.\n")
-        f.write("- Note: 3 m is a height threshold, not a motion-distance threshold.\n\n")
-        f.write("## Selected Height Trials\n\n")
-        f.write("| trial | scenario | height_m | height_pass | dynamic_pass | elevated_valid | class | success |\n")
-        f.write("|---|---|---:|---|---|---|---|---|\n")
-        for row in selected_height:
-            f.write(
-                f"| {row.get('trial_id','')} | {row.get('scenario','')} | "
-                f"{row.get('target_object_height_m','')} | {row.get('height_filter_pass','')} | "
-                f"{row.get('dynamic_filter_pass','')} | {row.get('elevated_dynamic_target_valid','')} | "
-                f"{row.get('classification','')} | {row.get('overall_success','')} |\n"
-            )
-        f.write("\n## Selected UI Trials\n\n")
-        f.write("| trial | mode | map | robot | global path | local path | direct cmd disabled | success |\n")
-        f.write("|---|---|---|---|---|---|---|---|\n")
-        for row in selected_ui:
-            f.write(
-                f"| {row.get('trial_id','')} | {row.get('map_mode','')} | "
-                f"{row.get('map_received','')} | {row.get('robot_pose_visible','')} | "
-                f"{row.get('global_path_visible','')} | {row.get('local_path_visible','')} | "
-                f"{row.get('ui_direct_cmd_vel_disabled','')} | {row.get('overall_ui_success','')} |\n"
-            )
+        f.write(f"- Status: **{status}**\n\n")
+        f.write("## Gate Reasons\n\n")
+        for reason in reasons or ["none"]:
+            f.write(f"- {reason}\n")
         f.write("\n## Metrics\n\n")
-        f.write("| metric | value |\n")
-        f.write("|---|---:|\n")
+        f.write("| metric | value | n | notes |\n|---|---:|---:|---|\n")
         for row in metrics:
-            f.write(f"| {row['metric']} | {row['value']} |\n")
+            f.write(f"| {row.get('metric')} | {row.get('value')} | {row.get('n', '')} | {row.get('notes', '')} |\n")
 
 
 def make_plots(tables_dir: Path, figures_dir: Path) -> None:
@@ -314,53 +372,53 @@ def make_plots(tables_dir: Path, figures_dir: Path) -> None:
     except Exception as exc:
         print(f"matplotlib unavailable, skipping paper plots: {exc}")
         return
+    rows = read_csv(tables_dir / "height_target_trials_all.csv") if (tables_dir / "height_target_trials_all.csv").exists() else []
+    if not rows:
+        return
     figures_dir.mkdir(parents=True, exist_ok=True)
+    labels = [str(row.get("trial_id") or i) for i, row in enumerate(rows, 1)]
+    heights = [as_float(row.get("target_object_height_m"), 0.0) for row in rows]
+    plt.figure(figsize=(8, 4))
+    plt.bar(labels, heights, color="#4c78a8")
+    plt.axhline(3.0, color="#e45756", linestyle="--", label="3.0 m threshold")
+    plt.xlabel("Trial")
+    plt.ylabel("Object height (m)")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(figures_dir / "paper_target_height_by_trial.png", dpi=180)
+    plt.close()
 
-    selected = tables_dir / "height_target_trials_selected.csv"
-    if selected.exists():
-        rows = read_csv(selected)
-        labels = [str(row.get("trial_id") or row.get("scenario")) for row in rows]
-        heights = [as_float(row.get("target_object_height_m"), 0.0) for row in rows]
-        valid = [1.0 if truth(row.get("elevated_dynamic_target_valid")) else 0.0 for row in rows]
-        plt.figure(figsize=(7, 4))
-        plt.bar(labels, heights, color="#4c78a8")
-        plt.axhline(3.0, color="#e45756", linestyle="--", label="3.0 m threshold")
-        plt.xlabel("Trial")
-        plt.ylabel("Object height (m)")
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(figures_dir / "paper_target_height_by_trial.png", dpi=180)
-        plt.close()
 
-        plt.figure(figsize=(7, 4))
-        plt.bar(labels, valid, color="#54a24b")
-        plt.ylim(0, 1.1)
-        plt.xlabel("Trial")
-        plt.ylabel("Elevated dynamic target valid")
-        plt.tight_layout()
-        plt.savefig(figures_dir / "paper_target_validity_by_trial.png", dpi=180)
-        plt.close()
-
-    ui = tables_dir / "ui_visualization_selected.csv"
-    if ui.exists():
-        rows = read_csv(ui)
-        labels = [str(row.get("trial_id")) for row in rows]
-        success = [1.0 if truth(row.get("overall_ui_success")) else 0.0 for row in rows]
-        plt.figure(figsize=(7, 4))
-        plt.bar(labels, success, color="#f58518")
-        plt.ylim(0, 1.1)
-        plt.xlabel("UI Trial")
-        plt.ylabel("UI success")
-        plt.tight_layout()
-        plt.savefig(figures_dir / "paper_ui_success_by_trial.png", dpi=180)
-        plt.close()
+def strict_reasons(height_rows: list[dict[str, object]], required: list[str], expected: int) -> list[str]:
+    reasons: list[str] = []
+    if not height_rows:
+        return ["MISSING_RAW_EXPERIMENT_DATA"]
+    if expected <= 0:
+        return reasons
+    by_scenario: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for row in height_rows:
+        by_scenario[scenario_key(row)].append(row)
+    for scenario in required:
+        count = len(by_scenario.get(scenario, []))
+        if count < expected:
+            reasons.append(f"scenario {scenario} has {count} trials, expected >= {expected}")
+    return reasons
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Prepare paper-ready Waver experiment tables, plots, and report")
+    parser = argparse.ArgumentParser(description="Prepare Waver paper evidence tables from raw experiment trials.")
     parser.add_argument("--input-dir", default="~/ros2_ws5/FSD_Vehicle/experiments_result")
     parser.add_argument("--output-root", default="~/ros2_ws5/FSD_Vehicle/experiments_result/paper_ready")
     parser.add_argument("--name", default="")
+    parser.add_argument(
+        "--expected-trials-per-scenario",
+        type=int,
+        default=0,
+        help="Optional minimum trial count per scenario. Default 0 disables repeated-trial count gating.",
+    )
+    parser.add_argument("--require-scenarios", default=",".join(REQUIRED_SCENARIOS_DEFAULT))
+    parser.add_argument("--paper-strict", action="store_true")
+    parser.add_argument("--allow-missing-ground-truth", action="store_true")
     parser.add_argument("--no-latest", action="store_true", help="Do not update paper_ready/latest symlink")
     args = parser.parse_args()
 
@@ -372,26 +430,32 @@ def main() -> int:
     figures_dir = out / "figures"
     reports_dir = out / "reports"
     raw_dir = out / "raw_selected"
+    required = [s.strip() for s in args.require_scenarios.split(",") if s.strip()]
 
-    height_all = find_height_rows(input_dir)
-    ui_all = find_ui_rows(input_dir)
-    height_selected = latest_by_key(height_all, "scenario")
-    ui_selected = latest_by_key(ui_all, "trial_id")
-    metrics = metric_rows(height_selected, ui_selected)
+    height_all = find_height_rows(input_dir) if input_dir.exists() else []
+    ui_all = find_ui_rows(input_dir) if input_dir.exists() else []
+    metrics = metric_rows(height_all, ui_all, required)
+    scenario_rows = scenario_summary_rows(height_all, required)
+    failures = failure_reason_rows(height_all)
+    confusion = confusion_rows(height_all)
+    evidence = evidence_summary_rows(height_all + ui_all)
 
     write_csv(tables_dir / "height_target_trials_all.csv", HEIGHT_FIELDS, height_all)
-    write_csv(tables_dir / "height_target_trials_selected.csv", HEIGHT_FIELDS, height_selected)
+    write_csv(tables_dir / "height_target_trials_by_scenario.csv", ["scenario", "n_total", "n_success", "success_rate", "failure_reasons"], scenario_rows)
     write_csv(tables_dir / "ui_visualization_all.csv", UI_FIELDS, ui_all)
-    write_csv(tables_dir / "ui_visualization_selected.csv", UI_FIELDS, ui_selected)
-    write_csv(tables_dir / "paper_metrics.csv", ["metric", "value"], metrics)
+    write_csv(tables_dir / "paper_metrics.csv", ["metric", "value", "n", "mean", "std", "min", "max", "ci95", "notes"], metrics)
+    write_csv(tables_dir / "failure_reason_counts.csv", ["failure_reason", "count"], failures)
+    write_csv(tables_dir / "confusion_matrix_expected_vs_predicted.csv", ["cell", "count"], confusion)
+    write_csv(tables_dir / "evidence_level_summary.csv", ["evidence_level", "sim_or_real", "fake_detector_used", "fake_sound_used", "serial_enabled", "ground_truth_source", "count"], evidence)
+    write_csv(out / "source_manifest.csv", ["artifact_type", "source", "paper_copy"], copy_selected_sources(height_all + ui_all, raw_dir))
 
-    manifest = copy_selected_sources(height_selected + ui_selected, raw_dir)
-    write_csv(out / "source_manifest.csv", ["artifact_type", "source", "paper_copy"], manifest)
-    write_report(reports_dir / "paper_results_summary.md", height_selected, ui_selected, metrics)
+    reasons = strict_reasons(height_all, required, args.expected_trials_per_scenario)
+    status = "PASS" if not reasons else "FAIL"
+    write_report(reports_dir / "paper_results_summary.md", status, reasons, metrics)
     make_plots(tables_dir, figures_dir)
 
     latest = output_root / "latest"
-    if not args.no_latest:
+    if not args.no_latest and status == "PASS":
         try:
             if latest.is_symlink() or latest.exists():
                 latest.unlink()
@@ -399,10 +463,15 @@ def main() -> int:
         except Exception:
             pass
 
-    print(f"Paper-ready results prepared under: {out}")
-    print(f"Selected height trials: {len(height_selected)} / all rows: {len(height_all)}")
-    print(f"Selected UI trials: {len(ui_selected)} / all rows: {len(ui_all)}")
-    return 0 if height_selected else 1
+    print(f"PAPER_RESULTS_OUTPUT={out}")
+    print(f"HEIGHT_TRIAL_ROWS={len(height_all)}")
+    print(f"UI_TRIAL_ROWS={len(ui_all)}")
+    print(f"PAPER_RESULTS_STATUS={status}")
+    for reason in reasons:
+        print(f"PAPER_RESULTS_REASON={reason}")
+    if args.paper_strict and reasons:
+        return 2
+    return 0 if height_all else 1
 
 
 if __name__ == "__main__":

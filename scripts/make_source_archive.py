@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
+import io
+import json
+import subprocess
 import tarfile
 import time
 from pathlib import Path
@@ -52,6 +57,22 @@ EXCLUDED_FILE_NAMES = {
     ".env.private",
 }
 
+EXCLUDED_REL_PATHS = {
+    "config/waver_field_env",
+    "config/waver_field_env.local",
+    "reports/source_manifest.json",
+    "reports/source_sha256_manifest.csv",
+}
+
+EXCLUDED_REL_PREFIXES = (
+    "maps/archive/",
+    "reports/field_docker_ssh_check/",
+    "reports/full_readiness_loop/",
+    "reports/gazebo_functional_validation/",
+    "reports/remote_ui_validation/",
+    "reports/pre_existing_",
+)
+
 
 def _parts(path: Path) -> tuple[str, ...]:
     return tuple(part for part in path.parts if part not in {"", "."})
@@ -66,13 +87,18 @@ def should_exclude(path: Path, root: Path) -> bool:
     parts = _parts(rel)
     if not parts:
         return False
+    rel_posix = rel.as_posix()
+    if rel_posix in EXCLUDED_REL_PATHS:
+        return True
+    if any(rel_posix.startswith(prefix) for prefix in EXCLUDED_REL_PREFIXES):
+        return True
     if parts[-1] in EXCLUDED_FILE_NAMES:
         return True
     if parts[-1].startswith(".env.") and parts[-1] != ".env.example":
         return True
     if any(part in EXCLUDED_DIR_NAMES for part in parts):
         return True
-    if any(part.startswith("rosbag") for part in parts):
+    if any(part.startswith("rosbag") and part != "rosbag_replay" for part in parts):
         return True
     if any(part.startswith("waver_experiments") for part in parts):
         return True
@@ -105,12 +131,85 @@ def top_level_summary(root: Path) -> tuple[list[str], list[str]]:
 
 def make_archive(root: Path, output: Path) -> int:
     files = iter_source_files(root)
+    generated = generated_release_metadata(root, files)
+    write_generated_metadata(root, generated)
     output.parent.mkdir(parents=True, exist_ok=True)
     base = root.name
     with tarfile.open(output, "w:gz") as tar:
         for path in files:
             tar.add(path, arcname=str(Path(base) / path.relative_to(root)))
-    return len(files)
+        for rel_path, payload in generated.items():
+            info = tarfile.TarInfo(str(Path(base) / rel_path))
+            info.size = len(payload)
+            info.mtime = int(time.time())
+            info.mode = 0o644
+            tar.addfile(info, io.BytesIO(payload))
+    return len(files) + len(generated)
+
+
+def git_output(root: Path, args: list[str]) -> str:
+    try:
+        return subprocess.check_output(["git", "-C", str(root), *args], text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return "UNKNOWN"
+
+
+def file_sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    if path.is_symlink():
+        h.update(f"SYMLINK->{path.readlink()}".encode())
+        return h.hexdigest()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def generated_release_metadata(root: Path, files: list[Path]) -> dict[Path, bytes]:
+    status = git_output(root, ["status", "--short"])
+    status_lines = [line for line in status.splitlines() if line and line != "UNKNOWN"]
+    dirty_count = sum(1 for line in status_lines if not line.startswith("??"))
+    untracked_count = sum(1 for line in status_lines if line.startswith("??"))
+    rows = [
+        {"path": path.relative_to(root).as_posix(), "sha256": file_sha256(path), "type": "source_file"}
+        for path in files
+    ]
+    generated_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    manifest = {
+        "generated_at": generated_at,
+        "source_root": root.name,
+        "git_branch_or_unknown": git_output(root, ["branch", "--show-current"]),
+        "git_commit_or_unknown": git_output(root, ["rev-parse", "--short", "HEAD"]),
+        "git_dirty_summary": {
+            "dirty_file_count": dirty_count,
+            "untracked_file_count": untracked_count,
+            "status_short": status_lines,
+            "submodule_status": git_output(root, ["submodule", "status", "--recursive"]).splitlines(),
+        },
+        "artifact_type": "source_release",
+        "excluded_policy_version": "source_release_policy_v2",
+        "included_file_count": len(files) + 2,
+        "sha256_manifest_path": "reports/source_sha256_manifest.csv",
+        "note": "The sha256 manifest lists source files and source_manifest.json; it intentionally excludes itself.",
+    }
+    manifest_payload = (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()
+    rows.append({"path": "reports/source_manifest.json", "sha256": hashlib.sha256(manifest_payload).hexdigest(), "type": "generated_manifest"})
+
+    csv_buf = io.StringIO()
+    writer = csv.DictWriter(csv_buf, fieldnames=["path", "sha256", "type"], lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return {
+        Path("reports/source_manifest.json"): manifest_payload,
+        Path("reports/source_sha256_manifest.csv"): csv_buf.getvalue().encode(),
+    }
+
+
+def write_generated_metadata(root: Path, generated: dict[Path, bytes]) -> None:
+    for rel_path, payload in generated.items():
+        path = root / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
 
 
 def main() -> int:

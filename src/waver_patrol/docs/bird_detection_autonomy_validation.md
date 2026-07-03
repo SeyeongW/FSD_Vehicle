@@ -33,7 +33,7 @@ The current `jo` branch adds a Gazebo-only synthetic bird evaluation bridge:
   `src/waver_patrol/waver_patrol/perception/bird_detection_pipeline_node.py`
 - Launch:
   `src/waver_patrol/launch/gazebo_bird_detection_validation.launch.py`
-- Repeated-run script:
+- Optional stress/smoke runner:
   `src/waver_patrol/scripts/run_bird_detection_gazebo_ui_trials.sh`
 
 The node uses Gazebo model-state provenance for a bird model already present in
@@ -82,30 +82,12 @@ bird_candidate
 
 2D LaserScan alone is not a valid source for elevated bird height.
 
-## Current 10-Run Result
+## Paper Claim Boundary
 
-Latest run:
-
-```text
-experiments_result/paper_ready/bird_detection_10runs
-```
-
-Summary:
-
-- valid pass runs: 10/10
-- bird precision mean: 1.000
-- bird recall mean: 1.000
-- bird F1 mean: 1.000
-- average scan Hz: 16.9783
-- average odom Hz: 83.978
-- `/cmd_vel` publisher count: 1 in all final trials
-- `/cmd_vel` publisher node: `safety_cmd_mux_node`
-- direct `/cmd_vel` violation: 0
-
-Important limitation:
-this is Gazebo synthetic ground-truth evidence. It is useful for validating the
-ROS2 topic pipeline, mission trigger gates, UI command path, and safety command
-path. It is not a real-camera YOLO mAP claim.
+This source package does not claim repeated-trial bird detection performance or
+perfect precision/recall. Gazebo synthetic ground-truth runs may be used as
+single-run smoke evidence for the ROS2 topic pipeline, mission trigger gates, UI
+command path, and safety command path. They are not real-camera YOLO mAP claims.
 
 ## Run Commands
 
@@ -145,15 +127,15 @@ ros2 launch ugv_tools waver_operator_panel.launch.py \
   publish_direct_cmd_vel:=false
 ```
 
-Final 10-run Gazebo/UI bird pipeline validation:
+Optional Gazebo/UI bird pipeline stress runner. This is not a paper performance
+claim unless a separate evidence package with raw data and ground truth is
+provided:
 
 ```bash
-RUNS=10 \
-REQUIRED_SUCCESSES=10 \
 USE_GUI=true \
 TRIAL_DURATION_SEC=6 \
 HZ_SAMPLE_SEC=5 \
-OUTPUT_ROOT=$HOME/ros2_ws5/FSD_Vehicle/experiments_result/paper_ready/bird_detection_10runs \
+OUTPUT_ROOT=$HOME/ros2_ws5/FSD_Vehicle/experiments_result/local_bird_smoke \
 bash src/waver_patrol/scripts/run_bird_detection_gazebo_ui_trials.sh
 ```
 

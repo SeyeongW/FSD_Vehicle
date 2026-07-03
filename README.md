@@ -1,5 +1,16 @@
 # Waver ROS2 Humble Final Check Guide
 
+**Paper submission policy:** do not submit a raw workspace zip. The paper/public
+source artifact must be a `source_release` archive created by
+`scripts/make_source_archive.py` and checked by
+`scripts/check_submission_package.py`. Raw experiment data, rosbags,
+screenshots, and field logs belong in a separate `evidence_package`.
+
+Third-party/vendor packages are kept for reproducibility and integration only.
+Unresolved upstream metadata, especially `livox_laser_simulation_RO2`, is
+documented in `src/waver_patrol/docs/PACKAGE_METADATA_AUDIT.md` and is not part
+of the Waver original contribution claim.
+
 Workspace for this release:
 
 ```bash

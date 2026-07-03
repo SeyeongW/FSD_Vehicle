@@ -1,0 +1,10 @@
+packet_type: 1001
+left_odom_field: odl
+right_odom_field: odr
+unit: cm
+scale_left: 1.0
+scale_right: 1.0
+invert_left: false
+invert_right: false
+wheel_base_m: 0.28
+covariance_profile: low_speed_bringup
