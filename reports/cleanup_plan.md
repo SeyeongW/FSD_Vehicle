@@ -77,8 +77,16 @@
 - `maps/archive/waver_latest_map_94_300000000.yaml`
 - `maps/archive/waver_latest_map_94_500000000.pgm`
 - `maps/archive/waver_latest_map_94_500000000.yaml`
+- `maps/archive/waver_latest_map_94_800000000.pgm`
+- `maps/archive/waver_latest_map_94_800000000.yaml`
+- `maps/archive/waver_latest_map_95_300000000.pgm`
+- `maps/archive/waver_latest_map_95_300000000.yaml`
+- `maps/archive/waver_latest_map_95_400000000.pgm`
+- `maps/archive/waver_latest_map_95_400000000.yaml`
 - `maps/archive/waver_latest_map_96_100000000.pgm`
 - `maps/archive/waver_latest_map_96_100000000.yaml`
+- `maps/archive/waver_latest_map_98_600000000.pgm`
+- `maps/archive/waver_latest_map_98_600000000.yaml`
 - `maps/archive/waver_latest_map_99_200000000.pgm`
 - `maps/archive/waver_latest_map_99_200000000.yaml`
 - `maps/waver_latest_map.pgm`
@@ -322,12 +330,28 @@
 - `reports/bird_mission_readiness/1783260401_source.json`
 - `reports/bird_mission_readiness/1783260404_source.json`
 - `reports/bird_mission_readiness/1783262671_source.json`
+- `reports/bird_mission_readiness/1783265106_source.json`
+- `reports/bird_mission_readiness/1783265525_source.json`
+- `reports/bird_mission_readiness/1783267082_source.json`
+- `reports/bird_mission_readiness/1783267085_source.json`
+- `reports/bird_mission_readiness/source_latest.json`
 - `reports/command_chain/latest.json`
 - `reports/field_bridge_regression/latest.json`
 - `reports/launch_contract/latest.json`
 - `reports/network/latest.json`
 - `reports/release_self_test/check_bird_mission_field_release_self_test.json`
 - `reports/release_self_test/latest_bird_mission_release_self_test.json`
+- `reports/release_self_test/latest_bird_mission_release_self_test_steps.jsonl`
+- `reports/release_self_test/steps/`
+- `reports/release_self_test/steps/bridge_regression.log`
+- `reports/release_self_test/steps/command_chain.log`
+- `reports/release_self_test/steps/compileall.log`
+- `reports/release_self_test/steps/contract.log`
+- `reports/release_self_test/steps/launch_contract.log`
+- `reports/release_self_test/steps/no_ros_unit_tests.log`
+- `reports/release_self_test/steps/shell_syntax.log`
+- `reports/release_self_test/steps/source_readiness.log`
+- `reports/release_self_test/steps/targeted_pytest.log`
 - `reports/ui_slam_bird_detection/README.md`
 - `reports/ui_slam_bird_detection/latest.json`
 - `reports/ui_slam_bird_detection/ui_slam_bird_20260705_222448/`
@@ -360,6 +384,30 @@
 - `reports/ui_slam_bird_detection/ui_slam_bird_20260705_234450/map_quality.txt`
 - `reports/ui_slam_bird_detection/ui_slam_bird_20260705_234450/monitor.json`
 - `reports/ui_slam_bird_detection/ui_slam_bird_20260705_234450/summary.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_002609/`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_002609/deterministic_bird_ui_status_publisher.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_002609/launch.log`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_002609/map_quality.txt`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_002609/monitor.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_002609/summary.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_010348/`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_010348/deterministic_bird_ui_status_publisher.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_010348/launch.log`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_010348/map_quality.txt`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_010348/monitor.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_010348/summary.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_073948/`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_073948/deterministic_bird_ui_status_publisher.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_073948/launch.log`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_073948/map_quality.txt`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_073948/monitor.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_073948/summary.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_074541/`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_074541/deterministic_bird_ui_status_publisher.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_074541/launch.log`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_074541/map_quality.txt`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_074541/monitor.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_074541/summary.json`
 
 ### LEGACY_BUT_REFERENCED
 
@@ -555,9 +603,13 @@
 - `config/network/waver_ros_domain.yaml`
 - `config/perception/`
 - `config/real_profiles/`
+- `config/real_profiles/autonomous_bird_patrol_locked.yaml`
 - `config/real_profiles/bird_full_experimental.yaml`
 - `config/real_profiles/indoor_nav_only.yaml`
+- `config/real_profiles/inspection_dry_run.yaml`
 - `config/real_profiles/lidar_nav_backend.yaml`
+- `config/real_profiles/sensor_live.yaml`
+- `config/real_profiles/supervised_bird_patrol.yaml`
 - `config/real_profiles/wheel_off_driver_check.yaml`
 - `config/real_profiles/wheel_on_low_speed.yaml`
 - `config/sensors/`
@@ -571,6 +623,7 @@
 - `docs/TROUBLESHOOTING_FIELD.md`
 - `docs/artifact_policy.md`
 - `docs/bird_mission_readiness_levels.md`
+- `docs/bird_patrol_field_profiles.md`
 - `docs/final_bird_patrol_architecture.md`
 - `docs/hardware_acceptance_matrix.md`
 - `docs/hardware_readiness_levels.md`
@@ -742,12 +795,7 @@
 - `src/Livox-SDK2/3rdparty/spdlog/spdlog/sinks/rotating_file_sink.h`
 - `src/Livox-SDK2/3rdparty/spdlog/spdlog/sinks/sink.h`
 - `src/Livox-SDK2/3rdparty/spdlog/spdlog/sinks/stdout_color_sinks.h`
-- `src/Livox-SDK2/3rdparty/spdlog/spdlog/sinks/stdout_sinks.h`
-- `src/Livox-SDK2/3rdparty/spdlog/spdlog/sinks/syslog_sink.h`
-- `src/Livox-SDK2/3rdparty/spdlog/spdlog/sinks/wincolor_sink.h`
-- `src/Livox-SDK2/3rdparty/spdlog/spdlog/spdlog.h`
-- `src/Livox-SDK2/3rdparty/spdlog/spdlog/tweakme.h`
-- ... 1805 more
+- ... 1816 more
 
 ### VENDOR_OR_SUBMODULE
 

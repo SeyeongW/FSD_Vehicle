@@ -193,6 +193,11 @@ def write_report(rows: list[tuple[str, bool, str]], removed: list[str], output: 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate a conservative Waver cleanup plan.")
     parser.add_argument("--output", default=str(ROOT / "reports/cleanup_plan.md"))
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="explicit dry-run mode; this is the default and removes nothing",
+    )
     parser.add_argument("--apply", action="store_true", help="remove generated artifacts only")
     args = parser.parse_args()
     rows = iter_paths()

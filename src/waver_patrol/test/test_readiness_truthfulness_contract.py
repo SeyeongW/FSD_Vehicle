@@ -23,6 +23,11 @@ def test_readiness_audit_does_not_promote_sim_to_real_autonomy():
     )
     assert "`BIRD_PATROL_AUTONOMOUS_READY`: NOT_RUN" in audit
     assert "Gazebo/UI simulation PASS must never promote real autonomous readiness" in audit
+    assert "## Current Package Analyzed From Workspace/Zip" in audit
+    assert "raw workspace zip is a backup format only" in audit
+    assert "deploy artifact must be the clean field release tarball" in audit
+    assert "handoff_reference_head" in audit
+    assert "actual_package_head_at_audit_generation" in audit
 
 
 def test_readiness_script_blocks_pass_degraded_autonomous_promotion():

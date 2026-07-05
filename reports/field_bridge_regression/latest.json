@@ -5,7 +5,7 @@
   "expected_command_chain": "/waver/manual_cmd_vel -> safety_cmd_mux_node -> /waver/cmd_vel_safety -> nav2_collision_monitor -> /cmd_vel -> waver_base_driver_node",
   "field_bridge": "local PC -> SSH -> Jetson host -> docker exec -> fsd_dev_jetson -> ROS2 nodes -> Waver USB serial",
   "findings": [],
-  "generated_at": "2026-07-06T07:39:08+0900",
+  "generated_at": "2026-07-06T08:42:41+0900",
   "jetson_host": "",
   "jetson_user": "sw",
   "jetson_ws": "/home/sw/ros2_ws5/FSD_Vehicle",

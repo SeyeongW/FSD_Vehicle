@@ -23,13 +23,14 @@ def test_cleanup_policy_document_preserves_field_bridge_scripts():
 def test_cleanup_plan_script_dry_run_generates_report(tmp_path):
     output = tmp_path / "cleanup_plan.md"
     result = subprocess.run(
-        ["python3", "scripts/waver_conservative_cleanup_plan.py", "--output", str(output)],
+        ["python3", "scripts/waver_conservative_cleanup_plan.py", "--dry-run", "--output", str(output)],
         cwd=ROOT,
         text=True,
         capture_output=True,
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "WAVER_CLEANUP_MODE=DRY_RUN" in result.stdout
     report = output.read_text(encoding="utf-8")
     assert "Waver Conservative Cleanup Plan" in report
     assert "LOCAL_RUNTIME_REQUIRED" in report

@@ -528,3 +528,35 @@ Fresh Gazebo LiDAR spatial response mechanism smoke:
   `experiment_results/gazebo_spatial_response/spatial_lidar_20260706_074944_seed709_20260706_074944`
 - notable PASS checks: `detector_mode_lidar`, `lidar_only_decision_clean`, `has_dynamic_lock`, `has_object_mission_goal`, `has_active_target_nav_goal`, `patrol_preempt_to_target_goal`, `preempt_before_first_patrol_success`, `return_resume_sequence_success`, `removed_bird_count`, `cmd_vel_safety_mux_sole_publisher`
 - measured values: removed birds 2, target preempt to target cmd 0.20 s, odom path length 53.08 m, final `/cmd_vel` publisher count 1.
+
+## 2026-07-06 Prompt 899 Final Recheck
+
+Additional corrections from the follow-up field prompt:
+
+- `scripts/waver_conservative_cleanup_plan.py --dry-run` is now an explicit accepted mode and remains non-destructive.
+- Repository cleanup policy tests now call the explicit `--dry-run` path.
+- `scripts/generate_bird_mission_readiness_audit.py` now adds a current package/zip section that separates raw workspace backup, clean release tarball policy, legacy handoff reference head, actual package head at audit generation, branch, and dirty-state evidence.
+- Real readiness remains `BIRD_PATROL_SOURCE_READY`; the follow-up recheck still collected no live Jetson/Livox/camera/base/sound hardware evidence.
+
+Fresh local checks:
+
+- no-ROS unit tests: `86 passed`
+- prompt-critical contract tests: `25 passed`
+- cleanup explicit dry-run: PASS
+- local operator deps, UI/RViz/operator dry-run, and field bridge dry-run: PASS
+
+Fresh Gazebo remote UI SLAM + bird detection smoke:
+
+- command:
+  `ROS_DOMAIN_ID=70 GAZEBO_MASTER_URI=http://127.0.0.1:11363 TIMEOUT_SEC=220 WAVER_USE_GUI=false WAVER_START_RVIZ=false bash scripts/run_ui_slam_bird_detection_gazebo_smoke.sh`
+- result: `UI_SLAM_BIRD_DETECTION_SMOKE=PASS`
+- evidence: `/map`, `/cmd_vel`, `/waver/mode` publisher counts are each 1; map quality PASS; mapping path visible; bird topics fresh; no patrol emergency stop.
+
+Fresh Gazebo LiDAR spatial response mechanism smoke:
+
+- command:
+  `ROS_DOMAIN_ID=71 GAZEBO_MASTER_URI=http://127.0.0.1:11364 TIMEOUT_SEC=320 RANDOM_SEED=710 WAVER_USE_GUI=false WAVER_START_RVIZ=false bash scripts/run_gazebo_lidar_spatial_response_smoke.sh`
+- result: `VERIFY_GAZEBO_SPATIAL_RESPONSE=PASS`
+- run dir:
+  `experiment_results/gazebo_spatial_response/spatial_lidar_20260706_083557_seed710_20260706_083557`
+- evidence: LiDAR-only detector mode, dynamic lock, target-goal preempt during patrol, active target cmd_vel, return/resume sequence, removed birds 2, target preempt to target cmd 0.30 s, odom path length 47.69 m, final `/cmd_vel` publisher count 1 and owned by the safety chain.

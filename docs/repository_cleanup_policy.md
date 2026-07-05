@@ -59,7 +59,7 @@ drivers, field bridge scripts, or local private config files.
 2. Generate cleanup plan:
 
    ```bash
-   python3 scripts/waver_conservative_cleanup_plan.py
+   python3 scripts/waver_conservative_cleanup_plan.py --dry-run
    ```
 
 3. Review `reports/cleanup_plan.md`.
