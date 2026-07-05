@@ -198,7 +198,7 @@ src/ugv_main/ugv_gazebo/param/bird_patrol/topic_remaps_real_prep.yaml
 Real-prep topic notes include:
 
 ```text
-/mid360_PointCloud2 -> /livox/lider candidate remap
+/mid360_PointCloud2 -> /livox/lidar candidate remap
 /camera/image_raw
 /camera/camera_info
 /waver/manual_cmd_vel

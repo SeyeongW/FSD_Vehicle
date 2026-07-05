@@ -34,6 +34,8 @@ class BirdDetectorNode(Node):
         self.declare_parameter("target_confidence_topic", "/waver/target_confidence")
         self.declare_parameter("target_classification_state_topic", "/waver/target_classification_state")
         self.declare_parameter("target_classification_latency_topic", "/waver/target_classification_latency_ms")
+        self.declare_parameter("bbox_center_error_topic", "/waver/camera_bbox_center_error_px")
+        self.declare_parameter("bbox_center_error_signed_topic", "/waver/camera_bbox_center_error_signed_px")
         self.declare_parameter("backend", "yolo")
         self.declare_parameter("bird_backend", "")
         self.declare_parameter("model_path", "")
@@ -46,13 +48,27 @@ class BirdDetectorNode(Node):
         self.declare_parameter("bird_class_names", ["bird"])
         self.declare_parameter("class_names_of_interest", ["bird", "drone"])
         self.declare_parameter("deterrence_class_names", ["bird"])
+        self.declare_parameter("class_map_required", ["bird", "person", "vehicle", "drone", "unknown"])
         self.declare_parameter("unknown_confidence_threshold", 0.50)
         self.declare_parameter(
             "class_aliases",
-            ["airplane:irrelevant", "kite:unknown", "bird:bird", "drone:drone", "uav:drone"],
+            [
+                "airplane:irrelevant",
+                "kite:unknown",
+                "bird:bird",
+                "person:person",
+                "human:person",
+                "vehicle:vehicle",
+                "car:vehicle",
+                "truck:vehicle",
+                "robot:vehicle",
+                "drone:drone",
+                "uav:drone",
+                "unknown:unknown",
+            ],
         )
         self.declare_parameter("publish_unknown_when_no_detection", True)
-        self.declare_parameter("classification_requires_camera_alignment", True)
+        self.declare_parameter("classification_requires_camera_alignment", False)
         self.declare_parameter("camera_centered_topic", "/waver/camera_target_centered")
         self.declare_parameter("nof_m_window", 5)
         self.declare_parameter("nof_m_required", 3)
@@ -82,11 +98,24 @@ class BirdDetectorNode(Node):
             str(self.get_parameter("target_classification_latency_topic").value),
             10,
         )
+        self.bbox_error_pub = self.create_publisher(
+            Float32,
+            str(self.get_parameter("bbox_center_error_topic").value),
+            10,
+        )
+        self.bbox_error_signed_pub = self.create_publisher(
+            Float32,
+            str(self.get_parameter("bbox_center_error_signed_topic").value),
+            10,
+        )
 
         self.camera_info: CameraInfo | None = None
+        self.camera_info_time = 0.0
         self.camera_centered = False
         self.last_image_time = 0.0
         self.last_inference_time = 0.0
+        self.last_latency_ms = 0.0
+        self.last_inference_state = "READY"
         self.confirm_window: deque[bool] = deque(maxlen=max(int(self.get_parameter("nof_m_window").value), 1))
         self.model = None
         self.bridge = None
@@ -130,17 +159,21 @@ class BirdDetectorNode(Node):
 
     def camera_info_callback(self, msg: CameraInfo) -> None:
         self.camera_info = msg
+        self.camera_info_time = self._now()
 
     def image_callback(self, msg: Image) -> None:
         now = self._now()
         self.last_image_time = now
         if now - self.last_inference_time < 1.0 / max(float(self.get_parameter("max_inference_hz").value), 0.1):
+            self.last_inference_state = "THROTTLED"
             return
         self.last_inference_time = now
         if bool(self.get_parameter("classification_requires_camera_alignment").value) and not self.camera_centered:
+            self.last_inference_state = "READY"
             self._publish_empty(msg, "WAIT_CAMERA_ALIGNMENT", force_class="none")
             return
         if self.model is None or self.bridge is None:
+            self.last_inference_state = "ERROR"
             self._publish_empty(msg, self.model_error or "MODEL_MISSING")
             return
         try:
@@ -148,10 +181,14 @@ class BirdDetectorNode(Node):
             inference_start = self._now()
             detections = self._run_yolo(cv_image, msg)
             latency_ms = max((self._now() - inference_start) * 1000.0, 0.0)
+            self.last_latency_ms = latency_ms
+            self.last_inference_state = "READY"
             target_class, best_confidence = self._best_classification(detections)
-            if not detections.detections and bool(self.get_parameter("publish_unknown_when_no_detection").value):
-                target_class = "unknown"
-                best_confidence = 0.0
+            if not detections.detections:
+                force_class = "unknown" if bool(self.get_parameter("publish_unknown_when_no_detection").value) else "none"
+                self._publish_empty(msg, "CAMERA_NO_TARGET", force_class=force_class)
+                return
+            self._publish_bbox_center_error(detections, msg)
             unknown_threshold = float(self.get_parameter("unknown_confidence_threshold").value)
             if best_confidence < unknown_threshold and target_class not in {"unknown", "none"}:
                 target_class = "unknown"
@@ -162,14 +199,20 @@ class BirdDetectorNode(Node):
             self.target_confidence_pub.publish(Float32(data=float(best_confidence)))
             self.latency_pub.publish(Float32(data=float(latency_ms)))
             state = (
-                f"CLASSIFIED target_class={target_class} confidence={best_confidence:.3f} "
-                f"bird_confirmed={confirmed} detections={len(detections.detections)} latency_ms={latency_ms:.2f}"
+                self._state_text(
+                    "CLASSIFIED",
+                    target_class=target_class,
+                    confidence=best_confidence,
+                    bird_confirmed=confirmed,
+                    detections=len(detections.detections),
+                )
             )
             self.state_pub.publish(
                 String(data=state)
             )
             self.classification_state_pub.publish(String(data=state))
         except Exception as exc:  # pragma: no cover - hardware/model dependent
+            self.last_inference_state = "ERROR"
             self._publish_empty(msg, f"INFERENCE_ERROR error={exc}")
 
     def _run_yolo(self, cv_image, msg: Image) -> Detection2DArray:
@@ -192,7 +235,7 @@ class BirdDetectorNode(Node):
                 class_name = str(names.get(cls_id, cls_id)).lower()
                 normalized = normalize_class_name(class_name, aliases)
                 score = float(box.conf[0]) if getattr(box, "conf", None) is not None else 0.0
-                if normalized not in {"bird", "drone", "unknown", "irrelevant"} or score < conf_threshold:
+                if normalized not in {"bird", "person", "vehicle", "drone", "unknown", "irrelevant"} or score < conf_threshold:
                     continue
                 x1, y1, x2, y2 = [float(v) for v in box.xyxy[0]]
                 w = max(x2 - x1, 0.0)
@@ -231,9 +274,66 @@ class BirdDetectorNode(Node):
         self.target_class_pub.publish(String(data=target_class))
         self.target_confidence_pub.publish(Float32(data=0.0))
         self.latency_pub.publish(Float32(data=0.0))
-        state_text = f"{state} target_class={target_class} bird_confirmed=false"
+        state_text = self._state_text(state, target_class=target_class, confidence=0.0, bird_confirmed=False, detections=0)
         self.state_pub.publish(String(data=state_text))
         self.classification_state_pub.publish(String(data=state_text))
+
+    def _model_state(self) -> str:
+        if self.model is not None and self.bridge is not None and not self.model_error:
+            return "MODEL_READY" if self._class_map_ok() else "MODEL_LOAD_ERROR"
+        text = (self.model_error or "MODEL_MISSING").upper()
+        if "MODEL_NOT_FOUND" in text:
+            return "MODEL_NOT_FOUND"
+        if "MODEL_MISSING" in text or "MODEL_PATH_EMPTY" in text:
+            return "MODEL_MISSING"
+        if "INFERENCE_BACKEND_UNAVAILABLE" in text:
+            return "INFERENCE_BACKEND_UNAVAILABLE"
+        return "MODEL_LOAD_ERROR"
+
+    def _camera_state(self) -> str:
+        if self.camera_info is None:
+            return "CAMERA_INFO_MISSING"
+        if self.last_image_time == 0.0 or self._now() - self.last_image_time > float(self.get_parameter("camera_stale_sec").value):
+            return "CAMERA_STALE"
+        return "CAMERA_OK"
+
+    def _class_map_ok(self) -> bool:
+        aliases = self.class_aliases()
+        values = {str(v).strip().lower() for v in aliases.values()}
+        required = {str(v).strip().lower() for v in self.get_parameter("class_map_required").value if str(v).strip()}
+        return required.issubset(values)
+
+    def _publish_bbox_center_error(self, detections: Detection2DArray, msg: Image) -> None:
+        best_det: Detection2D | None = None
+        best_score = -1.0
+        for det in detections.detections:
+            for result in det.results:
+                score = float(result.hypothesis.score)
+                if score > best_score:
+                    best_score = score
+                    best_det = det
+        if best_det is None or msg.width <= 0:
+            return
+        signed_error_px = float(best_det.bbox.center.x) - float(msg.width) * 0.5
+        self.bbox_error_signed_pub.publish(Float32(data=signed_error_px))
+        self.bbox_error_pub.publish(Float32(data=abs(signed_error_px)))
+
+    def _state_text(
+        self,
+        prefix: str,
+        *,
+        target_class: str = "none",
+        confidence: float = 0.0,
+        bird_confirmed: bool = False,
+        detections: int = 0,
+    ) -> str:
+        fps = 0.0 if self.last_image_time == 0.0 else min(float(self.get_parameter("max_inference_hz").value), 999.0)
+        return (
+            f"{prefix} model_state={self._model_state()} camera_state={self._camera_state()} "
+            f"inference_state={self.last_inference_state} latency_ms={self.last_latency_ms:.2f} fps={fps:.2f} "
+            f"class_map_ok={str(self._class_map_ok()).lower()} target_class={target_class} "
+            f"confidence={float(confidence):.3f} bird_confirmed={str(bool(bird_confirmed)).lower()} detections={int(detections)}"
+        )
 
     @staticmethod
     def _best_confidence(detections: Detection2DArray) -> float:
@@ -271,8 +371,15 @@ class BirdDetectorNode(Node):
         for name in self.get_parameter("bird_class_names").value:
             aliases.setdefault(str(name).strip().lower(), "bird")
         aliases.setdefault("bird", "bird")
+        aliases.setdefault("person", "person")
+        aliases.setdefault("human", "person")
+        aliases.setdefault("vehicle", "vehicle")
+        aliases.setdefault("car", "vehicle")
+        aliases.setdefault("truck", "vehicle")
+        aliases.setdefault("robot", "vehicle")
         aliases.setdefault("drone", "drone")
         aliases.setdefault("uav", "drone")
+        aliases.setdefault("unknown", "unknown")
         return aliases
 
     def _update_confirmation(self, detected: bool) -> bool:
@@ -285,7 +392,7 @@ class BirdDetectorNode(Node):
             self.confirmed_pub.publish(Bool(data=False))
             self.target_class_pub.publish(String(data="none"))
             self.target_confidence_pub.publish(Float32(data=0.0))
-            state = "CAMERA_WAITING target_class=none bird_confirmed=false"
+            state = self._state_text("CAMERA_WAITING", target_class="none", bird_confirmed=False)
             self.state_pub.publish(String(data=state))
             self.classification_state_pub.publish(String(data=state))
             return
@@ -294,7 +401,7 @@ class BirdDetectorNode(Node):
             self.confirmed_pub.publish(Bool(data=False))
             self.target_class_pub.publish(String(data="none"))
             self.target_confidence_pub.publish(Float32(data=0.0))
-            state = "CAMERA_STALE target_class=none bird_confirmed=false"
+            state = self._state_text("CAMERA_STALE", target_class="none", bird_confirmed=False)
             self.state_pub.publish(String(data=state))
             self.classification_state_pub.publish(String(data=state))
 

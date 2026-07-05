@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+REAL_READY_KEYS = (
+    "BIRD_PATROL_FIELD_BRIDGE_READY",
+    "BIRD_PATROL_SENSOR_LIVE_READY",
+    "BIRD_PATROL_LIDAR_TRACKING_READY",
+    "BIRD_PATROL_DETECTOR_READY",
+    "BIRD_PATROL_FUSION_READY",
+    "BIRD_PATROL_INSPECTION_READY",
+    "BIRD_PATROL_SUPERVISED_DETERRENCE_READY",
+    "BIRD_PATROL_AUTONOMOUS_READY",
+)
+
+SIM_READY_KEYS = (
+    "UI_SLAM_MAPPING_SIM_READY",
+    "SAVED_MAP_NAV2_SIM_READY",
+    "GAZEBO_BIRD_PATROL_MECHANISM_SIM_READY",
+    "UI_SLAM_AND_BIRD_DETECTION_SIM_READY",
+)
+
+HARDWARE_EVIDENCE_DIRS = (
+    ROOT / "reports/livox_mid360",
+    ROOT / "reports/camera",
+    ROOT / "reports/bird_detector",
+    ROOT / "reports/hardware_calibration",
+    ROOT / "reports/field_readiness",
+    ROOT / "reports/field_runs",
+)
+
+
+def load_json(path: Path) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def readiness_reports() -> list[dict[str, Any]]:
+    reports: list[dict[str, Any]] = []
+    for path in sorted((ROOT / "reports/bird_mission_readiness").glob("*.json")):
+        data = load_json(path)
+        if data:
+            data["_path"] = path
+            reports.append(data)
+    return reports
+
+
+def status_is_pass(data: dict[str, Any]) -> bool:
+    return data.get("status") == "PASS" or data.get("result") == "PASS"
+
+
+def status_is_degraded(data: dict[str, Any]) -> bool:
+    return data.get("status") == "PASS_DEGRADED" or data.get("result") == "PASS_DEGRADED"
+
+
+def has_source_pass(reports: list[dict[str, Any]]) -> bool:
+    return any(item.get("mode") == "source" and status_is_pass(item) for item in reports)
+
+
+def has_live_hardware_evidence() -> bool:
+    for directory in HARDWARE_EVIDENCE_DIRS:
+        if not directory.exists():
+            continue
+        for path in directory.glob("*.json"):
+            data = load_json(path)
+            if not data:
+                continue
+            if data.get("sim_only") is True or data.get("dry_run") is True or data.get("no_hardware") is True:
+                continue
+            if data.get("status") == "PASS" or data.get("result") == "PASS":
+                return True
+    return False
+
+
+def simulation_status() -> dict[str, str]:
+    sim = load_json(ROOT / "reports/sim_regression/latest.json")
+    ui_bird = load_json(ROOT / "reports/ui_slam_bird_detection/latest.json")
+    statuses = {key: "NOT_RUN" for key in SIM_READY_KEYS}
+    ui_slam = sim.get("ui_slam_mapping", {}) if isinstance(sim.get("ui_slam_mapping"), dict) else {}
+    nav2 = sim.get("saved_map_nav2", {}) if isinstance(sim.get("saved_map_nav2"), dict) else {}
+    bird = sim.get("gazebo_bird_patrol_mechanism", {}) if isinstance(sim.get("gazebo_bird_patrol_mechanism"), dict) else {}
+    if ui_slam.get("status") == "PASS":
+        statuses["UI_SLAM_MAPPING_SIM_READY"] = "YES"
+    if nav2.get("status") == "PASS":
+        statuses["SAVED_MAP_NAV2_SIM_READY"] = "YES"
+    if bird.get("status") == "PASS":
+        statuses["GAZEBO_BIRD_PATROL_MECHANISM_SIM_READY"] = "YES"
+    if ui_bird.get("result") == "PASS" and ui_bird.get("sim_only") is True:
+        statuses["UI_SLAM_AND_BIRD_DETECTION_SIM_READY"] = "YES"
+    return statuses
+
+
+def real_status(source_ready: bool, hardware_ready: bool) -> dict[str, str]:
+    statuses = {key: "NOT_RUN" for key in REAL_READY_KEYS}
+    if source_ready:
+        statuses["BIRD_PATROL_FIELD_BRIDGE_READY"] = "NO_LIVE_HARDWARE_EVIDENCE" if not hardware_ready else "YES"
+    if not hardware_ready:
+        return statuses
+    for key in REAL_READY_KEYS:
+        statuses[key] = "YES"
+    return statuses
+
+
+def top_level_judgment(source_ready: bool, hardware_ready: bool, reports: list[dict[str, Any]]) -> str:
+    if any(status_is_degraded(item) and item.get("mode") == "autonomous-patrol" for item in reports):
+        # Explicitly do not promote PASS_DEGRADED autonomous reports.
+        return "BIRD_PATROL_SOURCE_READY" if source_ready else "NOT_BIRD_PATROL_READY"
+    if hardware_ready:
+        return "BIRD_PATROL_HARDWARE_EVIDENCE_READY_NEEDS_OPERATOR_REVIEW"
+    if source_ready:
+        return "BIRD_PATROL_SOURCE_READY"
+    return "NOT_BIRD_PATROL_READY"
+
+
+def main() -> int:
+    reports = readiness_reports()
+    source_ready = has_source_pass(reports)
+    hardware_ready = has_live_hardware_evidence()
+    sim = simulation_status()
+    real = real_status(source_ready, hardware_ready)
+    judgment = top_level_judgment(source_ready, hardware_ready, reports)
+    path = ROOT / "reports/bird_mission_readiness_audit.md"
+    lines = [
+        judgment,
+        "",
+        "# Bird Mission Readiness Audit",
+        "",
+        "This audit separates source/static evidence, Gazebo simulation evidence, and real hardware evidence.",
+        "Gazebo/UI simulation PASS must never promote real autonomous readiness.",
+        "PASS_DEGRADED must never promote `BIRD_PATROL_AUTONOMOUS_READY`.",
+        "",
+        "## Top-Level Judgment",
+        "",
+        f"- `BIRD_PATROL_SOURCE_READY`: {'YES' if source_ready else 'NO'}",
+        f"- live hardware evidence present: {'YES' if hardware_ready else 'NO'}",
+        f"- honest top-level judgment: `{judgment}`",
+        "",
+        "## Simulation Evidence",
+        "",
+    ]
+    for key in SIM_READY_KEYS:
+        lines.append(f"- `{key}`: {sim[key]}")
+    lines.extend(["", "## Real Hardware Readiness", ""])
+    for key in REAL_READY_KEYS:
+        lines.append(f"- `{key}`: {real[key]}")
+    lines.extend(
+        [
+            "",
+            "## What Is Available Now",
+            "",
+            "- Clean field release generation and validation.",
+            "- Local operator station scripts and SSH/Jetson Docker bridge contracts.",
+            "- Source/static/dry-run checks for launch, command chain, network, and release hygiene.",
+            "- Deterministic Gazebo UI SLAM + bird display regression evidence.",
+            "- Hardware probe scripts and checklists ready for live Jetson/Livox/camera/base tests.",
+            "",
+            "## What Is Not Yet Proven",
+            "",
+            "- Autonomous wheel-on field patrol.",
+            "- Live Livox pointcloud/scan/TF quality on the target Jetson.",
+            "- Live camera detector, camera-LiDAR calibration, and 3D fusion readiness.",
+            "- Real sound deterrent backend and operator/legal/hardware ACK.",
+            "- Real base feedback, odometry, braking, E-stop, and blackbox evidence under motion.",
+            "",
+            "## Recent Readiness Reports",
+            "",
+            "| Report | Mode | Status | Failed | Blocked |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+    )
+    for report in reports[-20:]:
+        report_path = Path(str(report.get("_path", "")))
+        lines.append(
+            f"| `{report_path.name}` | {report.get('mode')} | {report.get('status')} | "
+            f"{len(report.get('failed_checks', []))} | {len(report.get('blocked_capabilities', []))} |"
+        )
+    path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    print(f"BIRD_MISSION_AUDIT={path}")
+    print(f"BIRD_MISSION_AUDIT_JUDGMENT={judgment}")
+    print(f"BIRD_MISSION_AUDIT_HARDWARE_EVIDENCE={'YES' if hardware_ready else 'NO'}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

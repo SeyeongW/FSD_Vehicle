@@ -3,9 +3,11 @@ set -euo pipefail
 
 WORKSPACE_ROOT=${WORKSPACE_ROOT:-$HOME/ros2_ws5/FSD_Vehicle}
 OUTPUT_ROOT=${OUTPUT_ROOT:-$WORKSPACE_ROOT/experiment_results/gazebo_spatial_response}
-TIMEOUT_SEC=${TIMEOUT_SEC:-180}
+TIMEOUT_SEC=${TIMEOUT_SEC:-300}
 ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
 RANDOM_SEED=${RANDOM_SEED:-530}
+BIRD_REMOVAL_GOAL_COUNT=${BIRD_REMOVAL_GOAL_COUNT:-2}
+ACTIVE_BIRDS=${ACTIVE_BIRDS:-bird_1,bird_2,bird_3,bird_4}
 BATCH_TIME="$(date +%Y%m%d_%H%M%S)"
 TRIAL_ID="spatial_lidar_${BATCH_TIME}_seed${RANDOM_SEED}"
 RUN_ID="${TRIAL_ID}_${BATCH_TIME}"
@@ -78,8 +80,8 @@ timeout --foreground "${TIMEOUT_SEC}s" ros2 launch ugv_gazebo ugv_gazebo_bird_pa
   write_yolo:=false \
   enable_bird_removal_after_detection:=true \
   require_sound_done_for_removal:=true \
-  bird_removal_goal_count:=2 \
-  active_birds:=bird_1,bird_2,bird_3,bird_4 \
+  bird_removal_goal_count:="$BIRD_REMOVAL_GOAL_COUNT" \
+  active_birds:="$ACTIVE_BIRDS" \
   random_seed:="$RANDOM_SEED" \
   trial_id:="$TRIAL_ID" \
   run_id:="$RUN_ID" \
@@ -97,6 +99,6 @@ fi
 python3 src/waver_experiment_logger/scripts/compute_spatial_response_metrics.py "$RUN_DIR"
 python3 scripts/verify_gazebo_spatial_response_trial.py "$RUN_DIR" \
   --mode full \
-  --min-removed-birds 2 \
+  --min-removed-birds "$BIRD_REMOVAL_GOAL_COUNT" \
   --require-mid-patrol-preempt
 echo "RUN_DIR=$RUN_DIR"

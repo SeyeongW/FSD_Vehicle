@@ -4,10 +4,20 @@ import math
 
 import rclpy
 from geometry_msgs.msg import PoseStamped
+from rclpy.duration import Duration
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import Bool, Float32, String
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+
+try:
+    from tf2_geometry_msgs import do_transform_pose_stamped
+    from tf2_ros import Buffer, TransformException, TransformListener
+except Exception:  # pragma: no cover
+    Buffer = None
+    TransformException = Exception
+    TransformListener = None
+    do_transform_pose_stamped = None
 
 
 class SeoCameraTiltJointNode(Node):
@@ -16,6 +26,8 @@ class SeoCameraTiltJointNode(Node):
     def __init__(self) -> None:
         super().__init__("seo_camera_tilt_joint_node")
         self.declare_parameter("target_topic", "/waver/lidar_target_pose_base")
+        self.declare_parameter("base_frame", "base_footprint")
+        self.declare_parameter("transform_timeout_sec", 0.05)
         self.declare_parameter("joint_topic", "/set_joint_trajectory")
         self.declare_parameter("joint_name", "pt_link1_to_pt_link2")
         self.declare_parameter("tilt_axis_sign", -1.0)
@@ -26,6 +38,8 @@ class SeoCameraTiltJointNode(Node):
         self.declare_parameter("publish_joint_trajectory", False)
         self.target: PoseStamped | None = None
         self.request_active = False
+        self.tf_buffer = Buffer() if Buffer is not None else None
+        self.tf_listener = TransformListener(self.tf_buffer, self) if self.tf_buffer is not None else None
         self.joint_pub = self.create_publisher(JointTrajectory, str(self.get_parameter("joint_topic").value), 10)
         self.centered_pub = self.create_publisher(Bool, "/waver/camera_target_centered", 10)
         self.state_pub = self.create_publisher(String, "/waver/camera_alignment_state", 10)
@@ -41,9 +55,14 @@ class SeoCameraTiltJointNode(Node):
         if self.target is None or not self.request_active:
             self.centered_pub.publish(Bool(data=False))
             return
-        x = float(self.target.pose.position.x)
-        y = float(self.target.pose.position.y)
-        z = float(self.target.pose.position.z)
+        target = self.target_in_base()
+        if target is None:
+            self.centered_pub.publish(Bool(data=False))
+            self.state_pub.publish(String(data="CAMERA_ALIGNMENT TF_FAIL centered=false"))
+            return
+        x = float(target.pose.position.x)
+        y = float(target.pose.position.y)
+        z = float(target.pose.position.z)
         bearing = math.atan2(y, x)
         elevation = math.atan2(z, max(math.hypot(x, y), 1e-6))
         tilt = float(self.get_parameter("tilt_axis_sign").value) * elevation
@@ -63,6 +82,26 @@ class SeoCameraTiltJointNode(Node):
         self.centered_pub.publish(Bool(data=centered))
         mode = str(self.get_parameter("alignment_mode").value)
         self.state_pub.publish(String(data=f"CAMERA_ALIGNMENT mode={mode} centered={centered} bearing={bearing:.3f} tilt_cmd={tilt:.3f} joint_publish={bool(self.get_parameter('publish_joint_trajectory').value)}"))
+
+    def target_in_base(self) -> PoseStamped | None:
+        target = self.target
+        if target is None:
+            return None
+        base_frame = str(self.get_parameter("base_frame").value)
+        if not target.header.frame_id or target.header.frame_id == base_frame:
+            return target
+        if self.tf_buffer is None or do_transform_pose_stamped is None:
+            return None
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                base_frame,
+                target.header.frame_id,
+                rclpy.time.Time(),
+                timeout=Duration(seconds=float(self.get_parameter("transform_timeout_sec").value)),
+            )
+            return do_transform_pose_stamped(target, transform)
+        except (TransformException, Exception):
+            return None
 
 
 def main(args: list[str] | None = None) -> None:

@@ -16,6 +16,10 @@ mission_patrol_manager_node:
     patrol_goal_timeout_sec: 180.0
     enable_sound_task: true
     enable_sound_output: false
+    require_3d_fusion_valid_for_sound: true
+    require_dynamic_valid_for_sound: true
+    dynamic_valid_grace_sec_for_sound: 2.0
+    require_camera_centered_for_sound: true
     deterrence_classes: ["bird"]
     sound_task_timeout_sec: 15.0
     wait_bird_clear_after_sound: true

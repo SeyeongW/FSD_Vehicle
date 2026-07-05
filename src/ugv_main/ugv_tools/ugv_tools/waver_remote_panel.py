@@ -71,6 +71,10 @@ class PanelState:
     target_class: str = "unknown"
     target_confidence: float = 0.0
     bird_confirmed: bool = False
+    bird_detector_state: str = "unknown"
+    bird_fusion_state: str = "unknown"
+    bird_detector_update_time: float = 0.0
+    bird_fusion_update_time: float = 0.0
     lidar_target_id: str = "unknown"
     lidar_target_valid: bool = False
     lidar_target_frame: str = ""
@@ -175,6 +179,8 @@ class WaverRemoteNode(Node):
         self.declare_parameter("inspection_target_state_topic", "/waver/inspection_target_state")
         self.declare_parameter("height_filter_debug_topic", "/waver/height_filter_debug")
         self.declare_parameter("camera_detection_status_topic", "/waver/target_classification_state")
+        self.declare_parameter("bird_detector_state_topic", "/waver/bird_detector_state")
+        self.declare_parameter("bird_fusion_state_topic", "/waver/bird_fusion_state")
         self.declare_parameter("camera_alignment_state_topic", "/waver/camera_alignment_state")
         self.declare_parameter("camera_target_centered_topic", "/waver/camera_target_centered")
         self.declare_parameter("sound_mission_status_topic", "/waver/sound_alert_state")
@@ -577,6 +583,18 @@ class WaverRemoteNode(Node):
             String,
             str(self.get_parameter("camera_detection_status_topic").value),
             lambda msg: self.set_text_state("camera_state", msg.data),
+            10,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("bird_detector_state_topic").value),
+            lambda msg: self.set_timed_text_state("bird_detector_state", "bird_detector_update_time", msg.data),
+            10,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("bird_fusion_state_topic").value),
+            lambda msg: self.set_timed_text_state("bird_fusion_state", "bird_fusion_update_time", msg.data),
             10,
         )
         self.create_subscription(
@@ -1268,6 +1286,12 @@ finally:
         # 역할: 여러 상태 문자열 토픽을 같은 패턴으로 GUI 공유 상태에 반영한다.
         with self.lock:
             setattr(self.state, field_name, value)
+
+    def set_timed_text_state(self, field_name: str, time_field_name: str, value: str) -> None:
+        # 역할: detector/fusion처럼 freshness 표시가 필요한 상태 문자열을 갱신한다.
+        with self.lock:
+            setattr(self.state, field_name, value)
+            setattr(self.state, time_field_name, time.monotonic())
 
     def set_bool_state(self, field_name: str, value: bool) -> None:
         # 역할: 여러 Bool 상태 토픽을 같은 패턴으로 GUI 공유 상태에 반영한다.
@@ -3276,6 +3300,10 @@ class WaverRemotePanel:
             target_class = self.state.target_class
             target_confidence = self.state.target_confidence
             bird_confirmed = self.state.bird_confirmed
+            bird_detector_state = self.state.bird_detector_state
+            bird_fusion_state = self.state.bird_fusion_state
+            bird_detector_update_time = self.state.bird_detector_update_time
+            bird_fusion_update_time = self.state.bird_fusion_update_time
             lidar_target_id = self.state.lidar_target_id
             lidar_target_valid = self.state.lidar_target_valid
             lidar_target_frame = self.state.lidar_target_frame
@@ -3316,6 +3344,18 @@ class WaverRemotePanel:
             if lidar_target_update_time > 0.0
             else float("inf")
         )
+        bird_detector_age = (
+            max(0.0, time.monotonic() - bird_detector_update_time)
+            if bird_detector_update_time > 0.0
+            else float("inf")
+        )
+        bird_fusion_age = (
+            max(0.0, time.monotonic() - bird_fusion_update_time)
+            if bird_fusion_update_time > 0.0
+            else float("inf")
+        )
+        bird_detector_fresh = bird_detector_age <= 2.0
+        bird_fusion_fresh = bird_fusion_age <= 2.0
         lidar_pose_text = "LiDAR: waiting for target"
         if (
             lidar_target_valid
@@ -3369,6 +3409,12 @@ class WaverRemotePanel:
         self.target_var.set(
             f"{lidar_pose_text}\n"
             f"class={target_class}, conf={target_confidence:.2f}, bird={bird_confirmed}\n"
+            f"detector={bird_detector_state[:100]}, "
+            f"age={format_optional(bird_detector_age if bird_detector_age != float('inf') else None, '.1f')}s, "
+            f"fresh={bird_detector_fresh}\n"
+            f"fusion={bird_fusion_state[:100]}, "
+            f"age={format_optional(bird_fusion_age if bird_fusion_age != float('inf') else None, '.1f')}s, "
+            f"fresh={bird_fusion_fresh}\n"
             f"height/dynamic: {height_filter[:120]}"
         )
         self.dynamic_obstacle_var.set(f"dynamic: {dynamic_obstacle[:360]}")

@@ -17,30 +17,128 @@ SSH_CMD=("${WAVER_SSH_CMD[@]}")
 SCP_CMD=("${WAVER_SCP_CMD[@]}")
 JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST}}"
 
+WAVER_REAL_PROFILE="${WAVER_REAL_PROFILE:-lidar_nav_backend}"
+WAVER_REAL_PROFILE_PATH="${WAVER_REAL_PROFILE_PATH:-${LOCAL_ROOT}/config/real_profiles/${WAVER_REAL_PROFILE}.yaml}"
+if [ ! -f "${WAVER_REAL_PROFILE_PATH}" ]; then
+  echo "[LOCAL][ERROR] real profile not found: ${WAVER_REAL_PROFILE_PATH}" >&2
+  exit 11
+fi
+eval "$(python3 - "${WAVER_REAL_PROFILE_PATH}" <<'PY'
+import shlex
+import sys
+from pathlib import Path
+
+import yaml
+
+path = Path(sys.argv[1])
+data = yaml.safe_load(path.read_text()) or {}
+
+def find_leaf(obj, key):
+    if isinstance(obj, dict):
+        if key in obj:
+            return obj[key]
+        for value in obj.values():
+            found = find_leaf(value, key)
+            if found is not None:
+                return found
+    return None
+
+def emit(name, value):
+    if value is None:
+        return
+    if isinstance(value, bool):
+        value = "true" if value else "false"
+    elif isinstance(value, (list, tuple)):
+        value = ",".join(str(item) for item in value)
+    else:
+        value = str(value)
+    print(f"PROFILE_{name}={shlex.quote(value)}")
+
+for key in (
+    "enable_waver_base_driver",
+    "serial_port_required",
+    "scan_source",
+    "scan_topic",
+    "pointcloud_topic",
+    "camera_image_topic",
+    "camera_info_topic",
+    "camera_lidar_extrinsic_path",
+    "odom_source",
+    "enable_robot_localization",
+    "enable_nav2",
+    "enable_collision_monitor",
+    "enable_mission_patrol_manager",
+    "enable_auto_behavior_mux",
+    "enable_bird_detector",
+    "enable_pointcloud_lidar_objects",
+    "enable_bird_3d_fusion",
+    "enable_sound_deterrent",
+    "enable_sound_output",
+    "max_linear_speed",
+    "max_angular_speed",
+    "require_scan",
+    "require_odom",
+    "require_battery",
+    "manual_ack_required",
+    "forbidden_nodes",
+):
+    emit(key.upper(), data.get(key, find_leaf(data, key)))
+PY
+)"
+
 MAP_PATH="${MAP_PATH:-/ros2_ws/ros2_ws5/maps/waver_latest_map.yaml}"
 WAYPOINT_FILE="${WAYPOINT_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/waypoints/waver_real_0p5m_square_patrol.yaml}"
 MISSION_PARAMS_FILE="${MISSION_PARAMS_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/config/waver_nav2_radar_bird_mission_real.yaml}"
 NAV2_PARAMS_FILE="${NAV2_PARAMS_FILE:-/ros2_ws/ros2_ws5/src/waver_patrol/config/nav2_params_waver_real.yaml}"
-ODOM_SOURCE="${ODOM_SOURCE:-ekf}"
-POINTCLOUD_TOPIC="${POINTCLOUD_TOPIC:-${LIVOX_POINTCLOUD_TOPIC:-/livox/lidar}}"
-SCAN_TOPIC="${SCAN_TOPIC:-/scan}"
+ODOM_SOURCE="${ODOM_SOURCE:-${PROFILE_ODOM_SOURCE:-ekf}}"
+POINTCLOUD_TOPIC="${POINTCLOUD_TOPIC:-${PROFILE_POINTCLOUD_TOPIC:-${LIVOX_POINTCLOUD_TOPIC:-/livox/lidar}}}"
+SCAN_TOPIC="${SCAN_TOPIC:-${PROFILE_SCAN_TOPIC:-/scan_safety}}"
 START_LIVOX_DRIVER="${START_LIVOX_DRIVER:-true}"
-LIVOX_TOPIC="${LIVOX_TOPIC:-${POINTCLOUD_TOPIC}}"
+FEEDBACK_SCHEMA_PATH="${FEEDBACK_SCHEMA_PATH:-/ros2_ws/ros2_ws5/config/waver_base_feedback_schema.yaml}"
+LIVOX_FIELD_CONFIG="${LIVOX_FIELD_CONFIG:-${LOCAL_ROOT}/config/sensors/livox_mid360_field.local.yaml}"
+if [ ! -f "${LIVOX_FIELD_CONFIG}" ]; then
+  LIVOX_FIELD_CONFIG="${LOCAL_ROOT}/config/sensors/livox_mid360_field.example.yaml"
+fi
+eval "$(python3 - "${LIVOX_FIELD_CONFIG}" <<'PY'
+import shlex
+import sys
+from pathlib import Path
+import yaml
+path = Path(sys.argv[1])
+data = yaml.safe_load(path.read_text()) if path.exists() else {}
+for src, dst in {
+    "host_ip": "LIVOX_CONFIG_HOST_IP",
+    "sensor_ip": "LIVOX_CONFIG_SENSOR_IP",
+    "frame_id": "LIVOX_CONFIG_FRAME_ID",
+    "publish_freq": "LIVOX_CONFIG_PUBLISH_FREQ",
+    "bd_code": "LIVOX_CONFIG_BD_CODE",
+    "pointcloud_topic": "LIVOX_CONFIG_POINTCLOUD_TOPIC",
+}.items():
+    value = data.get(src)
+    if value is not None:
+        print(f"{dst}={shlex.quote(str(value))}")
+PY
+)"
+LIVOX_TOPIC="${LIVOX_TOPIC:-${LIVOX_CONFIG_POINTCLOUD_TOPIC:-${POINTCLOUD_TOPIC}}}"
 LIVOX_CONFIG_PATH="${LIVOX_CONFIG_PATH:-/ros2_ws/ros2_ws5/install_docker/livox_ros_driver2/share/livox_ros_driver2/config/MID360_config.json}"
-LIVOX_FRAME_ID="${LIVOX_FRAME_ID:-livox}"
-LIVOX_HOST_IP="${LIVOX_HOST_IP:-192.168.1.50}"
-LIVOX_SENSOR_IP="${LIVOX_SENSOR_IP:-192.168.1.102}"
-LIVOX_PUBLISH_FREQ="${LIVOX_PUBLISH_FREQ:-10.0}"
-LIVOX_BD_CODE="${LIVOX_BD_CODE:-livox0000000001}"
+LIVOX_FRAME_ID="${LIVOX_FRAME_ID:-${LIVOX_CONFIG_FRAME_ID:-livox}}"
+LIVOX_HOST_IP="${LIVOX_HOST_IP:-${LIVOX_CONFIG_HOST_IP:-192.168.1.50}}"
+LIVOX_SENSOR_IP="${LIVOX_SENSOR_IP:-${LIVOX_CONFIG_SENSOR_IP:-192.168.1.102}}"
+LIVOX_PUBLISH_FREQ="${LIVOX_PUBLISH_FREQ:-${LIVOX_CONFIG_PUBLISH_FREQ:-10.0}}"
+LIVOX_BD_CODE="${LIVOX_BD_CODE:-${LIVOX_CONFIG_BD_CODE:-livox0000000001}}"
 BIRD_MODEL_PATH="${BIRD_MODEL_PATH:-${bird_model_path:-}}"
-CAMERA_IMAGE_TOPIC="${CAMERA_IMAGE_TOPIC:-/camera/image_raw}"
-CAMERA_INFO_TOPIC="${CAMERA_INFO_TOPIC:-/camera/camera_info}"
-SAFETY_MAX_LINEAR_SPEED="${SAFETY_MAX_LINEAR_SPEED:-0.05}"
-SAFETY_MAX_ANGULAR_SPEED="${SAFETY_MAX_ANGULAR_SPEED:-0.20}"
-ENABLE_BIRD_STACK="${ENABLE_BIRD_STACK:-false}"
-ENABLE_SOUND_STACK="${ENABLE_SOUND_STACK:-false}"
-ENABLE_WAVER_BASE_DRIVER="${ENABLE_WAVER_BASE_DRIVER:-true}"
-REQUIRE_SCAN="${REQUIRE_SCAN:-true}"
+CAMERA_IMAGE_TOPIC="${CAMERA_IMAGE_TOPIC:-${PROFILE_CAMERA_IMAGE_TOPIC:-/camera/image_raw}}"
+CAMERA_INFO_TOPIC="${CAMERA_INFO_TOPIC:-${PROFILE_CAMERA_INFO_TOPIC:-/camera/camera_info}}"
+CAMERA_LIDAR_EXTRINSIC="${CAMERA_LIDAR_EXTRINSIC:-${PROFILE_CAMERA_LIDAR_EXTRINSIC_PATH:-config/sensors/camera_lidar_extrinsic.yaml}}"
+SAFETY_MAX_LINEAR_SPEED="${SAFETY_MAX_LINEAR_SPEED:-${PROFILE_MAX_LINEAR_SPEED:-0.05}}"
+SAFETY_MAX_ANGULAR_SPEED="${SAFETY_MAX_ANGULAR_SPEED:-${PROFILE_MAX_ANGULAR_SPEED:-0.20}}"
+ENABLE_BIRD_STACK="${ENABLE_BIRD_STACK:-${PROFILE_ENABLE_BIRD_DETECTOR:-false}}"
+ENABLE_SOUND_STACK="${ENABLE_SOUND_STACK:-${PROFILE_ENABLE_SOUND_DETERRENT:-false}}"
+ENABLE_SOUND_OUTPUT="${ENABLE_SOUND_OUTPUT:-${PROFILE_ENABLE_SOUND_OUTPUT:-false}}"
+SOUND_SAFETY_ACK="${SOUND_SAFETY_ACK:-false}"
+ENABLE_WAVER_BASE_DRIVER="${ENABLE_WAVER_BASE_DRIVER:-${PROFILE_ENABLE_WAVER_BASE_DRIVER:-true}}"
+ENABLE_COLLISION_MONITOR="${ENABLE_COLLISION_MONITOR:-${PROFILE_ENABLE_COLLISION_MONITOR:-false}}"
+REQUIRE_SCAN="${REQUIRE_SCAN:-${PROFILE_REQUIRE_SCAN:-true}}"
 WAVER_FIELD_MODE="${WAVER_FIELD_MODE:-production}"
 FIELD_READINESS_LEVEL="${FIELD_READINESS_LEVEL:-L3}"
 FIELD_READINESS_STRICT="${FIELD_READINESS_STRICT:-true}"
@@ -83,6 +181,7 @@ fi
 select_jetson_host
 
 echo "[LOCAL] target Jetson: ${JETSON_USER}@${JETSON_HOST} ws=${JETSON_WS}"
+echo "[LOCAL] real profile=${WAVER_REAL_PROFILE} path=${WAVER_REAL_PROFILE_PATH}"
 echo "[LOCAL] syncing real-nav source/config/map files to Jetson"
 SYNC_PATHS=(
   "src/waver_patrol/launch"
@@ -94,7 +193,13 @@ SYNC_PATHS=(
   "maps"
   "scripts"
   "docs"
-  "config/real_profiles"
+    "config/real_profiles"
+    "config/sensors"
+    "config/perception"
+    "config/waver_base_feedback_schema.yaml"
+    "config/hardware_acceptance_matrix.yaml"
+    "README_BIRD_PATROL_FIELD.md"
+    "requirements-jetson-perception.txt"
 )
 
 for rel in "${SYNC_PATHS[@]}"; do
@@ -109,13 +214,14 @@ done
   "${MAP_PATH}" "${WAYPOINT_FILE}" "${MISSION_PARAMS_FILE}" "${NAV2_PARAMS_FILE}" \
   "${ODOM_SOURCE}" "${POINTCLOUD_TOPIC}" "${SCAN_TOPIC}" \
   "${SAFETY_MAX_LINEAR_SPEED}" "${SAFETY_MAX_ANGULAR_SPEED}" \
-  "${ENABLE_BIRD_STACK}" "${ENABLE_SOUND_STACK}" \
-  "${START_LIVOX_DRIVER}" "${LIVOX_TOPIC}" "${LIVOX_CONFIG_PATH}" \
+  "${ENABLE_BIRD_STACK}" "${ENABLE_SOUND_STACK}" "${ENABLE_SOUND_OUTPUT}" "${SOUND_SAFETY_ACK}" \
+  "${START_LIVOX_DRIVER}" "${FEEDBACK_SCHEMA_PATH}" "${LIVOX_TOPIC}" "${LIVOX_CONFIG_PATH}" \
   "${LIVOX_FRAME_ID}" "${LIVOX_PUBLISH_FREQ}" "${LIVOX_BD_CODE}" \
   "${LIVOX_HOST_IP}" "${LIVOX_SENSOR_IP}" "${BIRD_MODEL_PATH}" \
-  "${CAMERA_IMAGE_TOPIC}" "${CAMERA_INFO_TOPIC}" \
+  "${CAMERA_IMAGE_TOPIC}" "${CAMERA_INFO_TOPIC}" "${CAMERA_LIDAR_EXTRINSIC}" \
   "${SERIAL_PORT_BY_ID_PATTERN}" "${SERIAL_PORT_ALLOW_TTYUSB_FALLBACK}" "${SERIAL_PORT_ALLOW_TTYTHS_FALLBACK}" \
-  "${ENABLE_WAVER_BASE_DRIVER}" "${REQUIRE_SCAN}" "${WAVER_FIELD_MODE}" "${FIELD_READINESS_LEVEL}" "${FIELD_READINESS_STRICT}" <<'REMOTE'
+  "${ENABLE_WAVER_BASE_DRIVER}" "${ENABLE_COLLISION_MONITOR}" "${REQUIRE_SCAN}" "${WAVER_FIELD_MODE}" "${FIELD_READINESS_LEVEL}" "${FIELD_READINESS_STRICT}" \
+  "${WAVER_REAL_PROFILE}" <<'REMOTE'
 set -euo pipefail
 
 JETSON_WS="$1"
@@ -133,25 +239,31 @@ SAFETY_MAX_LINEAR_SPEED="${12}"
 SAFETY_MAX_ANGULAR_SPEED="${13}"
 ENABLE_BIRD_STACK="${14}"
 ENABLE_SOUND_STACK="${15}"
-START_LIVOX_DRIVER="${16}"
-LIVOX_TOPIC="${17}"
-LIVOX_CONFIG_PATH="${18}"
-LIVOX_FRAME_ID="${19}"
-LIVOX_PUBLISH_FREQ="${20}"
-LIVOX_BD_CODE="${21}"
-LIVOX_HOST_IP="${22}"
-LIVOX_SENSOR_IP="${23}"
-BIRD_MODEL_PATH="${24}"
-CAMERA_IMAGE_TOPIC="${25}"
-CAMERA_INFO_TOPIC="${26}"
-SERIAL_PORT_BY_ID_PATTERN="${27}"
-SERIAL_PORT_ALLOW_TTYUSB_FALLBACK="${28}"
-SERIAL_PORT_ALLOW_TTYTHS_FALLBACK="${29}"
-ENABLE_WAVER_BASE_DRIVER="${30}"
-REQUIRE_SCAN="${31}"
-WAVER_FIELD_MODE="${32}"
-FIELD_READINESS_LEVEL="${33}"
-FIELD_READINESS_STRICT="${34}"
+ENABLE_SOUND_OUTPUT="${16}"
+SOUND_SAFETY_ACK="${17}"
+START_LIVOX_DRIVER="${18}"
+FEEDBACK_SCHEMA_PATH="${19}"
+LIVOX_TOPIC="${20}"
+LIVOX_CONFIG_PATH="${21}"
+LIVOX_FRAME_ID="${22}"
+LIVOX_PUBLISH_FREQ="${23}"
+LIVOX_BD_CODE="${24}"
+LIVOX_HOST_IP="${25}"
+LIVOX_SENSOR_IP="${26}"
+BIRD_MODEL_PATH="${27}"
+CAMERA_IMAGE_TOPIC="${28}"
+CAMERA_INFO_TOPIC="${29}"
+CAMERA_LIDAR_EXTRINSIC="${30}"
+SERIAL_PORT_BY_ID_PATTERN="${31}"
+SERIAL_PORT_ALLOW_TTYUSB_FALLBACK="${32}"
+SERIAL_PORT_ALLOW_TTYTHS_FALLBACK="${33}"
+ENABLE_WAVER_BASE_DRIVER="${34}"
+ENABLE_COLLISION_MONITOR="${35}"
+REQUIRE_SCAN="${36}"
+WAVER_FIELD_MODE="${37}"
+FIELD_READINESS_LEVEL="${38}"
+FIELD_READINESS_STRICT="${39}"
+WAVER_REAL_PROFILE="${40}"
 BIRD_MODEL_LAUNCH_ARG=""
 if [ -n "${BIRD_MODEL_PATH}" ]; then
   BIRD_MODEL_LAUNCH_ARG="bird_model_path:=${BIRD_MODEL_PATH}"
@@ -333,7 +445,7 @@ PY
   sleep 2
 fi
 
-echo "[JETSON] starting real LiDAR/Nav2 backend"
+echo "[JETSON] starting production bird patrol backend"
 echo "[JETSON] map=${MAP_PATH}"
 echo "[JETSON] waypoints=${WAYPOINT_FILE}"
 echo "[JETSON] serial=${SERIAL_PORT} odom_source=${ODOM_SOURCE} pointcloud=${POINTCLOUD_TOPIC} scan=${SCAN_TOPIC}"
@@ -344,13 +456,15 @@ fi
 docker exec -d "${CONTAINER}" bash -lc "
 cd /ros2_ws/ros2_ws5
 ${DOCKER_SOURCE}
-exec ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
+exec ros2 launch waver_patrol bird_patrol_production.launch.py \
+  profile:=/ros2_ws/ros2_ws5/config/real_profiles/${WAVER_REAL_PROFILE}.yaml \
   use_sim_time:=false \
   real_profile:=true \
   use_nav2:=true \
   default_mode:=STANDBY \
   enable_waver_base_driver:=${ENABLE_WAVER_BASE_DRIVER} \
   serial_port:=${SERIAL_PORT} \
+  feedback_schema_path:=${FEEDBACK_SCHEMA_PATH} \
   start_serial_bridge:=false \
   start_base_feedback:=false \
   include_existing_ugv_driver:=false \
@@ -364,6 +478,7 @@ exec ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   pointcloud_topic:=${POINTCLOUD_TOPIC} \
   camera_image_topic:=${CAMERA_IMAGE_TOPIC} \
   camera_info_topic:=${CAMERA_INFO_TOPIC} \
+  camera_lidar_extrinsic:=${CAMERA_LIDAR_EXTRINSIC} \
   scan_topic:=${SCAN_TOPIC} \
   map:=${MAP_PATH} \
   waypoint_file:=${WAYPOINT_FILE} \
@@ -373,12 +488,16 @@ exec ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
   enable_pointcloud_lidar_objects:=true \
   enable_moving_object_map_transform:=true \
   enable_moving_object_motion_filter:=true \
+  enable_target_goal_manager:=${ENABLE_BIRD_STACK} \
+  enable_target_departure_monitor:=${ENABLE_BIRD_STACK} \
+  enable_radar_command_bridge:=false \
   enable_bird_detector:=${ENABLE_BIRD_STACK} \
   enable_bird_3d_fusion:=${ENABLE_BIRD_STACK} \
   enable_camera_gimbal_controller:=${ENABLE_BIRD_STACK} \
   enable_sound_deterrent:=${ENABLE_SOUND_STACK} \
-  enable_sound_output:=false \
-  sound_safety_ack:=false \
+  enable_sound_output:=${ENABLE_SOUND_OUTPUT} \
+  sound_safety_ack:=${SOUND_SAFETY_ACK} \
+  enable_collision_monitor:=${ENABLE_COLLISION_MONITOR} \
   enable_experiment_logger:=false \
   safety_max_linear_speed:=${SAFETY_MAX_LINEAR_SPEED} \
   safety_max_angular_speed:=${SAFETY_MAX_ANGULAR_SPEED} \
@@ -427,7 +546,7 @@ docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} &&
 echo "[JETSON] serial owner after launch:"
 fuser -v "${SERIAL_PORT}" 2>&1 || true
 
-READINESS_ARGS=(--level "${FIELD_READINESS_LEVEL}" --scan-topic "${SCAN_TOPIC}" --odom-source "${ODOM_SOURCE}" --require-scan "${REQUIRE_SCAN}" --enable-waver-base-driver "${ENABLE_WAVER_BASE_DRIVER}" --enable-bird-stack "${ENABLE_BIRD_STACK}" --enable-sound-output "false" --serial-port "${SERIAL_PORT}")
+READINESS_ARGS=(--level "${FIELD_READINESS_LEVEL}" --profile "/ros2_ws/ros2_ws5/config/real_profiles/${WAVER_REAL_PROFILE}.yaml" --scan-topic "${SCAN_TOPIC}" --odom-source "${ODOM_SOURCE}" --require-scan "${REQUIRE_SCAN}" --enable-waver-base-driver "${ENABLE_WAVER_BASE_DRIVER}" --enable-bird-stack "${ENABLE_BIRD_STACK}" --enable-sound-output "${ENABLE_SOUND_OUTPUT}" --serial-port "${SERIAL_PORT}")
 if [ "${FIELD_READINESS_STRICT}" = "true" ]; then
   READINESS_ARGS+=(--strict)
 fi
@@ -440,7 +559,8 @@ if docker exec \
   -e REQUIRE_SCAN="${REQUIRE_SCAN}" \
   -e ENABLE_WAVER_BASE_DRIVER="${ENABLE_WAVER_BASE_DRIVER}" \
   -e ENABLE_BIRD_STACK="${ENABLE_BIRD_STACK}" \
-  -e ENABLE_SOUND_OUTPUT="false" \
+  -e ENABLE_SOUND_OUTPUT="${ENABLE_SOUND_OUTPUT}" \
+  -e SOUND_SAFETY_ACK="${SOUND_SAFETY_ACK}" \
   "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && python3 scripts/waver_field_readiness_check.py ${READINESS_ARGS[*]}" | tee /tmp/waver_lidar_nav_readiness.log; then
   readiness_status="$(awk -F= '/^FIELD_READINESS=/{print $2}' /tmp/waver_lidar_nav_readiness.log | tail -1)"
 else

@@ -67,6 +67,9 @@ def generate_launch_description() -> LaunchDescription:
     default_map = os.path.expanduser("~/ros2_ws5/FSD_Vehicle/maps/waver_latest_map.yaml")
     default_experiment_output_root = os.path.expanduser("~/ros2_ws5/FSD_Vehicle/experiment_results")
     default_waypoints = os.path.join(share, "waypoints", "waver_real_0p5m_square_patrol.yaml")
+    default_feedback_schema_path = os.path.expanduser("~/ros2_ws5/FSD_Vehicle/config/waver_base_feedback_schema.yaml")
+    default_camera_lidar_extrinsic = os.path.expanduser("~/ros2_ws5/FSD_Vehicle/config/sensors/camera_lidar_extrinsic.yaml")
+    default_collision_params = os.path.join(share, "config", "collision_monitor_waver.yaml")
 
     common = [
         LaunchConfiguration("mission_params_file"),
@@ -114,6 +117,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_moving_object_motion_filter", default_value="true"),
             DeclareLaunchArgument("enable_velocity_smoother", default_value="true"),
             DeclareLaunchArgument("enable_collision_monitor", default_value="false"),
+            DeclareLaunchArgument("collision_monitor_params_file", default_value=default_collision_params),
             DeclareLaunchArgument("require_scan", default_value="true"),
             DeclareLaunchArgument("start_serial_bridge", default_value="false"),
             DeclareLaunchArgument("include_existing_ugv_driver", default_value="false"),
@@ -121,8 +125,10 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("safety_max_linear_speed", default_value="0.05"),
             DeclareLaunchArgument("safety_max_angular_speed", default_value="0.20"),
             DeclareLaunchArgument("serial_port", default_value=""),
+            DeclareLaunchArgument("feedback_schema_path", default_value=default_feedback_schema_path),
             DeclareLaunchArgument("camera_image_topic", default_value="/camera/image_raw"),
             DeclareLaunchArgument("camera_info_topic", default_value="/camera/camera_info"),
+            DeclareLaunchArgument("camera_lidar_extrinsic", default_value=default_camera_lidar_extrinsic),
             DeclareLaunchArgument("pointcloud_topic", default_value="/livox/lidar"),
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("map", default_value=default_map),
@@ -139,7 +145,9 @@ def generate_launch_description() -> LaunchDescription:
             LogInfo(
                 msg=(
                     "[WAVER REAL] Command chain: Nav2 -> /waver/cmd_vel_nav2_raw -> velocity_smoother "
-                    "-> /waver/cmd_vel_nav2_smooth -> safety_cmd_mux_node -> /cmd_vel -> canonical serial/base driver"
+                    "-> /waver/cmd_vel_nav2_smooth -> safety_cmd_mux_node "
+                    "-> /waver/cmd_vel_safety -> nav2_collision_monitor -> /cmd_vel when collision monitor is enabled; "
+                    "otherwise safety_cmd_mux_node publishes /cmd_vel."
                 )
             ),
             LogInfo(msg="[WAVER REAL] Test publishers disabled; default mode STANDBY; first wheel-on speed cap 0.05 m/s, 0.20 rad/s."),
@@ -237,6 +245,17 @@ def generate_launch_description() -> LaunchDescription:
                             "' == 'true' else '/waver/cmd_vel_nav2'",
                         ]
                     ),
+                    "safety_cmd_vel_out_topic": PythonExpression(
+                        [
+                            "'/waver/cmd_vel_safety' if '",
+                            LaunchConfiguration("enable_collision_monitor"),
+                            "' == 'true' else '/cmd_vel'",
+                        ]
+                    ),
+                    "enable_collision_monitor": LaunchConfiguration("enable_collision_monitor"),
+                    "collision_monitor_params_file": LaunchConfiguration("collision_monitor_params_file"),
+                    "collision_cmd_vel_in_topic": "/waver/cmd_vel_safety",
+                    "collision_cmd_vel_out_topic": "/cmd_vel",
                     "remap_nav2_cmd_vel": "true",
                     "use_rviz": LaunchConfiguration("use_rviz"),
                 }.items(),
@@ -272,6 +291,7 @@ def generate_launch_description() -> LaunchDescription:
                     *common,
                     {
                         "serial_port": ParameterValue(LaunchConfiguration("serial_port"), value_type=str),
+                        "feedback_schema_path": ParameterValue(LaunchConfiguration("feedback_schema_path"), value_type=str),
                         "cmd_vel_topic": "/cmd_vel",
                         "odom_topic": PythonExpression(
                             ["'/odom_raw' if '", LaunchConfiguration("odom_source"), "' == 'ekf' else '/odom'"]
@@ -329,6 +349,10 @@ def generate_launch_description() -> LaunchDescription:
                     {
                         "camera_info_topic": ParameterValue(LaunchConfiguration("camera_info_topic"), value_type=str),
                         "pointcloud_topic": ParameterValue(LaunchConfiguration("pointcloud_topic"), value_type=str),
+                        "camera_lidar_extrinsic_path": ParameterValue(
+                            LaunchConfiguration("camera_lidar_extrinsic"),
+                            value_type=str,
+                        ),
                     },
                 ],
             ),

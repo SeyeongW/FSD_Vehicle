@@ -1,5 +1,10 @@
 # Waver ROS2 Humble Final Check Guide
 
+**최종 실차 bird patrol 운용자는 먼저 `README_BIRD_PATROL_FIELD.md`를 읽어라.**
+이 README는 전체 저장소 안내이고, 실제 field product 절차와 readiness 판정은
+`README_BIRD_PATROL_FIELD.md`, `docs/CLONE_TO_FIELD.md`, 그리고
+`config/real_profiles/bird_patrol_production.yaml`을 기준으로 한다.
+
 **Paper submission policy:** do not submit a raw workspace zip. The paper/public
 source artifact must be a `source_release` archive created by
 `scripts/make_source_archive.py` and checked by
@@ -49,7 +54,8 @@ bash scripts/waver_create_home_field_env.sh 10.139.225.150 sw /home/sw/ros2_ws5/
 
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
-bash scripts/waver_field_docker_backend_start.sh
+WAVER_REAL_PROFILE=lidar_nav_backend FIELD_READINESS_LEVEL=L2 \
+  bash scripts/waver_start_field_backend.sh
 
 # second local PC terminal
 cd ~/ros2_ws5/FSD_Vehicle

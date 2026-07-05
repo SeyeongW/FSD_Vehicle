@@ -1,0 +1,7 @@
+ultralytics
+opencv-python-headless
+numpy
+
+# Install torch/torchvision using the NVIDIA Jetson wheel/container method that
+# matches the device JetPack/CUDA version. Do not blindly pip-install generic
+# x86 wheels on Jetson.

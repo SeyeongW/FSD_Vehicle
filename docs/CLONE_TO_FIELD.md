@@ -26,12 +26,14 @@ tracking, and Nav2 nodes must not publish final `/cmd_vel` directly.
 git clone <REPO_URL> ~/ros2_ws5/FSD_Vehicle
 cd ~/ros2_ws5/FSD_Vehicle
 
-bash scripts/waver_setup_local_pc.sh
+bash scripts/waver_setup_local_pc.sh --check
+bash scripts/waver_setup_local_pc.sh --install-minimal-ui
 bash scripts/waver_doctor.sh
 ```
 
-Edit `config/waver_field_env` for shared non-secret defaults, or create the
-ignored local override:
+`config/waver_field_env` is not required in a clean field release. Create the
+ignored local override, use `~/.waver_field_env`, or pass values through
+`waver_quickstart_field.sh`:
 
 ```bash
 cp config/waver_field_env.local.example config/waver_field_env.local
@@ -84,11 +86,13 @@ and builds the selected ROS overlay inside Docker when needed.
 
 ## Normal Field Start
 
-After bootstrap, the normal field workflow is:
+After bootstrap, the normal field workflow uses the strict LiDAR/Nav2 readiness
+backend:
 
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
-bash scripts/waver_field_docker_backend_start.sh
+WAVER_REAL_PROFILE=lidar_nav_backend FIELD_READINESS_LEVEL=L2 \
+  bash scripts/waver_start_field_backend.sh
 ```
 
 Open a second local PC terminal:
@@ -98,15 +102,10 @@ cd ~/ros2_ws5/FSD_Vehicle
 bash scripts/waver_field_local_ui_start.sh
 ```
 
-If the Jetson workspace has not been bootstrapped yet, the backend script now
-runs bootstrap automatically before starting Docker backend nodes.
-
-Equivalent wrapper names are also available:
-
-```bash
-bash scripts/waver_start_field_backend.sh
-bash scripts/waver_start_local_ui.sh
-```
+`scripts/waver_field_docker_backend_start.sh` is legacy supervised open-loop
+diagnostic only. It is blocked unless
+`WAVER_ALLOW_LEGACY_OPEN_LOOP_MICRO_PATROL=1` is set and must not be used as
+the real field backend.
 
 ## Quickstart Helper
 

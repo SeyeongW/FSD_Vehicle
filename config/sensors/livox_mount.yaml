@@ -1,0 +1,8 @@
+lidar_frame: livox
+base_frame: base_link
+mount_position_xyz: [0.0, 0.0, 0.0]
+mount_rotation_rpy: [0.0, 0.0, 0.0]
+expected_pointcloud_topic: /livox/lidar
+expected_scan_topic: /scan_safety
+calibrated: false
+notes: "Set true only after verifying livox->base_link TF and body-reflection filtering."

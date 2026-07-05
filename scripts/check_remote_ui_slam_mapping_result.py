@@ -68,7 +68,10 @@ def load_pgm_map(yaml_path: pathlib.Path) -> tuple[dict, int, int, bytes, pathli
     if header_lines[0] != b"P5":
         return None
     width, height = [int(v) for v in header_lines[1].split()[:2]]
-    data = raw[cursor : cursor + width * height]
+    expected = width * height
+    data = raw[cursor : cursor + expected]
+    if len(data) < expected:
+        data = data + (b"\x80" * (expected - len(data)))
     return meta, width, height, data, image
 
 
@@ -129,9 +132,17 @@ def obstacle_quality(
     center_y_grid = int(round((obstacle_y_m - float(origin[1])) / resolution))
     center_y_pgm = int(round((height - 1) - center_y_grid))
     radius_px = max(1, int(round(radius_m / resolution)))
+    if center_x + radius_px < 0 or center_x - radius_px >= width:
+        return False, (
+            f"obstacle_center_outside_map_x center_x={center_x} width={width} "
+            f"origin={origin} resolution={resolution}"
+        )
 
     counts: dict[str, int] = {}
     for label, center_y in {"grid_y": center_y_grid, "pgm_flipped_y": center_y_pgm}.items():
+        if center_y + radius_px < 0 or center_y - radius_px >= height:
+            counts[label] = 0
+            continue
         count = 0
         for py in range(max(0, center_y - radius_px), min(height, center_y + radius_px + 1)):
             row = py * width

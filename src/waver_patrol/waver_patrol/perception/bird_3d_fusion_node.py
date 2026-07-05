@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 import time
 
 import rclpy
@@ -14,6 +15,11 @@ from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Bool, String
 from visualization_msgs.msg import Marker
 from vision_msgs.msg import Detection2D, Detection2DArray
+
+try:
+    import message_filters
+except Exception:  # pragma: no cover
+    message_filters = None
 
 try:
     from tf2_ros import Buffer, TransformException, TransformListener
@@ -57,6 +63,8 @@ class Bird3DFusionNode(Node):
         self.declare_parameter("max_dynamic_target_age_sec", 1.0)
         self.declare_parameter("max_sync_dt_sec", 0.25)
         self.declare_parameter("require_camera_optical_frame", True)
+        self.declare_parameter("camera_lidar_extrinsic_path", os.path.expanduser("~/ros2_ws5/FSD_Vehicle/config/sensors/camera_lidar_extrinsic.yaml"))
+        self.declare_parameter("require_calibrated_extrinsic", True)
 
         self.camera_info: CameraInfo | None = None
         self.camera_info_time = 0.0
@@ -67,6 +75,8 @@ class Bird3DFusionNode(Node):
         self.dynamic_targets: list[PoseStamped] = []
         self.dynamic_targets_time = 0.0
         self.last_cloud_time = 0.0
+        self.synced_packet_count = 0
+        self.rejected_packet_count = 0
 
         if Buffer is not None:
             self.tf_buffer = Buffer()
@@ -79,14 +89,28 @@ class Bird3DFusionNode(Node):
         self.pose_map_pub = self.create_publisher(PoseStamped, str(self.get_parameter("pose_map_topic").value), 10)
         self.valid_pub = self.create_publisher(Bool, str(self.get_parameter("valid_topic").value), 10)
         self.state_pub = self.create_publisher(String, str(self.get_parameter("state_topic").value), 10)
+        self.sync_state_pub = self.create_publisher(String, "/waver/bird_fusion_sync_state", 10)
         self.marker_pub = self.create_publisher(Marker, str(self.get_parameter("marker_topic").value), 10)
 
-        self.create_subscription(Detection2DArray, str(self.get_parameter("detections_topic").value), self.detections_callback, 10)
         self.create_subscription(Bool, str(self.get_parameter("bird_confirmed_topic").value), lambda m: setattr(self, "bird_confirmed", bool(m.data)), 10)
-        self.create_subscription(CameraInfo, str(self.get_parameter("camera_info_topic").value), self.camera_info_callback, 10)
         self.create_subscription(Bool, str(self.get_parameter("moving_target_valid_topic").value), lambda m: setattr(self, "dynamic_valid", bool(m.data)), 10)
         self.create_subscription(PoseArray, str(self.get_parameter("dynamic_targets_topic").value), self.dynamic_targets_callback, 10)
-        self.create_subscription(PointCloud2, str(self.get_parameter("pointcloud_topic").value), self.cloud_callback, 5)
+        if message_filters is not None:
+            self.det_filter = message_filters.Subscriber(self, Detection2DArray, str(self.get_parameter("detections_topic").value))
+            self.info_filter = message_filters.Subscriber(self, CameraInfo, str(self.get_parameter("camera_info_topic").value))
+            self.cloud_filter = message_filters.Subscriber(self, PointCloud2, str(self.get_parameter("pointcloud_topic").value))
+            self.sync = message_filters.ApproximateTimeSynchronizer(
+                [self.det_filter, self.info_filter, self.cloud_filter],
+                queue_size=10,
+                slop=float(self.get_parameter("max_sync_dt_sec").value),
+            )
+            self.sync.registerCallback(self.synced_callback)
+            self.sync_state_pub.publish(String(data="SYNC_ACTIVE backend=message_filters"))
+        else:
+            self.create_subscription(Detection2DArray, str(self.get_parameter("detections_topic").value), self.detections_callback, 10)
+            self.create_subscription(CameraInfo, str(self.get_parameter("camera_info_topic").value), self.camera_info_callback, 10)
+            self.create_subscription(PointCloud2, str(self.get_parameter("pointcloud_topic").value), self.cloud_callback, 5)
+            self.sync_state_pub.publish(String(data="SYNC_ACTIVE backend=fallback_latest_values"))
         self.create_timer(0.2, self.health_tick)
 
     def camera_info_callback(self, msg: CameraInfo) -> None:
@@ -96,6 +120,26 @@ class Bird3DFusionNode(Node):
     def detections_callback(self, msg: Detection2DArray) -> None:
         self.detections = msg
         self.detections_time = self._now()
+
+    def synced_callback(self, detections: Detection2DArray, info: CameraInfo, cloud: PointCloud2) -> None:
+        now = self._now()
+        self.synced_packet_count += 1
+        self.camera_info = info
+        self.camera_info_time = now
+        self.detections = detections
+        self.detections_time = now
+        sync_dt = self._stamp_delta_sec(cloud.header.stamp, detections.header.stamp)
+        info_dt = self._stamp_delta_sec(cloud.header.stamp, info.header.stamp)
+        self.sync_state_pub.publish(
+            String(
+                data=(
+                    "SYNC_PACKET backend=message_filters "
+                    f"packets={self.synced_packet_count} rejected={self.rejected_packet_count} "
+                    f"detection_cloud_dt_sec={sync_dt:.3f} info_cloud_dt_sec={info_dt:.3f}"
+                )
+            )
+        )
+        self.cloud_callback(cloud)
 
     def dynamic_targets_callback(self, msg: PoseArray) -> None:
         targets: list[PoseStamped] = []
@@ -110,48 +154,52 @@ class Bird3DFusionNode(Node):
     def cloud_callback(self, msg: PointCloud2) -> None:
         self.last_cloud_time = self._now()
         if not self.bird_confirmed:
-            self._reject("BIRD_NOT_CONFIRMED")
+            self._reject("FUSION_INVALID_NO_BIRD reason=bird_not_confirmed")
+            return
+        calibration_reason = self._calibration_invalid_reason()
+        if calibration_reason:
+            self._reject(calibration_reason)
             return
         if self.camera_info is None or self._now() - self.camera_info_time > float(self.get_parameter("camera_info_stale_sec").value):
-            self._reject("CAMERA_INFO_STALE")
+            self._reject("FUSION_INVALID_SYNC_STALE reason=camera_info_stale")
             return
         if not self.camera_info.header.frame_id:
-            self._reject("CALIBRATION_MISSING camera_info_frame_empty")
+            self._reject("FUSION_INVALID_NO_EXTRINSIC reason=camera_info_frame_empty")
             return
         if bool(self.get_parameter("require_camera_optical_frame").value) and "optical" not in self.camera_info.header.frame_id:
-            self._reject(f"CALIBRATION_MISSING camera_frame_not_optical:{self.camera_info.header.frame_id}")
+            self._reject(f"FUSION_INVALID_NO_EXTRINSIC reason=camera_frame_not_optical frame={self.camera_info.header.frame_id}")
             return
         if self.detections is None or self._now() - self.detections_time > float(self.get_parameter("detections_stale_sec").value):
-            self._reject("DETECTION_STALE")
+            self._reject("FUSION_INVALID_SYNC_STALE reason=detection_stale")
             return
         if self._stamp_delta_sec(msg.header.stamp, self.detections.header.stamp) > float(self.get_parameter("max_sync_dt_sec").value):
-            self._reject("SYNC_DT_TOO_LARGE")
+            self._reject("FUSION_INVALID_SYNC_STALE reason=sync_dt_too_large")
             return
         detection = self._best_detection(self.detections)
         if detection is None:
-            self._reject("NO_BIRD_BBOX")
+            self._reject("FUSION_INVALID_NO_BIRD reason=no_bird_bbox")
             return
         try:
             centroid_camera = self._centroid_from_cloud(msg, detection, self.camera_info)
             base_pose = self._pose_in_frame(centroid_camera, self.camera_info.header.frame_id, str(self.get_parameter("base_frame").value), msg.header.stamp)
             if base_pose is None:
-                self._reject("TF_FAIL_BASE")
+                self._reject("FUSION_INVALID_TF_FAIL target=base")
                 return
             height = base_pose.pose.position.z - float(self.get_parameter("ground_z_offset_m").value)
             target_range = math.hypot(base_pose.pose.position.x, base_pose.pose.position.y)
             if height < float(self.get_parameter("min_height_m").value) or height > float(self.get_parameter("max_height_m").value):
-                self._reject(f"HEIGHT_INVALID height={height:.3f}")
+                self._reject(f"FUSION_INVALID_HEIGHT height={height:.3f}")
                 return
             if target_range < float(self.get_parameter("min_range_m").value) or target_range > float(self.get_parameter("max_range_m").value):
-                self._reject(f"RANGE_INVALID range={target_range:.3f}")
+                self._reject(f"FUSION_INVALID_HEIGHT reason=range_invalid range={target_range:.3f}")
                 return
             map_pose = self._pose_in_frame(centroid_camera, self.camera_info.header.frame_id, str(self.get_parameter("global_frame").value), msg.header.stamp)
             if map_pose is None:
-                self._reject("TF_FAIL_MAP")
+                self._reject("FUSION_INVALID_TF_FAIL target=map")
                 return
             dynamic_ok, dynamic_reason = self._associated_dynamic_target(map_pose)
             if bool(self.get_parameter("require_dynamic_valid").value) and not dynamic_ok:
-                self._reject(dynamic_reason)
+                self._reject(f"FUSION_INVALID_DYNAMIC_ASSOCIATION {dynamic_reason}")
                 return
             self.valid_pub.publish(Bool(data=True))
             self.pose_base_pub.publish(base_pose)
@@ -160,14 +208,38 @@ class Bird3DFusionNode(Node):
             self.state_pub.publish(
                 String(
                     data=(
-                        "VALID bird_confirmed=true z_valid=true dynamic_valid=true "
+                        "FUSION_VALID bird_confirmed=true z_valid=true dynamic_valid=true "
                         f"height={height:.3f} range={target_range:.3f} source=PointCloud2 "
                         f"dynamic_reason={dynamic_reason}"
                     )
                 )
             )
         except Exception as exc:
-            self._reject(f"FUSION_ERROR error={exc}")
+            text = str(exc)
+            if "insufficient" in text:
+                self._reject(f"FUSION_INVALID_INSUFFICIENT_POINTS {text}")
+            elif "spread too large" in text:
+                self._reject(f"FUSION_INVALID_SPREAD_TOO_LARGE {text}")
+            elif "tf2" in text.lower() or "transform" in text.lower():
+                self._reject(f"FUSION_INVALID_TF_FAIL error={text}")
+            else:
+                self._reject(f"FUSION_INVALID_SYNC_STALE error={text}")
+
+    def _calibration_invalid_reason(self) -> str:
+        path = os.path.expanduser(str(self.get_parameter("camera_lidar_extrinsic_path").value))
+        if not os.path.exists(path):
+            return f"FUSION_INVALID_NO_EXTRINSIC path={path}"
+        if not bool(self.get_parameter("require_calibrated_extrinsic").value):
+            return ""
+        try:
+            import yaml
+
+            data = yaml.safe_load(open(path, "r", encoding="utf-8")) or {}
+        except Exception as exc:
+            return f"FUSION_INVALID_NO_EXTRINSIC error={exc}"
+        if data.get("calibrated") is not True:
+            return f"FUSION_INVALID_CALIBRATION_NOT_VERIFIED path={path}"
+        return ""
 
     def _best_detection(self, detections: Detection2DArray) -> Detection2D | None:
         best = None
@@ -318,12 +390,17 @@ class Bird3DFusionNode(Node):
         return abs((float(a.sec) + float(a.nanosec) * 1e-9) - (float(b.sec) + float(b.nanosec) * 1e-9))
 
     def _reject(self, reason: str) -> None:
+        self.rejected_packet_count += 1
         self.valid_pub.publish(Bool(data=False))
-        self.state_pub.publish(String(data=f"INVALID {reason}"))
+        text = reason if reason.startswith("FUSION_INVALID_") else f"FUSION_INVALID_SYNC_STALE reason={reason}"
+        self.state_pub.publish(String(data=text))
+        self.sync_state_pub.publish(
+            String(data=f"SYNC_STATE packets={self.synced_packet_count} rejected={self.rejected_packet_count} last_reason='{text}'")
+        )
 
     def health_tick(self) -> None:
         if self.last_cloud_time and self._now() - self.last_cloud_time > float(self.get_parameter("pointcloud_stale_sec").value):
-            self._reject("POINTCLOUD_STALE")
+            self._reject("FUSION_INVALID_SYNC_STALE reason=pointcloud_stale")
 
     @staticmethod
     def _now() -> float:

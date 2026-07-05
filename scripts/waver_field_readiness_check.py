@@ -5,15 +5,24 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
 LEVELS = {"L0", "L1", "L2", "L3", "L4", "L5"}
 FORBIDDEN_REAL_PATTERNS = ("gazebo", "fake", "mock", "test_publisher", "simple_sim")
+BASE_STATE_FAIL_TOKENS = (
+    "ODOM_FEEDBACK_MISSING",
+    "ODOM_FEEDBACK_STALE",
+    "ODOM_FEEDBACK_SCHEMA_ERROR",
+    "connected=False",
+)
 
 
 def run(cmd: list[str], timeout: float = 5.0) -> tuple[int, str]:
@@ -118,6 +127,30 @@ def load_acceptance_matrix() -> list[dict[str, str]]:
     return rows
 
 
+def load_yaml_profile(path: str) -> dict[str, Any]:
+    if not path:
+        return {}
+    p = Path(path)
+    if not p.is_absolute():
+        p = ROOT / p
+    if not p.exists():
+        return {"__missing__": str(p)}
+    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        return {"__invalid__": str(p)}
+    data["__path__"] = str(p)
+    return data
+
+
+def load_acceptance_matrix_yaml() -> list[dict[str, Any]]:
+    path = ROOT / "config/hardware_acceptance_matrix.yaml"
+    if not path.exists():
+        return []
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    rows = data.get("items", data if isinstance(data, list) else [])
+    return rows if isinstance(rows, list) else []
+
+
 def level_index(level: str) -> int:
     return int(level[1])
 
@@ -125,14 +158,21 @@ def level_index(level: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Fail-closed Waver field readiness checker.")
     parser.add_argument("--level", required=True, choices=sorted(LEVELS))
+    parser.add_argument("--profile", default=os.environ.get("WAVER_REAL_PROFILE_PATH", ""))
+    parser.add_argument("--remote-host", default=os.environ.get("JETSON_HOST", ""))
+    parser.add_argument("--remote-user", default=os.environ.get("JETSON_USER", ""))
+    parser.add_argument("--docker-container", default=os.environ.get("CONTAINER", ""))
+    parser.add_argument("--json-only", action="store_true")
+    parser.add_argument("--require-acceptance-matrix", action="store_true")
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--no-hardware", action="store_true")
     parser.add_argument("--output", default="")
     parser.add_argument("--scan-topic", default=os.environ.get("SCAN_TOPIC", "/scan"))
     parser.add_argument("--scan-safety-topic", default=os.environ.get("SCAN_TOPIC_SAFETY", "/scan_safety"))
     parser.add_argument("--odom-topic", default=os.environ.get("ODOM_TOPIC", "/odom"))
-    parser.add_argument("--min-scan-hz", type=float, default=float(os.environ.get("MIN_SCAN_HZ", "3.0")))
-    parser.add_argument("--min-odom-hz", type=float, default=float(os.environ.get("MIN_ODOM_HZ", "5.0")))
+    parser.add_argument("--min-scan-hz", "--min-scan-rate", dest="min_scan_hz", type=float, default=float(os.environ.get("MIN_SCAN_HZ", "3.0")))
+    parser.add_argument("--min-odom-hz", "--min-odom-rate", dest="min_odom_hz", type=float, default=float(os.environ.get("MIN_ODOM_HZ", "5.0")))
+    parser.add_argument("--min-base-state-rate", type=float, default=float(os.environ.get("MIN_BASE_STATE_HZ", "1.0")))
     parser.add_argument("--serial-port", default=os.environ.get("SERIAL_PORT", ""))
     parser.add_argument("--odom-source", default=os.environ.get("ODOM_SOURCE", "ekf"))
     parser.add_argument("--require-scan", default=os.environ.get("REQUIRE_SCAN", "true"))
@@ -140,6 +180,18 @@ def main() -> int:
     parser.add_argument("--enable-bird-stack", default=os.environ.get("ENABLE_BIRD_STACK", "false"))
     parser.add_argument("--enable-sound-output", default=os.environ.get("ENABLE_SOUND_OUTPUT", "false"))
     args = parser.parse_args()
+    profile = load_yaml_profile(args.profile)
+    if profile.get("__missing__") or profile.get("__invalid__"):
+        profile_error = profile.get("__missing__") or profile.get("__invalid__")
+    else:
+        profile_error = ""
+
+    if profile and not profile_error:
+        args.odom_source = str(profile.get("odom_source", args.odom_source))
+        args.require_scan = str(profile.get("require_scan", args.require_scan)).lower()
+        args.enable_waver_base_driver = str(profile.get("enable_waver_base_driver", args.enable_waver_base_driver)).lower()
+        args.enable_bird_stack = str(profile.get("enable_bird_detector", args.enable_bird_stack)).lower()
+        args.enable_sound_output = str(profile.get("enable_sound_output", args.enable_sound_output)).lower()
 
     now = time.strftime("%Y%m%d_%H%M%S")
     report: dict[str, Any] = {
@@ -160,24 +212,36 @@ def main() -> int:
         "forbidden_nodes": [],
         "manual_ack_status": {},
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "profile": profile,
+        "remote": {
+            "host": args.remote_host,
+            "user": args.remote_user,
+            "docker_container": args.docker_container,
+        },
     }
 
     idx = level_index(args.level)
     if args.no_hardware and idx >= 2:
         add_check(report, "no_hardware_level_limit", True, False, "--no-hardware can only PASS L0/L1 checks")
+    add_check(report, "profile_load", bool(args.profile), not profile_error, profile_error or profile.get("__path__", "<none>"))
     add_check(report, "ros_domain_id_present", False, bool(report["ros_domain_id"] != ""), f"ROS_DOMAIN_ID={report['ros_domain_id']}")
+    ros2_path = shutil.which("ros2")
+    add_check(report, "ros2_cli_available", idx >= 1 and not args.no_hardware, bool(ros2_path), ros2_path or "ros2 command not found")
 
     if args.level == "L0":
         add_check(report, "source_mode_no_graph_required", True, True, "L0 relies on compile/static/unit checks outside this script")
     elif args.no_hardware and args.level == "L1":
         add_check(report, "dry_run_no_hardware_guard", True, True, "serial/sound/GPIO are not accessed in --no-hardware mode")
     else:
+        if not ros2_path:
+            add_check(report, "ros_graph_unavailable", True, False, "ros2 command not found; cannot inspect live graph")
+        forbidden_patterns = tuple(str(x).lower() for x in profile.get("forbidden_nodes", []) if isinstance(x, str)) or FORBIDDEN_REAL_PATTERNS
         rc, nodes_out = ros2(["node", "list"], timeout=5)
         nodes = sorted(line.strip() for line in nodes_out.splitlines() if line.strip().startswith("/"))
         report["node_list"] = nodes
         add_check(report, "ros_node_list", True, rc == 0, nodes_out)
 
-        forbidden = [node for node in nodes if any(token in node.lower() for token in FORBIDDEN_REAL_PATTERNS)]
+        forbidden = [node for node in nodes if any(token in node.lower() for token in forbidden_patterns)]
         report["forbidden_nodes"] = forbidden
         add_check(report, "real_profile_forbidden_nodes_absent", True, not forbidden, ",".join(forbidden))
 
@@ -211,6 +275,12 @@ def main() -> int:
             base_ok, base_sample = topic_once("/waver/base_driver_state")
             report["base_feedback_status"]["sample"] = base_sample
             add_check(report, "base_driver_state_sample", True, base_ok, base_sample)
+            base_rate, base_rate_raw = topic_rate("/waver/base_driver_state")
+            report["topic_rates"]["/waver/base_driver_state"] = base_rate
+            add_check(report, "base_driver_state_rate", True, base_rate >= args.min_base_state_rate, f"hz={base_rate}\n{base_rate_raw}")
+            bad_base_tokens = [token for token in BASE_STATE_FAIL_TOKENS if token in base_sample]
+            add_check(report, "base_driver_state_no_feedback_fault", True, not bad_base_tokens, ",".join(bad_base_tokens) or base_sample)
+            add_check(report, "base_driver_state_odom_feedback_ok", True, "ODOM_FEEDBACK_OK" in base_sample, base_sample)
             serial_ok, serial_sample = topic_once("/waver/serial_owner_state")
             report["serial_status"]["sample"] = serial_sample
             add_check(report, "serial_owner_state_sample", True, serial_ok, serial_sample)
@@ -223,6 +293,15 @@ def main() -> int:
             volt_ok, volt_sample = topic_once("/voltage")
             report["battery_status"]["voltage_sample"] = volt_sample
             add_check(report, "battery_voltage_sample", True, volt_ok, volt_sample)
+            yaml_rows = load_acceptance_matrix_yaml()
+            if args.require_acceptance_matrix:
+                add_check(report, "acceptance_matrix_yaml_present", True, bool(yaml_rows), "config/hardware_acceptance_matrix.yaml")
+            for row in yaml_rows:
+                required_for = str(row.get("required_for_level", "L4"))
+                status = str(row.get("status", "TODO")).upper()
+                item = str(row.get("item", "unnamed"))
+                if required_for.startswith("L") and level_index(required_for) <= idx and status != "OPTIONAL":
+                    add_check(report, f"acceptance_matrix_{item}", True, status == "PASS", str(row.get("notes", "")))
             for row in load_acceptance_matrix():
                 if level_index(row["required_for_level"]) <= idx and row["status"].upper() != "OPTIONAL":
                     add_check(report, f"acceptance_matrix_{row['item']}", True, row["status"].upper() == "PASS", row["notes"])
@@ -246,10 +325,13 @@ def main() -> int:
     latest = output.parent / "latest.json"
     latest.write_text(output.read_text(encoding="utf-8"), encoding="utf-8")
 
-    print(f"FIELD_READINESS_REPORT={output}")
-    print(f"FAILED_CHECKS={len(report['failed_checks'])}")
-    print(f"WARNINGS={len(report['warnings'])}")
-    print(f"FIELD_READINESS={report['status']}")
+    if args.json_only:
+        print(json.dumps(report, ensure_ascii=False))
+    else:
+        print(f"FIELD_READINESS_REPORT={output}")
+        print(f"FAILED_CHECKS={len(report['failed_checks'])}")
+        print(f"WARNINGS={len(report['warnings'])}")
+        print(f"FIELD_READINESS={report['status']}")
     if args.strict and report["status"] != "PASS":
         return 1
     if report["status"] == "FAIL":

@@ -1,0 +1,10 @@
+{
+  "collision_monitor_required": true,
+  "dry_run": true,
+  "expected_chain": "sources -> velocity_smoother(optional) -> safety_cmd_mux_node -> /waver/cmd_vel_safety -> nav2_collision_monitor -> /cmd_vel -> waver_base_driver_node",
+  "findings": [],
+  "generated_at": "2026-07-06T00:58:05+0900",
+  "profile": "/home/chotaehyun/ros2_ws5/FSD_Vehicle/config/real_profiles/bird_patrol_production.yaml",
+  "runtime": {},
+  "status": "PASS"
+}

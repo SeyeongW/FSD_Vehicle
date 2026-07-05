@@ -1,0 +1,31 @@
+models:
+  default:
+    path: ""
+    backend: ultralytics
+    expected_classes:
+      - bird
+      - person
+      - vehicle
+      - drone
+      - unknown
+    fallback_unknown_class: true
+    min_confidence: 0.45
+    max_latency_ms: 300
+    sha256: ""
+    validated_on_jetson: false
+    notes: "Set model path/hash after deploying a field-validated detector. Empty path is MODEL_MISSING and must fail closed."
+  production_bird_detector:
+    path: ""
+    backend: ultralytics
+    expected_classes:
+      - bird
+      - person
+      - vehicle
+      - drone
+      - unknown
+    fallback_unknown_class: true
+    min_confidence: 0.45
+    max_latency_ms: 300
+    sha256: ""
+    validated_on_jetson: false
+    notes: "Optional named production override. Must not claim detector-live until model path/hash/class map are verified on Jetson."

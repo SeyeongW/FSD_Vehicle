@@ -1,0 +1,183 @@
+items:
+  - item: jetson_docker_runtime
+    status: TODO
+    required_for_modes: [field-bridge, sensor-live, lidar-tracking, detector-live, fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "python3 scripts/waver_field_bridge_regression_check.py --remote-smoke --host <JETSON_HOST> --user <JETSON_USER> --container fsd_dev_jetson"
+    evidence_file: "reports/field_bridge_regression/latest.json"
+    last_checked: ""
+    notes: "Jetson host and Docker container must run the selected ros2_ws5 field backend."
+  - item: ros_domain_id_match
+    status: TODO
+    required_for_modes: [field-bridge, sensor-live, lidar-tracking, detector-live, fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "python3 scripts/waver_ros_network_check.py --remote --host <JETSON_HOST> --user <JETSON_USER> --container fsd_dev_jetson"
+    evidence_file: "reports/network/latest.json"
+    last_checked: ""
+    notes: "Local PC, Jetson host, and Docker container must share ROS_DOMAIN_ID=0 unless intentionally overridden."
+  - item: livox_mid360_pointcloud
+    status: TODO
+    required_for_modes: [sensor-live, lidar-tracking, fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "python3 scripts/waver_livox_mid360_probe.py --pointcloud-topic /livox/lidar --scan-topic /scan_safety --duration-sec 15 --output reports/livox_mid360/latest.json"
+    evidence_file: "reports/livox_mid360/latest.json"
+    last_checked: ""
+    notes: "PointCloud2 must be dense, fresh, and use the configured Livox frame."
+  - item: scan_safety
+    status: TODO
+    required_for_modes: [sensor-live, lidar-tracking, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "python3 scripts/waver_livox_mid360_probe.py --pointcloud-topic /livox/lidar --scan-topic /scan_safety --duration-sec 15 --output reports/livox_mid360/latest.json"
+    evidence_file: "reports/livox_mid360/latest.json"
+    last_checked: ""
+    notes: "Safety scan must be present and must not be the /livox/lider typo."
+  - item: camera_image
+    status: TODO
+    required_for_modes: [sensor-live, detector-live, fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "python3 scripts/waver_camera_probe.py --image-topic /camera/image_raw --camera-info-topic /camera/camera_info --duration-sec 15 --output reports/camera/latest.json"
+    evidence_file: "reports/camera/latest.json"
+    last_checked: ""
+    notes: "Image topic must meet rate and resolution thresholds."
+  - item: camera_info
+    status: TODO
+    required_for_modes: [sensor-live, detector-live, fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "python3 scripts/waver_camera_probe.py --image-topic /camera/image_raw --camera-info-topic /camera/camera_info --duration-sec 15 --output reports/camera/latest.json"
+    evidence_file: "reports/camera/latest.json"
+    last_checked: ""
+    notes: "CameraInfo must include K/D/P and expected frame."
+  - item: camera_lidar_extrinsic
+    status: TODO
+    required_for_modes: [fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "python3 scripts/waver_camera_lidar_calibration_check.py --extrinsic config/sensors/camera_lidar_extrinsic.yaml --camera-info-topic /camera/camera_info --pointcloud-topic /livox/lidar --require-live-tf --require-live-topics --output reports/calibration/latest.json"
+    evidence_file: "reports/calibration/latest.json"
+    last_checked: ""
+    notes: "Calibration must be live-verified before fusion or sound."
+  - item: base_driver_serial
+    status: TODO
+    required_for_modes: [inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "python3 scripts/waver_base_feedback_probe.py --serial-port /dev/serial/by-id/<WAVER_BASE> --duration-sec 10 --wheel-off-confirm --output reports/base_feedback/latest.json"
+    evidence_file: "reports/base_feedback/latest.json"
+    last_checked: ""
+    notes: "Base driver must own exactly one by-id serial device."
+  - item: odom_feedback
+    status: TODO
+    required_for_modes: [inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "python3 scripts/waver_base_feedback_probe.py --serial-port /dev/serial/by-id/<WAVER_BASE> --duration-sec 10 --wheel-off-confirm --output reports/base_feedback/latest.json"
+    evidence_file: "reports/base_feedback/latest.json"
+    last_checked: ""
+    notes: "ODOM_FEEDBACK_OK required for real waypoint autonomy."
+  - item: imu_feedback
+    status: TODO
+    required_for_modes: [autonomous-patrol]
+    evidence_command: "python3 scripts/waver_base_feedback_probe.py --serial-port /dev/serial/by-id/<WAVER_BASE> --duration-sec 10 --wheel-off-confirm --output reports/base_feedback/latest.json"
+    evidence_file: "reports/base_feedback/latest.json"
+    last_checked: ""
+    notes: "IMU feedback must be fresh if EKF uses IMU input."
+  - item: voltage_scale
+    status: TODO
+    required_for_modes: [supervised-deterrence, autonomous-patrol]
+    evidence_command: "compare /voltage with external meter during wheel-off checklist"
+    evidence_file: "reports/base_feedback/latest.json"
+    last_checked: ""
+    notes: "Voltage scaling must be verified after USB/serial wiring changes."
+  - item: robot_localization_ekf
+    status: TODO
+    required_for_modes: [inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "ros2 node list | grep ekf && ros2 topic echo --once /odom"
+    evidence_file: "reports/base_feedback/latest.json"
+    last_checked: ""
+    notes: "EKF must publish /odom."
+  - item: tf_odom_base
+    status: TODO
+    required_for_modes: [inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "ros2 run tf2_ros tf2_echo odom base_link"
+    evidence_file: "reports/base_feedback/latest.json"
+    last_checked: ""
+    notes: "odom->base_link TF must be fresh."
+  - item: tf_base_livox
+    status: TODO
+    required_for_modes: [sensor-live, lidar-tracking, fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "ros2 run tf2_ros tf2_echo base_link livox"
+    evidence_file: "reports/livox_mid360/latest.json"
+    last_checked: ""
+    notes: "base_link to Livox frame must be available."
+  - item: tf_base_camera
+    status: TODO
+    required_for_modes: [sensor-live, detector-live, fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "ros2 run tf2_ros tf2_echo base_link camera_link"
+    evidence_file: "reports/calibration/latest.json"
+    last_checked: ""
+    notes: "base_link to camera frame must be available."
+  - item: collision_monitor_active
+    status: TODO
+    required_for_modes: [autonomous-patrol]
+    evidence_command: "python3 scripts/waver_command_chain_check.py --profile config/real_profiles/bird_patrol_production.yaml"
+    evidence_file: "reports/command_chain/latest.json"
+    last_checked: ""
+    notes: "Autonomous final /cmd_vel publisher must be collision monitor."
+  - item: final_cmd_vel_single_publisher
+    status: TODO
+    required_for_modes: [inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "python3 scripts/waver_command_chain_check.py --profile config/real_profiles/bird_patrol_production.yaml"
+    evidence_file: "reports/command_chain/latest.json"
+    last_checked: ""
+    notes: "/cmd_vel publisher count must be exactly one."
+  - item: mission_mode_single_publisher
+    status: TODO
+    required_for_modes: [field-bridge, sensor-live, lidar-tracking, detector-live, fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "ros2 topic info -v /waver/mode"
+    evidence_file: "reports/command_chain/latest.json"
+    last_checked: ""
+    notes: "/waver/mode publisher must be mission_patrol_manager_node only."
+  - item: bird_detector_model
+    status: TODO
+    required_for_modes: [detector-live, fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "python3 scripts/waver_bird_detector_probe.py --model-path <REAL_MODEL_PATH> --image-topic /camera/image_raw --camera-info-topic /camera/camera_info --duration-sec 15 --output reports/bird_detector/latest.json"
+    evidence_file: "reports/bird_detector/latest.json"
+    last_checked: ""
+    notes: "Real model/backend/class map must be ready; Gazebo fake detector is not real evidence."
+  - item: fusion_sync
+    status: TODO
+    required_for_modes: [fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "ros2 topic echo --once /waver/bird_fusion_sync_state"
+    evidence_file: "reports/calibration/latest.json"
+    last_checked: ""
+    notes: "Camera and LiDAR samples must synchronize within max_sync_dt_sec."
+  - item: camera_alignment
+    status: TODO
+    required_for_modes: [inspection-dry-run, supervised-deterrence, autonomous-patrol]
+    evidence_command: "ros2 topic echo --once /waver/camera_alignment_state"
+    evidence_file: "reports/field_runs/latest_alignment.json"
+    last_checked: ""
+    notes: "Detector may run before alignment; sound requires centered target."
+  - item: sound_backend
+    status: TODO
+    required_for_modes: [supervised-deterrence, autonomous-patrol]
+    evidence_command: "WAVER_ACK_SOUND_HARDWARE=1 WAVER_ACK_LOCAL_SOUND_LAW=1 WAVER_ACK_OPERATOR_SUPERVISION=1 python3 scripts/waver_bird_mission_readiness_check.py --mode supervised-deterrence --strict --require-sound-hardware"
+    evidence_file: "reports/sound_events/latest.json"
+    last_checked: ""
+    notes: "Real output requires hardware, legal, and operator ACK plus backend self-test/cancel-test."
+  - item: emergency_stop
+    status: TODO
+    required_for_modes: [supervised-deterrence, autonomous-patrol]
+    evidence_command: "wheel-off E-stop checklist"
+    evidence_file: "reports/field_acceptance/estop_check.md"
+    last_checked: ""
+    notes: "Emergency stop must zero drive and cancel sound."
+  - item: blackbox
+    status: TODO
+    required_for_modes: [autonomous-patrol]
+    evidence_command: "bash scripts/waver_blackbox_recorder.sh --remote --host <JETSON_HOST> --user <JETSON_USER> --container fsd_dev_jetson --workspace /ros2_ws/ros2_ws5"
+    evidence_file: "reports/blackbox/latest/metadata.yaml"
+    last_checked: ""
+    notes: "Autonomous field trials require blackbox bag and metadata."
+  - item: battery_return
+    status: TODO
+    required_for_modes: [autonomous-patrol]
+    evidence_command: "ros2 topic echo --once /waver/battery_return_state"
+    evidence_file: "reports/field_runs/latest_battery_return.json"
+    last_checked: ""
+    notes: "Battery stale/critical must block patrol and return safely."
+  - item: departure_monitor
+    status: TODO
+    required_for_modes: [supervised-deterrence, autonomous-patrol]
+    evidence_command: "ros2 topic echo --once /waver/target_departed"
+    evidence_file: "reports/field_runs/latest_departure.json"
+    last_checked: ""
+    notes: "After sound, robot must resume patrol only after target departure is verified."

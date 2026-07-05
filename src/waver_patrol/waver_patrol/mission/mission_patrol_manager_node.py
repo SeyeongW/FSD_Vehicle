@@ -134,6 +134,10 @@ class MissionPatrolManagerNode(Node):
         self.declare_parameter("fallback_robot_body_alignment", True)
         self.declare_parameter("enable_sound_task", True)
         self.declare_parameter("enable_sound_output", False)
+        self.declare_parameter("require_3d_fusion_valid_for_sound", True)
+        self.declare_parameter("require_dynamic_valid_for_sound", True)
+        self.declare_parameter("dynamic_valid_grace_sec_for_sound", 2.0)
+        self.declare_parameter("require_camera_centered_for_sound", True)
         self.declare_parameter("deterrence_classes", ["bird"])
         self.declare_parameter("patrol_goal_timeout_sec", 180.0)
         self.declare_parameter("waypoint_dwell_sec_default", 2.0)
@@ -185,6 +189,10 @@ class MissionPatrolManagerNode(Node):
         self.bird_clear_after_sound = False
         self.bird_clear_wait_reported = False
         self.bird_confirmed = False
+        self.bird_target_valid = False
+        self.dynamic_valid = False
+        self.last_dynamic_valid_time = -1.0
+        self.target_mission_started_time = 0.0
         self.target_class = "unknown"
         self.target_confidence = 0.0
         self.camera_target_centered = False
@@ -253,6 +261,8 @@ class MissionPatrolManagerNode(Node):
         self.create_subscription(Bool, str(self.get_parameter("target_departed_topic").value), self.target_departed_callback, 10)
         self.create_subscription(Odometry, str(self.get_parameter("odom_topic").value), self.odom_callback, 10)
         self.create_subscription(Bool, "/waver/bird_confirmed", lambda m: setattr(self, "bird_confirmed", bool(m.data)), 10)
+        self.create_subscription(Bool, "/waver/bird_target_valid", lambda m: setattr(self, "bird_target_valid", bool(m.data)), 10)
+        self.create_subscription(Bool, "/waver/moving_target_valid", self.dynamic_valid_callback, 10)
         self.create_subscription(String, "/waver/target_class", lambda m: setattr(self, "target_class", m.data), 10)
         self.create_subscription(Float32, "/waver/target_confidence", lambda m: setattr(self, "target_confidence", float(m.data)), 10)
         self.create_subscription(Bool, "/waver/camera_target_centered", lambda m: setattr(self, "camera_target_centered", bool(m.data)), 10)
@@ -272,6 +282,11 @@ class MissionPatrolManagerNode(Node):
 
     def odom_callback(self, msg: Odometry) -> None:
         self.latest_odom = msg
+
+    def dynamic_valid_callback(self, msg: Bool) -> None:
+        self.dynamic_valid = bool(msg.data)
+        if self.dynamic_valid:
+            self.last_dynamic_valid_time = self._now()
 
     def mode_callback(self, msg: String) -> None:
         requested = msg.data.strip().upper()
@@ -615,6 +630,7 @@ class MissionPatrolManagerNode(Node):
                 ),
             )
         self.target_interrupt_locked = True
+        self.target_mission_started_time = self._now()
         self.object_goal_active = False
         self.object_goal = None
         if (
@@ -675,9 +691,36 @@ class MissionPatrolManagerNode(Node):
         bird_threshold = float(self.get_parameter("bird_confidence_threshold").value)
         if normalized_class == "bird" and self.bird_confirmed and self.target_confidence >= bird_threshold:
             self.set_state(MissionState.TARGET_CLASSIFIED_BIRD, f"class=bird conf={self.target_confidence:.2f}")
+            require_fusion = bool(self.get_parameter("require_3d_fusion_valid_for_sound").value)
+            require_dynamic = bool(self.get_parameter("require_dynamic_valid_for_sound").value)
+            require_centered = bool(self.get_parameter("require_camera_centered_for_sound").value)
+            dynamic_ok = self.dynamic_valid_for_sound()
+            if require_fusion and not self.bird_target_valid:
+                self.set_state(MissionState.SOUND_TASK_BLOCKED_BY_CLASS, "bird_3d_fusion_not_valid")
+                return
+            if require_dynamic and not dynamic_ok:
+                self.set_state(
+                    MissionState.SOUND_TASK_BLOCKED_BY_CLASS,
+                    (
+                        "dynamic_target_not_valid "
+                        f"last_valid_age_sec={self.dynamic_valid_age_sec():.2f} "
+                        f"grace_sec={float(self.get_parameter('dynamic_valid_grace_sec_for_sound').value):.2f}"
+                    ),
+                )
+                return
+            if require_centered and not self.camera_target_centered:
+                self.set_state(MissionState.SOUND_TASK_BLOCKED_BY_CLASS, "camera_not_centered")
+                return
             if self.enable_sound_for_class(normalized_class):
                 self.sound_request_pub.publish(Bool(data=True))
-                self.set_state(MissionState.SOUND_TASK_REQUESTED, "sound_alert_requested class=bird")
+                self.set_state(
+                    MissionState.SOUND_TASK_REQUESTED,
+                    "sound_alert_requested class=bird "
+                    f"fusion_required={require_fusion} fusion_valid={self.bird_target_valid} "
+                    f"dynamic_required={require_dynamic} dynamic_valid={dynamic_ok} raw_dynamic_valid={self.dynamic_valid} "
+                    f"dynamic_valid_age_sec={self.dynamic_valid_age_sec():.2f} "
+                    f"centered_required={require_centered} centered={self.camera_target_centered}",
+                )
             else:
                 self.set_state(MissionState.SOUND_TASK_BLOCKED_BY_CLASS, "sound_disabled_or_class_blocked class=bird")
             return
@@ -723,6 +766,19 @@ class MissionPatrolManagerNode(Node):
         if text in {"none", "no_detection", ""}:
             return "unknown"
         return "irrelevant"
+
+    def dynamic_valid_age_sec(self) -> float:
+        if self.last_dynamic_valid_time < 0.0:
+            return float("inf")
+        return max(0.0, self._now() - self.last_dynamic_valid_time)
+
+    def dynamic_valid_for_sound(self) -> bool:
+        if self.dynamic_valid:
+            return True
+        if self.last_dynamic_valid_time < self.target_mission_started_time:
+            return False
+        grace = max(0.0, float(self.get_parameter("dynamic_valid_grace_sec_for_sound").value))
+        return self.dynamic_valid_age_sec() <= grace
 
     def enable_sound_for_class(self, target_class: str) -> bool:
         if not bool(self.get_parameter("enable_sound_task").value):

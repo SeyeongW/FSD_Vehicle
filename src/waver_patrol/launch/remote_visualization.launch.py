@@ -12,17 +12,20 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description() -> LaunchDescription:
-    # 역할: 로컬 PC에서 RViz와 Waver operator panel을 같이 띄우는 시각화 launch다.
+    # Local-operator launch only: real robot backend nodes stay in Jetson Docker.
     waver_share = get_package_share_directory("waver_patrol")
-    default_rviz = os.path.join(waver_share, "rviz", "pre_real_gazebo_validation.rviz")
+    default_rviz = os.path.join(waver_share, "rviz", "waver_field_operator.rviz")
     return LaunchDescription(
         [
             DeclareLaunchArgument("rviz_config", default_value=default_rviz),
             DeclareLaunchArgument("use_rviz", default_value="true"),
             DeclareLaunchArgument("use_operator_panel", default_value="true"),
+            DeclareLaunchArgument("fixed_frame", default_value="map"),
             DeclareLaunchArgument("require_scan", default_value="false"),
             DeclareLaunchArgument("map_display_mode", default_value="auto"),
             DeclareLaunchArgument("map_topic", default_value="/map"),
+            DeclareLaunchArgument("scan_topic", default_value="/scan_safety"),
+            DeclareLaunchArgument("pointcloud_topic", default_value="/livox/lidar"),
             DeclareLaunchArgument("global_path_topic", default_value="/plan"),
             DeclareLaunchArgument("local_path_topic", default_value="/local_plan"),
             ExecuteProcess(
@@ -42,6 +45,8 @@ def generate_launch_description() -> LaunchDescription:
                         "auto_mode_strategy": "mission_nav2",
                         "map_topic": LaunchConfiguration("map_topic"),
                         "map_display_mode": LaunchConfiguration("map_display_mode"),
+                        "scan_topic": LaunchConfiguration("scan_topic"),
+                        "pointcloud_topic": LaunchConfiguration("pointcloud_topic"),
                         "global_path_topic": LaunchConfiguration("global_path_topic"),
                         "local_path_topic": LaunchConfiguration("local_path_topic"),
                         "amcl_pose_topic": "/amcl_pose",

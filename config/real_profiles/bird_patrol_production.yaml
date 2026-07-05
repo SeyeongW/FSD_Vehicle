@@ -1,0 +1,192 @@
+profile: bird_patrol_production
+schema_version: bird_patrol_profile_v1
+source_of_truth: nested_sections
+compatibility_flat_aliases: true
+readiness_stage: autonomous_patrol_locked_until_hardware_evidence
+purpose: "3D LiDAR + camera bird detection and non-contact deterrence patrol"
+
+base:
+  enable_waver_base_driver: true
+  serial_port_required: true
+  serial_port: ""
+  odom_source: ekf
+  enable_robot_localization: true
+  require_base_feedback: true
+  require_odom_feedback_ok: true
+  feedback_schema_path: config/waver_base_feedback_schema.yaml
+  motor_calibration_path: config/waver_motor_calibration.yaml
+  cmd_timeout_sec: 0.5
+  stop_burst_on_shutdown: true
+  max_linear_speed: 0.05
+  max_angular_speed: 0.20
+  wheel_off_mode_allowed: true
+
+navigation:
+  enable_nav2: true
+  enable_slam_or_localization: true
+  map_path: ""
+  enable_collision_monitor: true
+  collision_monitor_required_for_autonomous: true
+  collision_monitor_config: src/waver_patrol/config/collision_monitor_waver.yaml
+  require_scan: true
+  require_odom: true
+  require_tf: true
+  require_battery: true
+  require_safety_state: true
+  patrol_mode: waypoint
+  require_operator_start_patrol: true
+
+lidar:
+  lidar_type: mid360
+  pointcloud_topic: /livox/lidar
+  scan_topic: /scan_safety
+  lidar_frame: livox
+  min_pointcloud_rate_hz: 5.0
+  min_scan_rate_hz: 5.0
+  min_points_per_cloud: 1000
+  enable_pointcloud_lidar_objects: true
+  enable_lidar_aerial_motion_detector: true
+  enable_moving_object_motion_filter: true
+  enable_moving_object_map_transform: true
+  min_target_height_m: 1.0
+  preferred_bird_height_min_m: 2.0
+  preferred_bird_height_max_m: 30.0
+  max_target_range_m: 30.0
+  reject_robot_body_reflections: true
+  require_pointcloud_to_scan_adapter: true
+
+camera:
+  camera_image_topic: /camera/image_raw
+  camera_info_topic: /camera/camera_info
+  camera_frame: camera_color_optical_frame
+  min_camera_rate_hz: 10.0
+  require_camera_info: true
+  min_width: 640
+  min_height: 480
+
+perception:
+  enable_bird_detector: true
+  detector_backend: ultralytics
+  bird_model_path: ""
+  model_registry_path: config/perception/bird_model_registry.yaml
+  require_detector_model: true
+  detector_confidence_threshold: 0.45
+  max_detector_latency_ms: 300
+  class_map_required:
+    - bird
+    - person
+    - vehicle
+    - drone
+    - unknown
+
+fusion:
+  enable_bird_3d_fusion: true
+  require_camera_lidar_extrinsic: true
+  camera_lidar_extrinsic_path: config/sensors/camera_lidar_extrinsic.yaml
+  max_sync_dt_sec: 0.15
+  min_bbox_points: 5
+  max_bbox_point_spread_m: 2.0
+  require_dynamic_association: true
+  require_fusion_valid_before_sound: true
+
+mission:
+  enable_mission_patrol_manager: true
+  enable_target_goal_manager: true
+  inspection_standoff_m: 2.0
+  direct_target_collision_goal_forbidden: true
+  target_timeout_sec: 10.0
+  target_memory_cooldown_sec: 60.0
+  return_to_patrol_after_target: true
+  lidar_only_target_allows_inspection_only: true
+  target_jump_reject_m: 5.0
+  person_vehicle_drone_sound_blocked: true
+
+alignment:
+  enable_camera_alignment: true
+  alignment_backend: robot_body
+  allow_topic_only_alignment_in_production: false
+  require_centered_before_sound: true
+  max_center_error_px: 80
+  alignment_timeout_sec: 8.0
+  real_gimbal_feedback_topic: /waver/gimbal_feedback
+
+deterrence:
+  enable_sound_deterrent: true
+  enable_sound_output: false
+  sound_backend: disabled
+  require_bird_confirmed_before_sound: true
+  require_fusion_valid_before_sound: true
+  require_centered_before_sound: true
+  max_sound_duration_sec: 3.0
+  sound_cooldown_sec: 30.0
+  max_retries_per_target: 2
+  max_volume_percent: 50
+  required_ack_for_real_output:
+    - WAVER_ACK_SOUND_HARDWARE
+    - WAVER_ACK_LOCAL_SOUND_LAW
+    - WAVER_ACK_OPERATOR_SUPERVISION
+
+safety:
+  forbidden_nodes:
+    - gazebo
+    - fake
+    - mock
+    - test_publisher
+  emergency_stop_topic: /waver/external_stop
+  battery_critical_blocks_mission: true
+  standby_blocks_autonomy: true
+  manual_mode_blocks_bird_interrupt: true
+  mapping_mode_blocks_bird_interrupt: true
+  external_stop_cancels_sound: true
+  external_stop_cancels_goal: true
+
+logging:
+  enable_blackbox: true
+  blackbox_profile: bird_mission
+  log_root: reports/field_runs
+
+# Flat aliases keep legacy field scripts compatible while the nested profile is
+# the production source of truth.
+enable_waver_base_driver: true
+serial_port_required: true
+scan_source: mid360
+pointcloud_topic: /livox/lidar
+camera_image_topic: /camera/image_raw
+camera_info_topic: /camera/camera_info
+odom_source: ekf
+enable_robot_localization: true
+enable_nav2: true
+enable_mission_patrol_manager: true
+enable_auto_behavior_mux: true
+enable_pointcloud_lidar_objects: true
+enable_lidar_aerial_motion_detector: true
+enable_moving_object_map_transform: true
+enable_moving_object_motion_filter: true
+enable_target_goal_manager: true
+enable_bird_detector: true
+enable_bird_3d_fusion: true
+enable_camera_alignment: true
+enable_sound_deterrent: true
+enable_sound_output: false
+max_linear_speed: 0.05
+max_angular_speed: 0.20
+inspection_standoff_m: 2.0
+min_target_height_m: 3.0
+max_target_range_m: 30.0
+require_scan: true
+require_odom: true
+require_battery: true
+require_camera_lidar_extrinsic: true
+require_detector_model: true
+require_fusion_valid_before_sound: true
+require_bird_confirmed_before_sound: true
+require_operator_start_patrol: true
+forbidden_nodes:
+  - gazebo
+  - fake
+  - mock
+  - test_publisher
+required_external_ack_for_sound_output:
+  - WAVER_ACK_SOUND_HARDWARE
+  - WAVER_ACK_LOCAL_SOUND_LAW
+  - WAVER_ACK_OPERATOR_SUPERVISION

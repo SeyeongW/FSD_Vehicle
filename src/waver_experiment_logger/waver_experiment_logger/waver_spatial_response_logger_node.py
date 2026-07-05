@@ -894,6 +894,67 @@ class WaverSpatialResponseLoggerNode(Node):
         except Exception:
             return []
 
+    def read_log_csv_rows(self, rel_path: str) -> list[dict[str, str]]:
+        path = self.run_dir / rel_path
+        if not path.exists():
+            return []
+        try:
+            with path.open(newline="", encoding="utf-8", errors="replace") as f:
+                return list(csv.DictReader(f))
+        except Exception:
+            return []
+
+    @staticmethod
+    def truth(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "pass", "ok"}
+
+    @staticmethod
+    def row_text(row: dict[str, Any]) -> str:
+        return " ".join(str(v) for v in row.values())
+
+    @staticmethod
+    def first_time_after(rows: list[dict[str, str]], predicate: Any, after: float | None) -> float | None:
+        for row in rows:
+            if not predicate(row):
+                continue
+            for field in ("time_sec", "event_time_sec", "ros_time_sec"):
+                value = safe_float(row.get(field))
+                if math.isfinite(value) and (after is None or value >= after):
+                    return value
+        return None
+
+    @classmethod
+    def first_text_time_after(cls, rows: list[dict[str, str]], tokens: tuple[str, ...], after: float | None) -> float | None:
+        upper_tokens = tuple(token.upper() for token in tokens)
+        return cls.first_time_after(
+            rows,
+            lambda r: all(token in cls.row_text(r).upper() for token in upper_tokens),
+            after,
+        )
+
+    def parse_cmd_vel_authority(self) -> tuple[int | str, bool]:
+        path = self.run_dir / "logs/cmd_vel_topic_info.txt"
+        if not path.exists():
+            return "", False
+        text = path.read_text(encoding="utf-8", errors="replace")
+        publisher_count: int | None = None
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("Publisher count:"):
+                try:
+                    publisher_count = int(stripped.split(":", 1)[1].strip())
+                except Exception:
+                    publisher_count = None
+        sole_mux = (
+            publisher_count == 1
+            and "safety_cmd_mux_node" in text
+            and "simple_nav2_cmd_sim_node" not in text
+            and "seo_cluster_tracker_node" not in text
+        )
+        return (publisher_count if publisher_count is not None else "", sole_mux)
+
     @staticmethod
     def numeric(rows: list[dict[str, str]], field: str) -> list[float]:
         vals = []
@@ -935,6 +996,9 @@ class WaverSpatialResponseLoggerNode(Node):
         goal_rows = self.read_csv_rows("goal_bird_distance_events")
         bird_rows = self.read_csv_rows("bird_kinematics")
         lidar_rows = self.read_csv_rows("lidar_filter_response")
+        cmd_rows = self.read_csv_rows("cmd_vel_response")
+        mission_events = self.read_log_csv_rows("logs/mission_events.csv")
+        removal_events = self.read_log_csv_rows("logs/bird_removal_events.csv")
         target_goal_rows = [
             r
             for r in goal_rows
@@ -944,6 +1008,13 @@ class WaverSpatialResponseLoggerNode(Node):
         object_target_goal_rows = [r for r in target_goal_rows if r.get("event_type") == "object_mission_goal"]
         target_spatial_rows = [
             r for r in spatial_rows if str(r.get("active_goal_role", "")).upper() == "TARGET_INSPECTION"
+        ]
+        valid_lidar_spatial_rows = [
+            r
+            for r in spatial_rows
+            if self.truth(r.get("lidar_target_valid"))
+            and safe_float(r.get("lidar_target_age_sec")) <= 0.5
+            and self.truth(r.get("dynamic_lock"))
         ]
         active_bird_rows = [
             r
@@ -973,6 +1044,116 @@ class WaverSpatialResponseLoggerNode(Node):
         target_goal_to_bird = self.numeric(object_target_goal_rows, "goal_to_bird_xy_m")
         target_goal_to_lidar = self.numeric(object_target_goal_rows, "goal_to_lidar_target_xy_m")
         lidar_runtime_wall = self.numeric_any(lidar_rows, ["filter_runtime_wall_ms", "filter_runtime_ms"])
+        cmd_vel_publisher_count, cmd_vel_sole_mux = self.parse_cmd_vel_authority()
+
+        first_object_time = self.first_times.get("first_object_mission_goal_time_sec")
+        first_active_target_time = self.first_times.get("first_active_target_nav_goal_time_sec")
+        first_patrol_goal_time = self.first_text_time_after(
+            mission_events,
+            ("NAV2_DISABLED_SIMULATED_GOAL", "PATROL"),
+            None,
+        )
+        if first_patrol_goal_time is None:
+            first_patrol_goal_time = self.first_time_after(
+                goal_rows,
+                lambda r: r.get("event_type") == "active_nav_goal"
+                and str(r.get("goal_role", "")).upper() not in {"TARGET_INSPECTION", "RADAR_TARGET"},
+                None,
+            )
+        first_patrol_preempt_time = self.first_time_after(
+            mission_events,
+            lambda r: "TARGET_PREEMPTS_PATROL_IMMEDIATELY" in self.row_text(r).upper()
+            or "INTERRUPT_PATROL_FOR_LIDAR_TARGET" in self.row_text(r).upper(),
+            first_patrol_goal_time,
+        )
+        first_patrol_dwell_before_preempt = self.first_time_after(
+            mission_events,
+            lambda r: "PATROL_DWELL" in self.row_text(r).upper(),
+            first_patrol_goal_time,
+        )
+        first_patrol_success_before_preempt = self.first_time_after(
+            mission_events,
+            lambda r: ("SIM_NAV_GOAL_ARRIVED" in self.row_text(r).upper() or "NAV2_GOAL_SUCCEEDED" in self.row_text(r).upper())
+            and "PATROL" in self.row_text(r).upper(),
+            first_patrol_goal_time,
+        )
+        first_target_cmd_after_preempt = self.first_time_after(
+            cmd_rows,
+            lambda r: str(r.get("nonzero_cmd", "")).lower() == "true"
+            and (
+                str(r.get("mission_state", "")).upper().startswith("APPROACH_TARGET_OFFSET")
+                or str(r.get("mission_state", "")).upper().startswith("TARGET_NAVIGATING")
+            ),
+            first_patrol_preempt_time,
+        )
+        if first_target_cmd_after_preempt is None:
+            first_target_cmd_after_preempt = self.first_times.get("first_nonzero_cmd_after_target_goal_time_sec")
+        patrol_dwell_before_preempt = (
+            first_patrol_dwell_before_preempt is not None
+            and first_patrol_preempt_time is not None
+            and first_patrol_dwell_before_preempt < first_patrol_preempt_time
+        )
+        patrol_success_before_preempt = (
+            first_patrol_success_before_preempt is not None
+            and first_patrol_preempt_time is not None
+            and first_patrol_success_before_preempt < first_patrol_preempt_time
+        )
+        mid_patrol_preempt_success = (
+            first_patrol_goal_time is not None
+            and first_patrol_preempt_time is not None
+            and first_active_target_time is not None
+            and first_target_cmd_after_preempt is not None
+            and first_patrol_goal_time <= first_patrol_preempt_time <= first_active_target_time
+            and not patrol_dwell_before_preempt
+            and not patrol_success_before_preempt
+        )
+        removed_times = [
+            safe_float(row.get("time_sec") or row.get("event_time_sec"))
+            for row in removal_events
+            if str(row.get("event", row.get("state", ""))).upper().startswith("REMOVED")
+        ]
+        removed_times = [value for value in removed_times if math.isfinite(value)]
+        if not removed_times:
+            removed_times = [
+                safe_float(row.get("time_sec"))
+                for row in bird_rows
+                if self.truth(row.get("removed")) and math.isfinite(safe_float(row.get("time_sec")))
+            ]
+        last_removed_time = max(removed_times) if removed_times else None
+        first_return_time = self.first_time_after(
+            spatial_rows,
+            lambda r: "RETURN" in str(r.get("mission_state", "")).upper(),
+            last_removed_time,
+        ) or self.first_time_after(
+            mission_events,
+            lambda r: "RETURN" in self.row_text(r).upper(),
+            last_removed_time,
+        )
+        first_resume_time = self.first_time_after(
+            spatial_rows,
+            lambda r: "RESUME" in str(r.get("mission_state", "")).upper(),
+            first_return_time,
+        ) or self.first_time_after(
+            mission_events,
+            lambda r: "RESUME" in self.row_text(r).upper(),
+            first_return_time,
+        )
+        final_patrol_time = self.first_time_after(
+            spatial_rows,
+            lambda r: str(r.get("mission_state", "")).upper().startswith("PATROL"),
+            first_resume_time,
+        ) or self.first_time_after(
+            mission_events,
+            lambda r: "PATROL" in self.row_text(r).upper(),
+            first_resume_time,
+        )
+        return_resume_sequence = (
+            last_removed_time is not None
+            and first_return_time is not None
+            and first_resume_time is not None
+            and final_patrol_time is not None
+            and last_removed_time <= first_return_time <= first_resume_time <= final_patrol_time
+        )
         has_return_resume = False
         target_goal_time = self.first_times.get("first_active_target_nav_goal_time_sec")
         if target_goal_time is not None:
@@ -993,11 +1174,16 @@ class WaverSpatialResponseLoggerNode(Node):
             "mechanism.has_object_mission_goal": "first_object_mission_goal_time_sec" in self.first_times,
             "mechanism.has_active_nav_goal": "first_active_nav_goal_time_sec" in self.first_times,
             "mechanism.has_active_target_nav_goal": "first_active_target_nav_goal_time_sec" in self.first_times,
+            "mechanism.has_patrol_preempt_to_target_goal": first_patrol_preempt_time is not None and first_active_target_time is not None,
+            "mechanism.mid_patrol_preempt_success": mid_patrol_preempt_success,
+            "mechanism.preempt_before_first_patrol_dwell": first_patrol_preempt_time is not None and not patrol_dwell_before_preempt,
+            "mechanism.preempt_before_first_patrol_success": first_patrol_preempt_time is not None and not patrol_success_before_preempt,
             "mechanism.has_nonzero_cmd_vel": "first_nonzero_cmd_vel_time_sec" in self.first_times,
             "mechanism.has_nonzero_cmd_vel_after_target_goal": "first_nonzero_cmd_after_target_goal_time_sec" in self.first_times,
             "mechanism.has_target_cmd_vel": "first_nonzero_cmd_after_target_goal_time_sec" in self.first_times,
             "mechanism.has_odom_motion_after_target_goal": "first_odom_motion_after_target_goal_time_sec" in self.first_times,
-            "mechanism.has_return_resume": has_return_resume,
+            "mechanism.has_return_resume": has_return_resume or return_resume_sequence,
+            "mechanism.return_resume_sequence_success": return_resume_sequence,
             "mechanism.has_sound_task": self.sound_done_seen,
             "mechanism.removed_bird_count": len(removed),
             "mechanism.two_bird_removal_success": len(removed) >= 2,
@@ -1027,6 +1213,11 @@ class WaverSpatialResponseLoggerNode(Node):
                 [abs(v) for v in self.numeric(object_target_goal_rows, "standoff_error_to_lidar_target_m")]
             ),
             "spatial.lidar_target_to_bird_xy_mean_m": self.mean(self.numeric(spatial_rows, "lidar_target_to_bird_xy_m")),
+            "spatial.lidar_target_to_bird_xy_p95_m": self.p95(self.numeric(spatial_rows, "lidar_target_to_bird_xy_m")),
+            "spatial.valid_lidar_target_sample_count": len(valid_lidar_spatial_rows),
+            "spatial.valid_lidar_target_to_bird_xy_mean_m": self.mean(self.numeric(valid_lidar_spatial_rows, "lidar_target_to_bird_xy_m")),
+            "spatial.valid_lidar_target_to_bird_xy_p95_m": self.p95(self.numeric(valid_lidar_spatial_rows, "lidar_target_to_bird_xy_m")),
+            "spatial.valid_lidar_target_to_bird_xy_max_m": max(self.numeric(valid_lidar_spatial_rows, "lidar_target_to_bird_xy_m") or [math.nan]),
             "bird.speed_xy_mean_mps": self.mean(self.numeric(active_bird_rows, "speed_xy_mps")),
             "bird.speed_xy_max_mps": max(self.numeric(active_bird_rows, "speed_xy_mps") or [math.nan]),
             "bird.speed_xy_normal_mean_mps": self.mean(self.numeric(active_normal_bird_rows, "speed_xy_mps")),
@@ -1053,6 +1244,21 @@ class WaverSpatialResponseLoggerNode(Node):
             "latency.active_target_nav_goal_to_cmd_vel_ms": self.latency_delta(
                 "first_active_target_nav_goal_time_sec", "first_nonzero_cmd_after_target_goal_time_sec"
             ),
+            "latency.patrol_goal_to_target_preempt_ms": (
+                ""
+                if first_patrol_goal_time is None or first_patrol_preempt_time is None
+                else (first_patrol_preempt_time - first_patrol_goal_time) * 1000.0
+            ),
+            "latency.target_preempt_to_active_target_nav_goal_ms": (
+                ""
+                if first_patrol_preempt_time is None or first_active_target_time is None
+                else (first_active_target_time - first_patrol_preempt_time) * 1000.0
+            ),
+            "latency.target_preempt_to_target_cmd_vel_ms": (
+                ""
+                if first_patrol_preempt_time is None or first_target_cmd_after_preempt is None
+                else (first_target_cmd_after_preempt - first_patrol_preempt_time) * 1000.0
+            ),
             "latency.active_target_nav_goal_to_odom_motion_ms": self.latency_delta(
                 "first_active_target_nav_goal_time_sec", "first_odom_motion_after_target_goal_time_sec"
             ),
@@ -1062,6 +1268,9 @@ class WaverSpatialResponseLoggerNode(Node):
             "navigation.cmd_vel_active_duration_sec": cmd_duration,
             "navigation.linear_cmd_max_abs": self.linear_cmd_abs_max,
             "navigation.angular_cmd_max_abs": self.angular_cmd_abs_max,
+            "safety.cmd_vel_publisher_count": cmd_vel_publisher_count,
+            "safety.cmd_vel_safety_mux_sole_publisher": cmd_vel_sole_mux,
+            "safety.cmd_vel_authority_pass": cmd_vel_sole_mux,
         }
         (self.run_dir / "metrics/spatial_response_metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
         self.write_metric_csv("spatial_response_metrics.csv", metrics)

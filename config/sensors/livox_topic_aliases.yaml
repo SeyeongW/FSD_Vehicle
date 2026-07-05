@@ -1,0 +1,24 @@
+canonical:
+  pointcloud_topic: "/livox/lidar"
+  imu_topic: "/livox/imu"
+  scan_safety_topic: "/scan_safety"
+  scan_slam_topic: "/scan_slam"
+aliases:
+  pointcloud:
+    - "/livox/lidar"
+    - "/mid360_PointCloud2"
+    - "/livox/points"
+  imu:
+    - "/livox/imu"
+    - "/livox/imu/data"
+  scan:
+    - "/scan_safety"
+    - "/scan"
+forbidden_topics:
+  - "/livox/lider"
+suggested_remaps:
+  "/mid360_PointCloud2": "/livox/lidar"
+  "/livox/points": "/livox/lidar"
+  "/scan": "/scan_safety"
+  "/livox/lider": "/livox/lidar"
+notes: "Use canonical /livox/lidar for MID-360 PointCloud2. /livox/lider is a typo and must fail production checks."

@@ -18,6 +18,7 @@ def generate_launch_description() -> LaunchDescription:
     default_config = os.path.join(share, "config", "waver_nav2_radar_bird_mission.yaml")
     default_waypoints = os.path.join(share, "waypoints", "waver_nav2_patrol_mission.yaml")
     default_nav2_params = os.path.join(share, "config", "nav2_params_waver.yaml")
+    default_collision_params = os.path.join(share, "config", "collision_monitor_waver.yaml")
     try:
         default_map = os.path.join(get_package_share_directory("ugv_nav"), "maps", "map.yaml")
     except PackageNotFoundError:
@@ -35,6 +36,9 @@ def generate_launch_description() -> LaunchDescription:
     velocity_smoother_input_topic = LaunchConfiguration("velocity_smoother_input_topic")
     velocity_smoother_output_topic = LaunchConfiguration("velocity_smoother_output_topic")
     safety_nav2_cmd_topic = LaunchConfiguration("safety_nav2_cmd_topic")
+    safety_cmd_vel_out_topic = LaunchConfiguration("safety_cmd_vel_out_topic")
+    collision_cmd_vel_in_topic = LaunchConfiguration("collision_cmd_vel_in_topic")
+    collision_cmd_vel_out_topic = LaunchConfiguration("collision_cmd_vel_out_topic")
     start_base_feedback = LaunchConfiguration("start_base_feedback")
     feedback_serial_port = LaunchConfiguration("feedback_serial_port")
     feedback_baudrate = LaunchConfiguration("feedback_baudrate")
@@ -162,6 +166,11 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("velocity_smoother_input_topic", default_value="/waver/cmd_vel_nav2_raw"),
             DeclareLaunchArgument("velocity_smoother_output_topic", default_value="/waver/cmd_vel_nav2_smooth"),
             DeclareLaunchArgument("safety_nav2_cmd_topic", default_value="/waver/cmd_vel_nav2"),
+            DeclareLaunchArgument("safety_cmd_vel_out_topic", default_value="/cmd_vel"),
+            DeclareLaunchArgument("enable_collision_monitor", default_value="false"),
+            DeclareLaunchArgument("collision_monitor_params_file", default_value=default_collision_params),
+            DeclareLaunchArgument("collision_cmd_vel_in_topic", default_value="/waver/cmd_vel_safety"),
+            DeclareLaunchArgument("collision_cmd_vel_out_topic", default_value="/cmd_vel"),
             DeclareLaunchArgument("cmd_vel_auto_topic", default_value="/waver/cmd_vel_auto"),
             DeclareLaunchArgument("cmd_vel_target_track_topic", default_value="/waver/cmd_vel_target_track"),
             DeclareLaunchArgument("cmd_vel_return_home_topic", default_value="/waver/cmd_vel_return_home"),
@@ -179,8 +188,8 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("use_rviz", default_value="false"),
             LogInfo(
                 msg=(
-                    "Safety rule: final /cmd_vel must have exactly one publisher: safety_cmd_mux_node. "
-                    "Check with `ros2 topic info -v /cmd_vel` before enabling serial."
+                    "Safety rule: final /cmd_vel must have exactly one publisher. "
+                    "Without collision monitor it is safety_cmd_mux_node; with collision monitor it is nav2_collision_monitor."
                 )
             ),
             LogInfo(
@@ -518,8 +527,29 @@ def generate_launch_description() -> LaunchDescription:
                         "cmd_vel_auto_topic": PythonExpression(
                             ["'", cmd_vel_auto_topic, "' if '", enable_auto_behavior_mux, "' == 'true' else ''"]
                         ),
+                        "cmd_vel_out_topic": safety_cmd_vel_out_topic,
                         "scan_topic": scan_topic,
                     },
+                ],
+            ),
+            Node(
+                package="nav2_collision_monitor",
+                executable="collision_monitor",
+                name="collision_monitor",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_collision_monitor")),
+                parameters=[
+                    LaunchConfiguration("collision_monitor_params_file"),
+                    {
+                        "use_sim_time": ParameterValue(use_sim_time, value_type=bool),
+                        "cmd_vel_in_topic": collision_cmd_vel_in_topic,
+                        "cmd_vel_out_topic": collision_cmd_vel_out_topic,
+                    },
+                ],
+                remappings=[
+                    ("cmd_vel_in", collision_cmd_vel_in_topic),
+                    ("cmd_vel_out", collision_cmd_vel_out_topic),
+                    ("scan", scan_topic),
                 ],
             ),
             Node(

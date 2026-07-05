@@ -1,0 +1,90 @@
+{
+  "findings": [],
+  "finished_at": "2026-07-06T00:58:06.837078+09:00",
+  "release_safe_subset": true,
+  "started_at": "2026-07-06T00:58:02+09:00",
+  "status": "PASS",
+  "steps": [
+    {
+      "command": "python3 -m compileall -q scripts src/waver_patrol/waver_patrol src/waver_patrol/launch src/waver_patrol/scripts",
+      "label": "compileall",
+      "log": "/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/release_self_test/steps/compileall.log",
+      "output_tail": "",
+      "returncode": 0,
+      "status": "PASS",
+      "timeout_sec": 90.0
+    },
+    {
+      "command": "bash -lc find scripts -maxdepth 1 -type f -name \"*.sh\" -print0 | xargs -0 -r bash -n",
+      "label": "shell_syntax",
+      "log": "/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/release_self_test/steps/shell_syntax.log",
+      "output_tail": "",
+      "returncode": 0,
+      "status": "PASS",
+      "timeout_sec": 30.0
+    },
+    {
+      "command": "bash scripts/run_no_ros_unit_tests.sh",
+      "label": "no_ros_unit_tests",
+      "log": "/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/release_self_test/steps/no_ros_unit_tests.log",
+      "output_tail": "........................................................................ [ 83%]\n..............                                                           [100%]\n86 passed in 2.04s\n",
+      "returncode": 0,
+      "status": "PASS",
+      "timeout_sec": 240.0
+    },
+    {
+      "command": "python3 scripts/waver_contract_check.py --allow-source-archive-without-git",
+      "label": "contract",
+      "log": "/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/release_self_test/steps/contract.log",
+      "output_tail": "{\n  \"workspace_root\": \"/home/chotaehyun/ros2_ws5/FSD_Vehicle\",\n  \"timestamp\": \"2026-07-06T00:58:04\",\n  \"branch\": \"jo\",\n  \"git_present\": true,\n  \"source_manifest_present\": true,\n  \"artifact_type\": \"source_release\",\n  \"result\": \"PASS\",\n  \"safety_regression\": false,\n  \"score\": 0,\n  \"counts\": {\n    \"CRITICAL\": 0,\n    \"HIGH\": 0,\n    \"MEDIUM\": 0,\n    \"LOW\": 0,\n    \"INFO\": 4\n  },\n  \"issue_count\": 4,\n  \"issues\": [\n    {\n      \"severity\": \"INFO\",\n      \"category\": \"workspace\",\n      \"message\": \"Local generated artifact exists and must not be edited as source: build\",\n      \"path\": \"build\",\n      \"recommendation\": \"\"\n    },\n    {\n      \"severity\": \"INFO\",\n      \"category\": \"workspace\",\n      \"message\": \"Local generated artifact exists and must not be edited as source: install\",\n      \"path\": \"install\",\n      \"recommendation\": \"\"\n    },\n    {\n      \"severity\": \"INFO\",\n      \"category\": \"workspace\",\n      \"message\": \"Local generated artifact exists and must not be edited as source: log\",\n      \"path\": \"log\",\n      \"recommendation\": \"\"\n    },\n    {\n      \"severity\": \"INFO\",\n      \"category\": \"workspace\",\n      \"message\": \"Local generated artifact exists and must not be edited as source: experiment_results\",\n      \"path\": \"experiment_results\",\n      \"recommendation\": \"\"\n    }\n  ],\n  \"next_recommended_fixes\": []\n}\nWAVER_CONTRACT_CHECK=PASS SCORE=0 COUNTS={'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0, 'INFO': 4}\n",
+      "returncode": 0,
+      "status": "PASS",
+      "timeout_sec": 90.0
+    },
+    {
+      "command": "python3 scripts/waver_bird_mission_readiness_check.py --mode source --strict --no-hardware",
+      "label": "source_readiness",
+      "log": "/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/release_self_test/steps/source_readiness.log",
+      "output_tail": "BIRD_MISSION_READINESS=PASS\nBIRD_MISSION_READINESS_REPORT=/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/bird_mission_readiness/1783267085_source.json\n",
+      "returncode": 0,
+      "status": "PASS",
+      "timeout_sec": 90.0
+    },
+    {
+      "command": "python3 scripts/waver_launch_contract_check.py --profile config/real_profiles/bird_patrol_production.yaml",
+      "label": "launch_contract",
+      "log": "/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/release_self_test/steps/launch_contract.log",
+      "output_tail": "WAVER_LAUNCH_CONTRACT=PASS\nWAVER_LAUNCH_CONTRACT_REPORT=/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/launch_contract/latest.json\n",
+      "returncode": 0,
+      "status": "PASS",
+      "timeout_sec": 90.0
+    },
+    {
+      "command": "python3 scripts/waver_field_bridge_regression_check.py --dry-run",
+      "label": "bridge_regression",
+      "log": "/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/release_self_test/steps/bridge_regression.log",
+      "output_tail": "WAVER_FIELD_BRIDGE_REGRESSION=PASS\nWAVER_FIELD_BRIDGE_REGRESSION_REPORT=/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/field_bridge_regression/latest.json\n",
+      "returncode": 0,
+      "status": "PASS",
+      "timeout_sec": 90.0
+    },
+    {
+      "command": "python3 scripts/waver_command_chain_check.py --dry-run --profile config/real_profiles/bird_patrol_production.yaml",
+      "label": "command_chain",
+      "log": "/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/release_self_test/steps/command_chain.log",
+      "output_tail": "WAVER_COMMAND_CHAIN=PASS\nWAVER_COMMAND_CHAIN_REPORT=/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/command_chain/latest.json\n",
+      "returncode": 0,
+      "status": "PASS",
+      "timeout_sec": 90.0
+    },
+    {
+      "command": "python3 -m pytest -q src/waver_patrol/test/test_bird_mission_not_removed.py src/waver_patrol/test/test_bird_patrol_production_profile.py src/waver_patrol/test/test_bird_entrypoint_uses_production_launch.py src/waver_patrol/test/test_bird_detector_deployment_contract.py src/waver_patrol/test/test_camera_lidar_fusion_gate.py src/waver_patrol/test/test_camera_alignment_production_contract.py src/waver_patrol/test/test_sound_deterrent_real_backend_gate.py src/waver_patrol/test/test_bird_mission_policy.py src/waver_patrol/test/test_bird_ready_degraded_policy.py src/waver_patrol/test/test_launch_contract_required_args.py src/waver_patrol/test/test_field_bridge_regression_contract.py src/waver_patrol/test/test_command_chain_collision_monitor_contract.py src/waver_patrol/test/test_remote_ui_slam_bird_contract.py src/waver_patrol/test/test_ui_slam_bird_detection_smoke_contract.py src/waver_patrol/test/test_local_operator_station_contract.py src/waver_patrol/test/test_repository_cleanup_policy.py src/waver_patrol/test/test_readiness_truthfulness_contract.py",
+      "label": "targeted_pytest",
+      "log": "/home/chotaehyun/ros2_ws5/FSD_Vehicle/reports/release_self_test/steps/targeted_pytest.log",
+      "output_tail": "..........................................                               [100%]\n42 passed in 0.93s\n",
+      "returncode": 0,
+      "status": "PASS",
+      "timeout_sec": 240.0
+    }
+  ]
+}

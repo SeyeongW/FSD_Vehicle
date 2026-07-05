@@ -47,13 +47,24 @@ class CameraGimbalControllerNode(Node):
         self.declare_parameter("use_robot_body_fallback", True)
         self.declare_parameter("fallback_cmd_topic", "/waver/cmd_vel_target_track")
         self.declare_parameter("hardware_backend", "topic_only")
+        self.declare_parameter("alignment_backend", "")
+        self.declare_parameter("production_profile", True)
+        self.declare_parameter("allow_simulated_centered", False)
         self.declare_parameter("real_gimbal_output_enabled", False)
+        self.declare_parameter("bbox_center_error_topic", "/waver/camera_bbox_center_error_px")
+        self.declare_parameter("gimbal_feedback_topic", "/waver/gimbal_feedback")
+        self.declare_parameter("max_center_error_px", 80.0)
+        self.declare_parameter("feedback_stale_sec", 1.0)
 
         self.target_pose: PoseStamped | None = None
         self.request_active = False
         self.request_start_time = 0.0
         self.last_pan = 0.0
         self.last_tilt = 0.0
+        self.bbox_center_error_px: float | None = None
+        self.bbox_feedback_time = 0.0
+        self.gimbal_feedback_ok = False
+        self.gimbal_feedback_time = 0.0
 
         self.cmd_pub = self.create_publisher(Vector3, "/waver/camera_gimbal_cmd", 10)
         self.state_pub = self.create_publisher(String, "/waver/camera_alignment_state", 10)
@@ -75,6 +86,18 @@ class CameraGimbalControllerNode(Node):
 
         self.create_subscription(PoseStamped, "/waver/camera_aim_target_pose", self.target_callback, 10)
         self.create_subscription(Bool, "/waver/camera_aim_request", self.request_callback, 10)
+        self.create_subscription(
+            Float32,
+            str(self.get_parameter("bbox_center_error_topic").value),
+            self.bbox_feedback_callback,
+            10,
+        )
+        self.create_subscription(
+            Bool,
+            str(self.get_parameter("gimbal_feedback_topic").value),
+            self.gimbal_feedback_callback,
+            10,
+        )
         rate = max(float(self.get_parameter("command_rate_hz").value), 0.5)
         self.create_timer(1.0 / rate, self.tick)
 
@@ -89,18 +112,26 @@ class CameraGimbalControllerNode(Node):
         if not active:
             self.publish_centered(False, "IDLE")
 
+    def bbox_feedback_callback(self, msg: Float32) -> None:
+        self.bbox_center_error_px = abs(float(msg.data))
+        self.bbox_feedback_time = self._now()
+
+    def gimbal_feedback_callback(self, msg: Bool) -> None:
+        self.gimbal_feedback_ok = bool(msg.data)
+        self.gimbal_feedback_time = self._now()
+
     def tick(self) -> None:
         if not self.request_active:
             return
         if self.target_pose is None:
-            self.publish_centered(False, "WAIT_TARGET_POSE")
+            self.publish_centered(False, "ALIGNMENT_WAIT_TARGET")
             return
         if self._now() - self.request_start_time > float(self.get_parameter("alignment_timeout_sec").value):
-            self.publish_centered(False, "CAMERA_ALIGN_FAILED timeout=true")
+            self.publish_centered(False, "ALIGNMENT_FAILED_TIMEOUT centered=false")
             return
         target = self.transform_target_to_base(self.target_pose)
         if target is None:
-            self.publish_centered(False, f"CAMERA_ALIGN_FAILED no_tf frame={self.target_pose.header.frame_id}")
+            self.publish_centered(False, f"ALIGNMENT_FAILED_NO_FEEDBACK reason=no_tf frame={self.target_pose.header.frame_id}")
             return
 
         x = float(target.pose.position.x)
@@ -129,13 +160,15 @@ class CameraGimbalControllerNode(Node):
         self.elevation_pub.publish(Float32(data=float(elevation)))
 
         clipped = abs(clamped_pan - pan) > 1e-6 or abs(clamped_tilt - tilt) > 1e-6
-        topic_only = not bool(self.get_parameter("real_gimbal_output_enabled").value)
-        centered = not clipped and topic_only
-        if centered:
+        backend = self.alignment_backend()
+        production = bool(self.get_parameter("production_profile").value)
+        if backend == "topic_only":
+            centered = (not production) and bool(self.get_parameter("allow_simulated_centered").value) and not clipped
             self.publish_centered(
-                True,
+                centered,
                 (
-                    "SIMULATED_ALIGNMENT TOPIC_ONLY real_gimbal_output_enabled=false centered=true "
+                    "ALIGNMENT_SIMULATED_ONLY "
+                    f"centered={str(centered).lower()} production_profile={str(production).lower()} "
                     f"pan_rad={clamped_pan:.3f} tilt_rad={clamped_tilt:.3f} "
                     f"bearing_rad={bearing:.3f} elevation_rad={elevation:.3f}"
                 ),
@@ -143,12 +176,27 @@ class CameraGimbalControllerNode(Node):
             self.publish_fallback_cmd(0.0)
             return
 
-        if clipped and bool(self.get_parameter("use_robot_body_fallback").value):
-            self.publish_fallback_cmd(bearing)
+        if backend == "real_gimbal":
+            feedback_ok = self.gimbal_feedback_ok and self._now() - self.gimbal_feedback_time <= float(self.get_parameter("feedback_stale_sec").value)
+            centered = feedback_ok and self.bbox_centered() and not clipped
             self.publish_centered(
-                False,
+                centered,
                 (
-                    "ROBOT_BODY_FALLBACK_ACTIVE centered=false "
+                    "ALIGNMENT_CENTERED_CONFIRMED " if centered else "ALIGNMENT_COMMANDING_GIMBAL "
+                )
+                + f"centered={str(centered).lower()} feedback_ok={str(feedback_ok).lower()} "
+                + f"pan_rad={clamped_pan:.3f} tilt_rad={clamped_tilt:.3f}",
+            )
+            return
+
+        if backend == "robot_body" and bool(self.get_parameter("use_robot_body_fallback").value):
+            self.publish_fallback_cmd(bearing)
+            centered = self.bbox_centered() and not clipped
+            self.publish_centered(
+                centered,
+                (
+                    ("ALIGNMENT_CENTERED_CONFIRMED " if centered else "ALIGNMENT_COMMANDING_BODY ")
+                    + f"centered={str(centered).lower()} "
                     f"bearing_rad={bearing:.3f} elevation_rad={elevation:.3f}"
                 ),
             )
@@ -156,10 +204,25 @@ class CameraGimbalControllerNode(Node):
             self.publish_centered(
                 False,
                 (
-                    "COMMANDING_GIMBAL centered=false "
+                    "ALIGNMENT_FAILED_NO_FEEDBACK centered=false "
                     f"pan_rad={clamped_pan:.3f} tilt_rad={clamped_tilt:.3f}"
                 ),
             )
+
+    def alignment_backend(self) -> str:
+        backend = str(self.get_parameter("alignment_backend").value).strip().lower()
+        if backend:
+            return backend
+        if bool(self.get_parameter("real_gimbal_output_enabled").value):
+            return "real_gimbal"
+        return str(self.get_parameter("hardware_backend").value).strip().lower() or "topic_only"
+
+    def bbox_centered(self) -> bool:
+        if self.bbox_center_error_px is None:
+            return False
+        if self._now() - self.bbox_feedback_time > float(self.get_parameter("feedback_stale_sec").value):
+            return False
+        return self.bbox_center_error_px <= float(self.get_parameter("max_center_error_px").value)
 
     def transform_target_to_base(self, msg: PoseStamped) -> PoseStamped | None:
         base_frame = str(self.get_parameter("base_frame").value)

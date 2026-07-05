@@ -62,14 +62,30 @@ EXCLUDED_REL_PATHS = {
     "config/waver_field_env.local",
     "reports/source_manifest.json",
     "reports/source_sha256_manifest.csv",
+    "reports/ui_slam_bird_detection/latest.json",
 }
 
 EXCLUDED_REL_PREFIXES = (
     "maps/archive/",
+    "reports/bird_mission_readiness/",
+    "reports/calibration/",
+    "reports/camera/",
+    "reports/bird_detector/",
+    "reports/command_chain/latest",
+    "reports/field_bridge_regression/latest",
     "reports/field_docker_ssh_check/",
     "reports/full_readiness_loop/",
     "reports/gazebo_functional_validation/",
+    "reports/hardware_calibration/",
+    "reports/field_readiness/",
+    "reports/launch_contract/latest",
+    "reports/livox_mid360/",
+    "reports/network/latest",
     "reports/remote_ui_validation/",
+    "reports/ui_slam_bird_detection/ui_slam_",
+    "reports/release_self_test/latest_",
+    "reports/sound_events/",
+    "reports/field_runs/",
     "reports/pre_existing_",
 )
 

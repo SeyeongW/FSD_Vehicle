@@ -1,0 +1,14 @@
+lidar_type: "mid360"
+host_ip: "192.168.1.50"
+sensor_ip: "192.168.1.102"
+cmd_port: 56100
+data_port: 56300
+imu_port: 56400
+frame_id: "livox"
+publish_freq: 10.0
+bd_code: "livox0000000001"
+pointcloud_topic: "/livox/lidar"
+imu_topic: "/livox/imu"
+scan_topic: "/scan_safety"
+use_livox_ros_driver2: true
+notes: "Copy to config/sensors/livox_mid360_field.local.yaml on the field Jetson/local PC and set host_ip to the Jetson Ethernet interface. Never connect the private field config to git with secrets."

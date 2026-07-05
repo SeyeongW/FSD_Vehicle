@@ -4,6 +4,13 @@ set -euo pipefail
 LOCAL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/waver_field_env_load.sh
 source "${LOCAL_ROOT}/scripts/waver_field_env_load.sh"
+if [ "${WAVER_ALLOW_LEGACY_OPEN_LOOP_MICRO_PATROL:-0}" != "1" ]; then
+  echo "[LEGACY_BACKEND][ERROR] waver_field_docker_backend_start.sh is legacy supervised open-loop diagnostic only." >&2
+  echo "[LEGACY_BACKEND][ERROR] Use scripts/waver_start_field_backend.sh for field release." >&2
+  echo "[LEGACY_BACKEND][ERROR] To run this diagnostic anyway, set WAVER_ALLOW_LEGACY_OPEN_LOOP_MICRO_PATROL=1." >&2
+  echo "LEGACY_BACKEND_READY=FAIL"
+  exit 64
+fi
 waver_field_env_require
 waver_field_env_ensure_password
 if [ -n "${JETSON_PASS:-}" ] && [ "${WAVER_ALLOW_PASSWORD_SSH:-0}" != "1" ]; then
@@ -18,13 +25,13 @@ SSH_CMD=("${WAVER_SSH_CMD[@]}")
 SCP_CMD=("${WAVER_SCP_CMD[@]}")
 
 JETSON_HOST_CANDIDATES="${JETSON_HOST_CANDIDATES:-${JETSON_HOST}}"
-PATROL_ALLOW_OPEN_LOOP="${PATROL_ALLOW_OPEN_LOOP:-true}"
+PATROL_ALLOW_OPEN_LOOP="${PATROL_ALLOW_OPEN_LOOP:-false}"
 PATROL_WAYPOINT_FILE="${PATROL_WAYPOINT_FILE:-/ros2_ws/ros2_ws5/src/ugv_main/ugv_tools/waypoints/waver_0p2m_patrol.yaml}"
 PATROL_STEP_DISTANCE_M="${PATROL_STEP_DISTANCE_M:-0.2}"
 PATROL_FORWARD_DURATION_S="${PATROL_FORWARD_DURATION_S:-0.65}"
 PATROL_TURN_DURATION_S="${PATROL_TURN_DURATION_S:-2.4}"
-PATROL_FORWARD_SPEED="${PATROL_FORWARD_SPEED:-0.085}"
-PATROL_TURN_SPEED="${PATROL_TURN_SPEED:-0.075}"
+PATROL_FORWARD_SPEED="${PATROL_FORWARD_SPEED:-0.05}"
+PATROL_TURN_SPEED="${PATROL_TURN_SPEED:-0.12}"
 PATROL_TURN_WHEEL_RATIO="${PATROL_TURN_WHEEL_RATIO:-0.46}"
 PATROL_TURN_MODE="${PATROL_TURN_MODE:-pivot}"
 
@@ -60,7 +67,8 @@ SYNC_FILES=(
   ".env"
   "docker-compose.jetson.yml"
   "docker/run.sh"
-  "config/waver_field_env"
+  "config/waver_field_env.example"
+  "config/waver_field_env.local.example"
   "scripts/waver_field_env_load.sh"
   "src/waver_patrol/waver_patrol/bridges/waver_base_driver_node.py"
   "src/waver_patrol/waver_patrol/safety/safety_cmd_mux_node.py"
@@ -267,14 +275,14 @@ start_node waver_safety_cmd_mux \
     -p nav2_cmd_topic:=/waver/cmd_vel_nav2_smooth \
     -p cmd_vel_auto_topic:=/waver/cmd_vel_nav2_smooth \
     -p manual_cmd_vel_topic:=/waver/manual_cmd_vel \
-    -p require_scan:=false \
-    -p ignore_scan_when_require_scan_false:=true \
-    -p stop_on_adapter_degraded:=false \
-    -p stop_on_battery_fault:=false \
-    -p max_linear_speed:=0.12 \
-    -p max_angular_speed:=0.16 \
-    -p mapping_max_linear_speed:=0.12 \
-    -p mapping_max_angular_speed:=0.16 \
+    -p require_scan:=true \
+    -p ignore_scan_when_require_scan_false:=false \
+    -p stop_on_adapter_degraded:=true \
+    -p stop_on_battery_fault:=true \
+    -p max_linear_speed:=0.05 \
+    -p max_angular_speed:=0.20 \
+    -p mapping_max_linear_speed:=0.05 \
+    -p mapping_max_angular_speed:=0.20 \
     -p max_linear_delta_per_tick:=0.08 \
     -p max_angular_delta_per_tick:=0.12 \
     -p manual_override_timeout_sec:=0.12 \
@@ -398,13 +406,17 @@ docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} &&
 echo "[JETSON] odom sample:"
 if docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && timeout 4 ros2 topic echo --once /odom" >/tmp/waver_backend_odom_check.log 2>&1; then
   cat /tmp/waver_backend_odom_check.log
-  echo "[JETSON] ODOM_READY=YES"
+  echo "[JETSON] ODOM_FEEDBACK_CHECK=PASS"
 else
   cat /tmp/waver_backend_odom_check.log || true
   if [ "${PATROL_ALLOW_OPEN_LOOP}" = "true" ]; then
-    echo "[JETSON][WARN] ODOM_READY=NO. WAVE ROVER field mode will use supervised calibrated open-loop ${PATROL_STEP_DISTANCE_M}m micro-patrol."
+    echo "[JETSON][ERROR] ODOM_READY=NO. Legacy supervised open-loop diagnostic cannot be called field-ready." >&2
+    echo "LEGACY_BACKEND_READY=FAIL"
+    exit 42
   else
-    echo "[JETSON][WARN] ODOM_READY=NO. True 0.2m waypoint patrol will wait; do not call open-loop movement a waypoint PASS."
+    echo "[JETSON][ERROR] ODOM_READY=NO. True waypoint patrol is blocked." >&2
+    echo "LEGACY_BACKEND_READY=FAIL"
+    exit 42
   fi
 fi
 
@@ -417,7 +429,13 @@ docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} &&
 echo "[JETSON] serial owner after backend:"
 fuser -v "${SERIAL_PORT}" 2>&1 || true
 
-echo "[JETSON] BACKEND_READY=YES"
+echo "[JETSON] running legacy diagnostic readiness checker"
+if docker exec "${CONTAINER}" bash -lc "cd /ros2_ws/ros2_ws5 && ${DOCKER_SOURCE} && python3 scripts/waver_field_readiness_check.py --level L3 --serial-port '${SERIAL_PORT}' --require-scan true --enable-waver-base-driver true --strict" | tee /tmp/waver_legacy_backend_readiness.log; then
+  echo "[JETSON] LEGACY_BACKEND_READY=PASS_LIMITED"
+else
+  echo "[JETSON] LEGACY_BACKEND_READY=FAIL"
+  exit 43
+fi
 echo "[JETSON] Now run local UI in another local PC terminal:"
 echo "  cd ~/ros2_ws5/FSD_Vehicle"
 echo "  bash scripts/waver_field_local_ui_start.sh"

@@ -27,9 +27,7 @@ need_file() { [ -e "${ROOT}/$1" ] || missing+=("$1"); }
 need_cmd() { command -v "$1" >/dev/null 2>&1 || missing+=("command:$1"); }
 warn_cmd() { command -v "$1" >/dev/null 2>&1 || warnings+=("command:$1 not found"); }
 
-need_file .env
 need_file .env.example
-need_file config/waver_field_env
 need_file config/waver_field_env.example
 need_file config/waver_field_env.local.example
 need_file scripts/waver_field_env_load.sh
@@ -119,7 +117,7 @@ if [ "${#missing[@]}" -gt 0 ]; then
   echo "Warnings:"
   printf -- '- %s\n' "${warnings[@]:-none}"
   echo "Next steps:"
-  echo "- Edit config/waver_field_env or create config/waver_field_env.local"
+  echo "- Run scripts/waver_quickstart_field.sh or create config/waver_field_env.local / ~/.waver_field_env"
   echo "- Install local deps: sudo apt install -y python3-colcon-common-extensions rsync openssh-client python3-tk"
   echo "- Install UI deps: pip3 install -r requirements-local-ui.txt"
   exit 1

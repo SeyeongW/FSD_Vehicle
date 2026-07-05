@@ -99,7 +99,7 @@ AprilTag는 C 라이브러리를 먼저 시스템에 설치해야 ROS2 wrapper�
 | 목적 | 명령 |
 |------|------|
 | 로컬 필드 환경 점검 | `bash scripts/waver_doctor.sh` |
-| Jetson Docker 백엔드 시작 | `bash scripts/waver_field_docker_backend_start.sh` |
+| Jetson Docker 백엔드 시작 | `WAVER_REAL_PROFILE=lidar_nav_backend FIELD_READINESS_LEVEL=L2 bash scripts/waver_start_field_backend.sh` |
 | 로컬 리모콘 UI 시작 | `bash scripts/waver_field_local_ui_start.sh` |
 
 ---

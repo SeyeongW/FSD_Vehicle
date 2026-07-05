@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pathlib
 
+import pytest
 import yaml
 
 
@@ -10,6 +11,8 @@ REPO = pathlib.Path(__file__).resolve().parents[3]
 
 def test_ui_slam_gazebo_config_keeps_cmd_authority() -> None:
     path = REPO / "src" / "ugv_main" / "ugv_gazebo" / "param" / "ui_slam" / "gazebo.yaml"
+    if not path.exists():
+        pytest.skip("bird mission field release excludes most sim assets; ui_slam config is optional there")
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     panel = data["waver_remote_panel"]["ros__parameters"]
     safety = data["safety_cmd_mux_node"]["ros__parameters"]

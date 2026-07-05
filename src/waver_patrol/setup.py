@@ -88,6 +88,7 @@ setup(
             'target_departure_monitor_node = waver_patrol.mission.target_departure_monitor_node:main',
             'mission_data_reporter_node = waver_patrol.mission.mission_data_reporter_node:main',
             'mission_patrol_manager_node = waver_patrol.mission.mission_patrol_manager_node:main',
+            'bird_mission_supervisor_node = waver_patrol.mission.bird_mission_supervisor_node:main',
             'experiment_data_logger_node = waver_patrol.logging.experiment_data_logger_node:main',
             'gazebo_trial_logger_node = waver_patrol.logging.gazebo_trial_logger_node:main',
             'simple_sim_odom_node = waver_patrol.test_nodes.simple_sim_odom_node:main',

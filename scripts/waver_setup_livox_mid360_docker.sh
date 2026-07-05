@@ -197,10 +197,10 @@ cat /tmp/waver_livox_mid360_launch_args.txt
 echo "[JETSON] current Jetson IPv4 addresses:"
 ip -4 addr show | sed "s/^/[JETSON][NET] /" || true
 echo "[JETSON] Livox Mid-360 default config expects Jetson host IP 192.168.1.5 and sensor IP 192.168.1.12."
-echo "[JETSON] LIVOX_MID360_DOCKER_READY=YES"
+echo "[JETSON] LIVOX_MID360_DOCKER_READY=PASS"
 REMOTE
 
-echo "[LOCAL] LIVOX_MID360_DOCKER_READY=YES"
+echo "[LOCAL] LIVOX_MID360_DOCKER_READY=PASS"
 echo "[LOCAL] Real LiDAR/Nav2 backend command:"
 echo "  cd ~/ros2_ws5/FSD_Vehicle"
 echo "  START_LIVOX_DRIVER=true bash scripts/waver_field_lidar_nav_backend_start.sh"

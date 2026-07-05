@@ -98,6 +98,7 @@ Motors stay disabled. Verify LiDAR, scan conversion, and TF.
 ```bash
 python3 scripts/waver_field_readiness_check.py \
   --level L2 \
+  --profile config/real_profiles/lidar_nav_backend.yaml \
   --strict \
   --scan-topic /scan_safety \
   --require-scan true
@@ -120,6 +121,7 @@ python3 scripts/waver_motor_calibration_wizard.py \
 
 python3 scripts/waver_field_readiness_check.py \
   --level L3 \
+  --profile config/real_profiles/wheel_off_driver_check.yaml \
   --strict \
   --serial-port /dev/serial/by-id/<WAVER_SERIAL_ID> \
   --enable-waver-base-driver true
@@ -144,13 +146,17 @@ ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
 
 python3 scripts/waver_field_readiness_check.py \
   --level L4 \
+  --profile config/real_profiles/wheel_on_low_speed.yaml \
   --strict \
+  --require-acceptance-matrix \
   --serial-port /dev/serial/by-id/<WAVER_SERIAL_ID>
 ```
 
-Bird detector, 3D fusion, sound deterrent, target approach, gimbal, and
-experiment logging remain disabled by default in the real bird launch. Enable
-them only for an explicitly approved experimental profile, for example:
+Bird detector, 3D fusion, target approach, camera/body alignment, sound
+deterrent gating, and experiment logging are the final bird-patrol product
+pipeline. They remain disabled by default only in the generic bring-up launch.
+For the product stack, use `config/real_profiles/bird_patrol_production.yaml`
+and fail-closed readiness gates. A direct equivalent launch looks like:
 
 ```bash
 ros2 launch waver_patrol waver_real_bird_autonomy.launch.py \
@@ -195,8 +201,9 @@ hardware stop.
 
 - Real camera-LiDAR extrinsics are not proven by source checks.
 - Battery voltage scaling must be calibrated under load.
-- `nav2_collision_monitor` is not the current final command authority.
-  `safety_cmd_mux_node` is the implemented final gate.
+- `nav2_collision_monitor` is wired for the product command-chain contract, but
+  autonomous-patrol readiness remains `BLOCKED` until live graph evidence shows
+  it as the sole final `/cmd_vel` publisher.
 - Full L5 bird autonomy requires detector model validation, 3D fusion
-  evidence, target association evidence, sound-output acknowledgement, and
-  blackbox logs.
+  evidence, target association evidence, collision-monitor evidence,
+  sound-output acknowledgement, and blackbox logs.

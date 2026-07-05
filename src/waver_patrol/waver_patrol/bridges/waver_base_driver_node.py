@@ -99,6 +99,7 @@ class WaverBaseDriverNode(Node):
         self.voltage_offset_v = float(self.get_parameter("voltage_offset_v").value)
         self.odom_feedback_stale_s = float(self.get_parameter("odom_feedback_stale_s").value)
         self.feedback_schema = self.load_feedback_schema(str(self.get_parameter("feedback_schema_path").value))
+        self.feedback_schema_loaded = bool(self.feedback_schema)
         self.feedback_packet_type = int(self.feedback_schema.get("packet_type", 1001))
         self.left_odom_field = str(self.feedback_schema.get("left_odom_field", "odl"))
         self.right_odom_field = str(self.feedback_schema.get("right_odom_field", "odr"))
@@ -152,6 +153,7 @@ class WaverBaseDriverNode(Node):
         self.last_odom_feedback_time = 0.0
         self.last_feedback_request_time = 0.0
         self.last_voltage_v = 0.0
+        self.last_imu_feedback_time = 0.0
         self.state = "STARTUP_STOP"
         self.odom_initialized = False
         self.wheel_odom_feedback_seen = False
@@ -163,6 +165,9 @@ class WaverBaseDriverNode(Node):
         self.odom_yaw = 0.0
         self.odom_feedback_status = "ODOM_FEEDBACK_MISSING"
         self.odom_feedback_error = ""
+        self.odom_rate_hz = 0.0
+        self.imu_rate_hz = 0.0
+        self.stop_burst_sent = False
 
         self.legacy_odom_raw_pub = (
             self.create_publisher(Float32MultiArray, self.legacy_float32_odom_topic, 50)
@@ -259,7 +264,13 @@ class WaverBaseDriverNode(Node):
     def publish_feedback(self, data: dict[str, Any]) -> None:
         if int(data.get("T", self.feedback_packet_type)) != self.feedback_packet_type:
             return
-        self.last_feedback_time = time.monotonic()
+        now = time.monotonic()
+        if self.last_imu_feedback_time > 0.0:
+            dt = now - self.last_imu_feedback_time
+            if dt > 0.0:
+                self.imu_rate_hz = 1.0 / dt
+        self.last_imu_feedback_time = now
+        self.last_feedback_time = now
 
         self.handle_odom_feedback(data)
 
@@ -314,7 +325,12 @@ class WaverBaseDriverNode(Node):
             if self.invert_right:
                 right = -right
             self.wheel_odom_feedback_seen = True
-            self.last_odom_feedback_time = time.monotonic()
+            now = time.monotonic()
+            if self.last_odom_feedback_time > 0.0:
+                dt = now - self.last_odom_feedback_time
+                if dt > 0.0:
+                    self.odom_rate_hz = 1.0 / dt
+            self.last_odom_feedback_time = now
             self.odom_feedback_status = "ODOM_FEEDBACK_OK"
             self.odom_feedback_error = ""
             if self.legacy_odom_raw_pub is not None:
@@ -505,10 +521,12 @@ class WaverBaseDriverNode(Node):
             stop = {"T": 13, "X": 0.0, "Z": 0.0}
         for _ in range(max(1, repeat)):
             self.serial.write((json.dumps(stop, separators=(",", ":")) + "\n").encode("utf-8"))
+        self.stop_burst_sent = True
 
     def publish_state(self) -> None:
         age = time.monotonic() - self.last_feedback_time if self.last_feedback_time else -1.0
         odom_age = time.monotonic() - self.last_odom_feedback_time if self.last_odom_feedback_time else -1.0
+        cmd_timeout_active = self.last_cmd_time > 0.0 and (time.monotonic() - self.last_cmd_time) > self.cmd_timeout_s
         if self.odom_feedback_status == "ODOM_FEEDBACK_OK" and odom_age > self.odom_feedback_stale_s:
             self.odom_feedback_status = "ODOM_FEEDBACK_STALE"
         connected = self.serial is not None and getattr(self.serial, "is_open", False)
@@ -518,10 +536,16 @@ class WaverBaseDriverNode(Node):
             motor_power = "MOTOR_POWER_LOW"
         else:
             motor_power = "OK"
+        voltage_status = "UNKNOWN" if self.last_feedback_time == 0.0 else motor_power
         text = (
             f"{self.state} port={self.serial_port} connected={connected} "
+            f"serial_port={self.serial_port} "
             f"feedback_age_sec={age:.2f} protocol={self.command_protocol} "
-            f"voltage_v={self.last_voltage_v:.3f} motor_power={motor_power} "
+            f"voltage_v={self.last_voltage_v:.3f} voltage_status={voltage_status} motor_power={motor_power} "
+            f"calibration_loaded={self.feedback_schema_loaded} stop_burst_sent={self.stop_burst_sent} "
+            f"feedback_schema_loaded={self.feedback_schema_loaded} last_feedback_age_sec={age:.2f} "
+            f"cmd_timeout_active={cmd_timeout_active} odom_rate_hz={self.odom_rate_hz:.2f} "
+            f"imu_rate_hz={self.imu_rate_hz:.2f} "
             f"odom_ok={self.wheel_odom_feedback_seen and self.odom_initialized} "
             f"odom_feedback_status={self.odom_feedback_status} odom_feedback_age_sec={odom_age:.2f} "
             f"odom_feedback_error={self.odom_feedback_error or 'none'} "

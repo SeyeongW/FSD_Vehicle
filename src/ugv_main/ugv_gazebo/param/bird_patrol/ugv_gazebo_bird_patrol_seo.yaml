@@ -17,6 +17,10 @@ mission_patrol_manager_node:
     fallback_robot_body_alignment: true
     enable_sound_task: true
     enable_sound_output: false
+    require_3d_fusion_valid_for_sound: false
+    require_dynamic_valid_for_sound: true
+    dynamic_valid_grace_sec_for_sound: 8.0
+    require_camera_centered_for_sound: true
     bird_confidence_threshold: 0.70
     min_classification_confidence: 0.50
     waypoint_dwell_sec_default: 0.5

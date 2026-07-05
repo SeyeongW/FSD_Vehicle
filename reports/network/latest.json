@@ -1,0 +1,11 @@
+{
+  "config": "/home/chotaehyun/ros2_ws5/FSD_Vehicle/config/network/waver_ros_domain.yaml",
+  "expected_field_ros_domain_id": "0",
+  "findings": [],
+  "generated_at": "2026-07-05T23:06:41+0900",
+  "local_ipv4": "127.0.0.1/8 scope host lo\n192.168.0.8/24 brd 192.168.0.255 scope global dynamic noprefixroute wlp2s0\n100.97.248.30/32 scope global tailscale0\n172.17.0.1/16 brd 172.17.255.255 scope global docker0\n",
+  "local_rmw": "rmw_cyclonedds_cpp",
+  "local_ros_domain_id": "0",
+  "remote": {},
+  "status": "PASS"
+}

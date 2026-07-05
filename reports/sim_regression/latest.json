@@ -1,0 +1,52 @@
+{
+  "generated_at": "2026-07-05T21:38:00+0900",
+  "status": "PASS",
+  "workspace": "/home/chotaehyun/ros2_ws5/FSD_Vehicle",
+  "branch": "jo",
+  "head": "170c38b",
+  "readiness_scope": "simulation_only_not_real_hardware",
+  "ui_slam_mapping": {
+    "status": "PASS",
+    "command": "WAVER_SPAWN_TEST_OBSTACLE=true WAVER_USE_GUI=false WAVER_START_RVIZ=false WAVER_UI_SLAM_TIMEOUT=150 bash scripts/run_ui_slam_mapping_gazebo_smoke.sh",
+    "log": "/tmp/waver_ui_slam_0705b.log",
+    "map_yaml": "maps/waver_latest_map.yaml",
+    "map_width": 600,
+    "map_height": 600,
+    "occupied_count": 15333,
+    "free_count": 82379,
+    "unknown_count": 262288,
+    "known_ratio": 0.2714,
+    "obstacle_occupied_count_best": 309,
+    "notes": "The checker boundary bug was fixed; saved map and obstacle quality passed after rerun."
+  },
+  "saved_map_nav2": {
+    "status": "PASS",
+    "command": "ROS_DOMAIN_ID=55 GAZEBO_MASTER_URI=http://127.0.0.1:11348 WAVER_USE_GUI=false WAVER_NAV_STARTUP_WAIT_SEC=30 WAVER_NAV_RESULT_TIMEOUT=100 WAVER_MIN_ODOM_DISTANCE=0.20 bash scripts/run_saved_map_static_obstacle_nav_check.sh",
+    "log": "/tmp/waver_saved_map_nav_0705.log",
+    "map_publishers": 1,
+    "cmd_vel_publishers": 1,
+    "current_map_source": "STATIC_MAP",
+    "odom_distance_m": 1.711,
+    "obstacle_clearance_min_m": 0.687,
+    "obstacle_clearance_required_m": 0.420,
+    "safety_state": "AUTO_PASS SCAN_CLEAR"
+  },
+  "gazebo_bird_patrol_mechanism": {
+    "status": "PASS",
+    "command": "ROS_DOMAIN_ID=61 GAZEBO_MASTER_URI=http://127.0.0.1:11354 TIMEOUT_SEC=300 RANDOM_SEED=706 bash scripts/run_gazebo_lidar_spatial_response_smoke.sh",
+    "log": "/tmp/waver_spatial_0705.log",
+    "run_dir": "experiment_results/gazebo_spatial_response/spatial_lidar_20260705_213157_seed706_20260705_213157",
+    "removed_bird_count": 2,
+    "return_resume_sequence_success": true,
+    "mid_patrol_preempt_success": true,
+    "has_odom_motion_after_target_goal": true,
+    "cmd_vel_publisher_count": 1,
+    "cmd_vel_safety_mux_sole_publisher": true,
+    "valid_lidar_target_sample_count": 37,
+    "valid_lidar_target_to_bird_xy_mean_m": 0.5637178690287405,
+    "odom_path_length_m": 49.86622684647957,
+    "lidar_filter_runtime_wall_mean_ms": 52.773423483408415,
+    "verifier": "VERIFY_GAZEBO_SPATIAL_RESPONSE=PASS"
+  },
+  "real_readiness_promotion": "forbidden_without_live_hardware_probe_evidence"
+}

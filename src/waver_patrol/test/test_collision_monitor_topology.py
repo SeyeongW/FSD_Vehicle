@@ -18,7 +18,8 @@ def test_current_real_topology_uses_safety_mux_as_final_cmd_vel_gate():
     assert 'allowed_final_nodes = {"safety_cmd_mux_node"}' in readiness
     assert "WAVER_ALLOW_COLLISION_MONITOR_FINAL" in readiness
     assert "nav2_collision_monitor" in docs
-    assert "future optional" in docs
+    assert "product bird-patrol topology" in docs
+    assert "BLOCKED" in docs
 
 
 def test_real_launches_do_not_enable_collision_monitor_by_default():

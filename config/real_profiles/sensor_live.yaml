@@ -1,0 +1,40 @@
+profile: sensor_live
+readiness_stage: sensor_live_no_motion
+description: "Livox/camera/base feedback live probe profile. No vehicle motion."
+enable_waver_base_driver: false
+start_serial_bridge: false
+serial_port_required: false
+scan_source: mid360
+pointcloud_topic: /livox/lidar
+scan_topic: /scan_safety
+camera_image_topic: /camera/image_raw
+camera_info_topic: /camera/camera_info
+odom_source: ekf
+enable_robot_localization: false
+enable_nav2: false
+enable_mission_patrol_manager: false
+enable_auto_behavior_mux: false
+enable_pointcloud_lidar_objects: true
+enable_lidar_aerial_motion_detector: true
+enable_moving_object_map_transform: false
+enable_moving_object_motion_filter: false
+enable_bird_detector: false
+enable_bird_3d_fusion: false
+enable_camera_alignment: false
+enable_sound_deterrent: false
+enable_sound_output: false
+max_linear_speed: 0.0
+max_angular_speed: 0.0
+require_scan: true
+require_pointcloud: true
+require_camera: false
+require_odom: false
+require_battery: false
+manual_ack_required: false
+forbidden_nodes:
+  - gazebo
+  - fake
+  - mock
+  - test_publisher
+  - nav2
+  - sound

@@ -4,7 +4,8 @@ Run these commands once on the operator laptop or desktop.
 
 ```bash
 cd ~/ros2_ws5/FSD_Vehicle
-bash scripts/waver_setup_local_pc.sh
+bash scripts/waver_setup_local_pc.sh --check
+bash scripts/waver_setup_local_pc.sh --install-minimal-ui
 ```
 
 The setup script checks common local dependencies and suggests packages when
@@ -53,3 +54,12 @@ Before field operation:
 cd ~/ros2_ws5/FSD_Vehicle
 bash scripts/waver_doctor.sh
 ```
+
+Open the approved local operator station after the Jetson backend is running:
+
+```bash
+cd ~/ros2_ws5/FSD_Vehicle
+bash scripts/waver_field_operator_station_start.sh
+```
+
+See `docs/LOCAL_OPERATOR_STATION.md` for the local PC / Jetson Docker boundary.

@@ -1,0 +1,7 @@
+{
+  "dry_run": true,
+  "field_bridge": "local PC -> SSH -> Jetson host -> docker exec -> fsd_dev_jetson -> ROS2 nodes -> Waver USB serial",
+  "findings": [],
+  "generated_at": "2026-07-06T00:58:05+0900",
+  "status": "PASS"
+}

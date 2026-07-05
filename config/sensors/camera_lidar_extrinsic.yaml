@@ -1,0 +1,11 @@
+camera_frame: camera_color_optical_frame
+lidar_frame: livox
+base_frame: base_link
+translation_xyz: [0.0, 0.0, 0.0]
+rotation_rpy: [0.0, 0.0, 0.0]
+calibrated: false
+calibration_date: ""
+calibration_method: ""
+reprojection_error_px: null
+operator: ""
+notes: "Set calibrated=true only after field calibration."

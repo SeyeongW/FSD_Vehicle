@@ -2,7 +2,7 @@ collision_monitor:
   ros__parameters:
     base_frame_id: "base_link"
     odom_frame_id: "odom"
-    cmd_vel_in_topic: "/cmd_vel_raw"
+    cmd_vel_in_topic: "/waver/cmd_vel_safety"
     cmd_vel_out_topic: "/cmd_vel"
     state_topic: "/collision_monitor_state"
     transform_tolerance: 0.2
@@ -22,4 +22,4 @@ collision_monitor:
     observation_sources: ["scan"]
     scan:
       type: "scan"
-      topic: "/scan"
+      topic: "/scan_safety"

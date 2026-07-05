@@ -2,13 +2,45 @@
 set -eo pipefail
 
 cd "$(dirname "$0")/.."
+DRY_RUN=false
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRY_RUN=true; shift ;;
+    -h|--help)
+      cat <<'EOF'
+Usage: bash scripts/waver_field_local_ui_start.sh [--dry-run]
+
+Starts the local Waver remote panel with SSH bridge enabled. The local PC does
+not publish final /cmd_vel and does not run the robot backend.
+
+Options:
+  --dry-run  Print missing env and command templates without requiring SSH
+             password/key, ROS setup, local build, or a reachable Jetson.
+EOF
+      exit 0
+      ;;
+    *) echo "[LOCAL][ERROR] unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
 # shellcheck source=scripts/waver_field_env_load.sh
 source scripts/waver_field_env_load.sh
-waver_field_env_require
-waver_field_env_ensure_password
+if [ "${DRY_RUN}" = "false" ]; then
+  waver_field_env_require
+  waver_field_env_ensure_password
+else
+  missing_env=()
+  for name in JETSON_HOST JETSON_USER JETSON_WS CONTAINER ROS_DOMAIN_ID SERIAL_PORT; do
+    value="${!name:-}"
+    if _waver_is_placeholder "${value}"; then
+      missing_env+=("${name}")
+    fi
+  done
+fi
 
-source /opt/ros/humble/setup.bash
 WAVER_LOCAL_UI_BUILD_IF_MISSING="${WAVER_LOCAL_UI_BUILD_IF_MISSING:-auto}"
+if [ "${DRY_RUN}" = "false" ]; then
+source /opt/ros/humble/setup.bash
 if [ ! -f install/setup.bash ] && [ "${WAVER_LOCAL_UI_BUILD_IF_MISSING}" != "false" ]; then
   if ! command -v colcon >/dev/null 2>&1; then
     echo "[LOCAL][ERROR] install/setup.bash is missing and colcon is not installed." >&2
@@ -24,11 +56,15 @@ else
   echo "[LOCAL][ERROR] install/setup.bash is missing. Build failed or was disabled." >&2
   exit 2
 fi
+fi
 
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 WAVER_SKIP_JETSON_CHECK="${WAVER_SKIP_JETSON_CHECK:-false}"
 
 select_jetson_host() {
+  if [ "${DRY_RUN}" = "true" ]; then
+    return 0
+  fi
   if [ "${WAVER_SKIP_JETSON_CHECK}" = "true" ]; then
     echo "[LOCAL][WARN] WAVER_SKIP_JETSON_CHECK=true; UI may open without a working Jetson bridge."
     return 0
@@ -121,6 +157,23 @@ if [ -n "${JETSON_PASS:-}" ]; then
 fi
 if [ -n "${JETSON_KEY_FILENAME:-}" ]; then
   ROS_ARGS+=(-p remote_bridge_key_filename:="${JETSON_KEY_FILENAME}")
+fi
+
+if [ "${DRY_RUN}" = "true" ]; then
+  echo "LOCAL_UI_DRY_RUN=1"
+  if [ "${#missing_env[@]}" -gt 0 ]; then
+    echo "DRY_RUN_MISSING_ENV=${missing_env[*]}"
+  fi
+  echo "DRY_RUN_SSH_TEMPLATE=ssh -p ${JETSON_PORT:-22} ${JETSON_USER:-<JETSON_USER>}@${JETSON_HOST:-<JETSON_HOST>} docker exec ${CONTAINER:-<CONTAINER>} ros2 node list"
+  printf 'DRY_RUN_UI_CMD='
+  for arg in "${ROS_ARGS[@]}"; do
+    case "${arg}" in
+      remote_bridge_password:=*) printf '%q ' "remote_bridge_password:=<masked>" ;;
+      *) printf '%q ' "${arg}" ;;
+    esac
+  done
+  printf '\n'
+  exit 0
 fi
 
 exec "${ROS_ARGS[@]}"

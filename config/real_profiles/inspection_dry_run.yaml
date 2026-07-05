@@ -1,0 +1,46 @@
+profile: inspection_dry_run
+readiness_stage: inspection_goal_without_motor_or_sound
+description: "Validate LiDAR target, camera alignment, detector/fusion gates, and inspection goal generation with motor and sound output disabled."
+enable_waver_base_driver: false
+start_serial_bridge: false
+serial_port_required: false
+scan_source: mid360
+pointcloud_topic: /livox/lidar
+scan_topic: /scan_safety
+camera_image_topic: /camera/image_raw
+camera_info_topic: /camera/camera_info
+odom_source: ekf
+enable_robot_localization: true
+enable_nav2: false
+enable_mission_patrol_manager: true
+enable_auto_behavior_mux: false
+enable_pointcloud_lidar_objects: true
+enable_lidar_aerial_motion_detector: true
+enable_moving_object_map_transform: true
+enable_moving_object_motion_filter: true
+enable_target_goal_manager: true
+enable_bird_detector: true
+enable_bird_3d_fusion: true
+enable_camera_alignment: true
+enable_sound_deterrent: true
+enable_sound_output: false
+max_linear_speed: 0.0
+max_angular_speed: 0.0
+inspection_standoff_m: 2.0
+require_scan: true
+require_odom: true
+require_battery: false
+require_camera_lidar_extrinsic: true
+require_detector_model: true
+require_fusion_valid_before_sound: true
+require_bird_confirmed_before_sound: true
+manual_ack_required: true
+forbidden_nodes:
+  - gazebo
+  - fake
+  - mock
+  - test_publisher
+  - base_driver_motion
+required_config:
+  - bird_model_path
+  - camera_lidar_extrinsic

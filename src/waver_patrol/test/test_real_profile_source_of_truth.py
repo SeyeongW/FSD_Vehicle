@@ -31,7 +31,8 @@ def test_launch_and_field_defaults_do_not_conflict_with_ekf_policy():
     real_launch = (ROOT / "src/waver_patrol/launch/waver_real_bird_autonomy.launch.py").read_text(errors="replace")
     indoor_launch = (ROOT / "src/waver_patrol/launch/waver_indoor_patrol_real.launch.py").read_text(errors="replace")
 
-    assert 'ODOM_SOURCE="${ODOM_SOURCE:-ekf}"' in field
+    assert 'ODOM_SOURCE="${ODOM_SOURCE:-${PROFILE_ODOM_SOURCE:-ekf}}"' in field
+    assert "WAVER_REAL_PROFILE" in field
     assert 'DeclareLaunchArgument("odom_source", default_value="ekf")' in real_launch
     assert 'DeclareLaunchArgument("odom_source", default_value="ekf")' in indoor_launch
 

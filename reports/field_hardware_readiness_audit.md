@@ -2,7 +2,7 @@
 
 Final judgement: **FIELD_READY_DRY_RUN**
 
-Generated: 2026-07-04 01:23 KST
+Generated: 2026-07-04 07:24 KST
 
 ## Scope
 
@@ -17,13 +17,29 @@ serial motor feedback, wheel-off, wheel-on, or autonomous patrol readiness.
 | Python compileall for scripts, launch, and Waver Python modules | PASS |
 | Shell syntax for `scripts/*.sh` and `src/waver_patrol/scripts/*.sh` | PASS |
 | `bash scripts/run_no_ros_unit_tests.sh` | PASS, 85 tests |
-| `cd src/waver_patrol && PYTHONPATH=. python3 -m pytest -q test` | PASS, 105 passed, 10 skipped |
+| `PYTHONPATH=src/waver_patrol:src/ugv_main/ugv_tools python3 -m pytest -q src/waver_patrol/test` | PASS, 114 passed, 10 skipped |
 | `python3 scripts/waver_contract_check.py --require-git-branch jo` | PASS |
 | `python3 scripts/make_field_release.py --output /tmp/waver_field_release.tar.gz` | PASS |
-| `python3 scripts/check_field_release.py --path /tmp/waver_field_release.tar.gz` | PASS |
-| `python3 scripts/waver_field_readiness_check.py --level L0 --strict --no-hardware` | PASS |
-| `python3 scripts/waver_field_readiness_check.py --level L1 --strict --no-hardware` | PASS |
-| `python3 scripts/waver_field_readiness_check.py --level L2 --strict --no-hardware` | FAIL as expected; L2 requires live sensor evidence |
+| `python3 scripts/check_field_release.py --path /tmp/waver_field_release.tar.gz` | PASS; extracted release quickstart dry-run and clone-to-run acceptance PASS |
+| default field release archive size | PASS, about 4.3 MB |
+| `python3 scripts/waver_field_readiness_check.py --level L0 --strict --no-hardware --profile config/real_profiles/lidar_nav_backend.yaml` | PASS |
+| `python3 scripts/waver_field_readiness_check.py --level L1 --strict --no-hardware --profile config/real_profiles/lidar_nav_backend.yaml` | PASS |
+| `python3 scripts/waver_field_readiness_check.py --level L2 --strict --no-hardware --profile config/real_profiles/lidar_nav_backend.yaml` | FAIL as expected; L2 requires live sensor evidence |
+
+## Field Release Fixes Confirmed
+
+- `config/waver_field_env` is no longer required for clean release startup.
+- `scripts/waver_quickstart_field.sh --dry-run` can create ignored
+  `config/waver_field_env.local` from CLI values.
+- `scripts/check_field_release.py` now extracts the archive and runs both
+  quickstart dry-run and release-mode clone-to-run acceptance.
+- Default backend entrypoint is now strict:
+  `scripts/waver_start_field_backend.sh` -> `scripts/waver_field_lidar_nav_backend_start.sh`.
+- Legacy supervised open-loop backend is gated by
+  `WAVER_ALLOW_LEGACY_OPEN_LOOP_MICRO_PATROL=1` and cannot print
+  `BACKEND_READY=YES`.
+- Real profile YAML files now drive field backend defaults and readiness
+  checker profile checks.
 
 ## Why This Is Not L2 Or Higher
 
@@ -44,7 +60,11 @@ collected in this local source-only run.
 - Readiness scripts no longer print unconditional `READY=YES`.
 - L2+ cannot pass with `--no-hardware`.
 - Field release archive excludes `.git`, `build`, `install`, `log`, private
-  env files, rosbags, and logs.
+  env files, rosbags, logs, default Gazebo simulation assets, and vendor-heavy
+  source trees unless explicitly included.
+- Base driver launch passes `feedback_schema_path`, and base driver state now
+  reports feedback schema/calibration, stop burst, timeout, odom rate, IMU rate,
+  and voltage status fields.
 
 ## Remaining Hardware Evidence Required
 

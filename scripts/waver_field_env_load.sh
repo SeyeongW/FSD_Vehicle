@@ -44,7 +44,7 @@ waver_field_env_load() {
   WAVER_FIELD_ENV_SOURCES=""
 
   _waver_source_env_file "${WAVER_REPO_ROOT}/.env" false
-  _waver_source_env_file "${WAVER_REPO_ROOT}/config/waver_field_env" true
+  _waver_source_env_file "${WAVER_REPO_ROOT}/config/waver_field_env" false
   _waver_source_env_file "${WAVER_REPO_ROOT}/config/waver_field_env.local" false
   _waver_source_env_file "${HOME}/.waver_field_env" false
 
@@ -93,7 +93,7 @@ waver_field_env_require() {
   if [ "${#missing[@]}" -gt 0 ]; then
     echo "[WAVER_ENV][ERROR] missing or placeholder field env values:" >&2
     printf '  - %s\n' "${missing[@]}" >&2
-    echo "[WAVER_ENV][ERROR] edit config/waver_field_env or create config/waver_field_env.local" >&2
+    echo "[WAVER_ENV][ERROR] provide values through CLI, config/waver_field_env.local, ~/.waver_field_env, or WAVER_FIELD_ENV_FILE" >&2
     return 1
   fi
 }
@@ -124,6 +124,11 @@ waver_field_env_masked_summary() {
   else
     echo "JETSON_PASS=<unset>"
   fi
+}
+
+waver_field_env_reload() {
+  unset WAVER_FIELD_ENV_LOADED_ONCE
+  waver_field_env_load
 }
 
 waver_field_env_ensure_password() {

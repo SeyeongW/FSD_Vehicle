@@ -47,7 +47,12 @@ map_points.txt
 # Root-level Waver real-vehicle profile/schema YAML files are source contracts.
 !config/real_profiles/
 !config/real_profiles/*.yaml
+!config/sensors/
+!config/sensors/*.yaml
+!config/perception/
+!config/perception/*.yaml
 !config/waver_base_feedback_schema.yaml
+!config/hardware_acceptance_matrix.yaml
 
 # Gazebo 임시 파일
 .gazebo/
@@ -74,6 +79,16 @@ reports/quality_gate/*
 !reports/quality_gate/.gitkeep
 reports/agent_iterations/*
 !reports/agent_iterations/.gitkeep
+reports/bird_mission_readiness/*.json
+reports/livox_mid360/*.json
+reports/camera/*.json
+reports/bird_detector/*.json
+reports/hardware_calibration/*.json
+reports/sound_events/*.json
+reports/ui_slam_bird_detection/latest.json
+reports/ui_slam_bird_detection/ui_slam_*/
+!reports/ui_slam_bird_detection/
+!reports/ui_slam_bird_detection/README.md
 
 # Generated dataset / analysis artifacts
 **/metrics/
@@ -90,6 +105,7 @@ reports/agent_iterations/*
 *.private
 config/waver_field_env.local
 .waver_field_env.local
+config/sensors/livox_mid360_field.local.yaml
 id_rsa
 id_ed25519
 *.pem

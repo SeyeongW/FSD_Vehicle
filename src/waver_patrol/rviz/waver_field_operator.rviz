@@ -1,0 +1,116 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Field Grid
+      Plane: XY
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+      Show Axes: true
+      Show Names: false
+      Value: true
+    - Class: rviz_default_plugins/RobotModel
+      Enabled: true
+      Name: RobotModel
+      Value: true
+    - Alpha: 0.75
+      Class: rviz_default_plugins/Map
+      Enabled: true
+      Name: Live/Loaded Map
+      Topic:
+        Value: /map
+      Value: true
+    - Class: rviz_default_plugins/LaserScan
+      Enabled: true
+      Name: Safety Scan
+      Size (m): 0.03
+      Topic:
+        Value: /scan_safety
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: Livox Mid360 PointCloud
+      Size (m): 0.02
+      Style: Flat Squares
+      Topic:
+        Value: /livox/lidar
+      Value: true
+    - Class: rviz_default_plugins/Odometry
+      Enabled: true
+      Name: EKF Odometry
+      Topic:
+        Value: /odom
+      Value: true
+    - Class: rviz_default_plugins/Path
+      Color: 25; 118; 210
+      Enabled: true
+      Name: Global Path
+      Topic:
+        Value: /plan
+      Value: true
+    - Class: rviz_default_plugins/Path
+      Color: 46; 204; 113
+      Enabled: true
+      Name: Local Path
+      Topic:
+        Value: /local_plan
+      Value: true
+    - Class: rviz_default_plugins/Path
+      Color: 241; 196; 15
+      Enabled: true
+      Name: Mapping Path
+      Topic:
+        Value: /waver/mapping_path
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Dynamic Object Candidates
+      Topic:
+        Value: /waver/moving_objects_map_marker
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Dynamic Object Track
+      Topic:
+        Value: /waver/moving_object_track_marker
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Bird Target Marker
+      Topic:
+        Value: /waver/bird_target_marker
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/SetInitialPose
+    - Class: rviz_default_plugins/SetGoal
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: Field Top-Down
+      Target Frame: map
+      Scale: 16
+      X: 0
+      Y: 0
+Window Geometry:
+  Height: 900
+  Width: 1400
+  X: 80
+  Y: 60

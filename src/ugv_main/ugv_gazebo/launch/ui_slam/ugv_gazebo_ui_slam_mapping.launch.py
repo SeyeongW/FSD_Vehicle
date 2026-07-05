@@ -289,6 +289,20 @@ def _launch_setup(context, *args, **kwargs):
                 ),
                 Node(
                     package="waver_patrol",
+                    executable="mapping_path_publisher_node",
+                    name="mapping_path_publisher_node",
+                    parameters=[
+                        {
+                            "use_sim_time": use_sim_time,
+                            "map_frame": "map",
+                            "odom_frame": "odom",
+                            "base_frame": "base_footprint",
+                        }
+                    ],
+                    output="screen",
+                ),
+                Node(
+                    package="waver_patrol",
                     executable="mission_patrol_manager_node",
                     name="mission_patrol_manager_node",
                     parameters=[ui_slam_params, {"waypoint_file": waypoint_file, "use_nav2": False}, *common_params],
