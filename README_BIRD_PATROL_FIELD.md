@@ -81,7 +81,7 @@ the selected mode:
 - `sensor-live` -> `sensor_live.yaml`
 - `lidar-tracking` -> `lidar_nav_backend.yaml`
 - `detector-live`, `fusion-live`, `inspection-dry-run` -> `inspection_dry_run.yaml`
-- `supervised-deterrence` -> `supervised_bird_patrol.yaml`
+- `supervised-deterrence` or `supervised-bird-patrol` -> `supervised_bird_patrol.yaml`
 - `autonomous-patrol` -> `autonomous_bird_patrol_locked.yaml`
 
 ```bash
@@ -90,8 +90,14 @@ bash scripts/waver_bird_patrol_field_start.sh --mode sensor-live
 bash scripts/waver_bird_patrol_field_start.sh --mode lidar-tracking
 bash scripts/waver_bird_patrol_field_start.sh --mode detector-live --bird-model /models/bird_detector.pt
 bash scripts/waver_bird_patrol_field_start.sh --mode fusion-live --bird-model /models/bird_detector.pt
-bash scripts/waver_bird_patrol_field_start.sh --mode inspection-dry-run --bird-model /models/bird_detector.pt
+bash scripts/waver_bird_patrol_field_start.sh --mode inspection-dry-run --speed-tier first-wheel-on --bird-model /models/bird_detector.pt
+bash scripts/waver_bird_patrol_field_start.sh --mode supervised-bird-patrol --speed-tier supervised-low-speed --bird-model /models/bird_detector.pt
 ```
+
+`inspection-dry-run` is a real first-wheel-on inspection movement dry-run, not a
+monitoring-only mode. It stays capped at 0.05 m/s and 0.20 rad/s. The supervised
+tier defaults to 0.08 m/s and 0.25 rad/s and requires operator, collision
+monitor, and blackbox evidence before field use.
 
 ## Local Operator Station
 

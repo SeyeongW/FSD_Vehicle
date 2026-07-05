@@ -1,7 +1,16 @@
 {
+  "container": "fsd_dev_jetson",
+  "docker_exec_command": "docker exec fsd_dev_jetson bash -lc 'cd /ros2_ws/ros2_ws5 && source /opt/ros/humble/setup.bash && source install_docker/setup.bash && ros2 launch waver_patrol bird_patrol_production.launch.py'",
   "dry_run": true,
+  "expected_command_chain": "/waver/manual_cmd_vel -> safety_cmd_mux_node -> /waver/cmd_vel_safety -> nav2_collision_monitor -> /cmd_vel -> waver_base_driver_node",
   "field_bridge": "local PC -> SSH -> Jetson host -> docker exec -> fsd_dev_jetson -> ROS2 nodes -> Waver USB serial",
   "findings": [],
-  "generated_at": "2026-07-06T00:58:05+0900",
+  "generated_at": "2026-07-06T07:39:08+0900",
+  "jetson_host": "",
+  "jetson_user": "sw",
+  "jetson_ws": "/home/sw/ros2_ws5/FSD_Vehicle",
+  "product_launch_target": "waver_patrol bird_patrol_production.launch.py",
+  "ros_domain_id": "0",
+  "serial_port_policy": "auto",
   "status": "PASS"
 }

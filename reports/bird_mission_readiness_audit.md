@@ -67,3 +67,4 @@ PASS_DEGRADED must never promote `BIRD_PATROL_AUTONOMOUS_READY`.
 | `1783265525_source.json` | source | PASS | 0 | 0 |
 | `1783267082_source.json` | source | PASS | 0 | 0 |
 | `1783267085_source.json` | source | PASS | 0 | 0 |
+| `source_latest.json` | source | PASS | 0 | 0 |

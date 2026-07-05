@@ -147,6 +147,7 @@ def self_test(path: Path, report_output: Path | None = None, timeout_sec: int = 
     findings: list[str] = []
     wrapper_payload: dict[str, object] = {}
     timed_out = False
+    timed_out_step = ""
     with tempfile.TemporaryDirectory(prefix="waver_bird_release_", ignore_cleanup_errors=True) as td:
         dest = Path(td)
         extract_archive(path, dest)
@@ -182,6 +183,7 @@ def self_test(path: Path, report_output: Path | None = None, timeout_sec: int = 
                 )
             except subprocess.TimeoutExpired as exc:
                 timed_out = True
+                timed_out_step = label
                 stdout = exc.stdout.decode(errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
                 stderr = exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
                 combined = stdout + stderr
@@ -208,6 +210,7 @@ def self_test(path: Path, report_output: Path | None = None, timeout_sec: int = 
             "release_root": str(root),
             "release_root_is_temporary": True,
             "timed_out": timed_out,
+            "timed_out_step": timed_out_step,
             "steps": step_reports,
             "findings": findings,
         }
@@ -263,6 +266,17 @@ def main() -> int:
     findings.extend(f"stale runtime report leaked into release: {item}" for item in stale[:30])
     if path.name.endswith(".zip"):
         findings.append("raw workspace zip is not accepted as bird mission field release; use make_bird_mission_field_release.py")
+    sidecar = Path(str(path) + ".manifest.json")
+    if sidecar.exists():
+        try:
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            actual_sha = subprocess.check_output(["sha256sum", str(path)], text=True).split()[0]
+            if payload.get("archive_sha256") != actual_sha:
+                findings.append("sidecar archive_sha256 does not match archive")
+            if payload.get("archive_size_bytes") != path.stat().st_size:
+                findings.append("sidecar archive_size_bytes does not match archive")
+        except Exception as exc:
+            findings.append(f"sidecar manifest parse/check failed: {exc}")
     if args.self_test and not findings:
         findings.extend(
             self_test(

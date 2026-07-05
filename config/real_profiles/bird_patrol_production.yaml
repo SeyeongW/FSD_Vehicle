@@ -23,6 +23,9 @@ base:
 
 navigation:
   enable_nav2: true
+  enable_mission_patrol_manager: true
+  enable_auto_behavior_mux: true
+  enable_target_goal_manager: true
   enable_slam_or_localization: true
   map_path: ""
   enable_collision_monitor: true
@@ -151,6 +154,7 @@ enable_waver_base_driver: true
 serial_port_required: true
 scan_source: mid360
 pointcloud_topic: /livox/lidar
+scan_topic: /scan_safety
 camera_image_topic: /camera/image_raw
 camera_info_topic: /camera/camera_info
 odom_source: ekf

@@ -1,6 +1,6 @@
 profile: supervised_bird_patrol
 readiness_stage: supervised_low_speed_patrol_with_sound_locked
-description: "Closed-area supervised patrol and inspection. Sound hardware output remains disabled unless explicit external ACK is supplied."
+description: "Closed-area supervised patrol and inspection after first-wheel-on evidence. Default supervised tier is 0.08 m/s and 0.25 rad/s; sound hardware output remains disabled unless explicit external ACK is supplied."
 enable_waver_base_driver: true
 start_serial_bridge: false
 serial_port_required: true
@@ -25,8 +25,8 @@ enable_bird_3d_fusion: true
 enable_camera_alignment: true
 enable_sound_deterrent: true
 enable_sound_output: false
-max_linear_speed: 0.05
-max_angular_speed: 0.20
+max_linear_speed: 0.08
+max_angular_speed: 0.25
 inspection_standoff_m: 2.0
 require_scan: true
 require_odom: true
@@ -36,6 +36,9 @@ require_detector_model: true
 require_fusion_valid_before_sound: true
 require_bird_confirmed_before_sound: true
 manual_ack_required: true
+operator_confirmation_required: true
+collision_monitor_required: true
+blackbox_required: true
 required_external_ack_for_sound_output:
   - WAVER_ACK_SOUND_HARDWARE
   - WAVER_ACK_LOCAL_SOUND_LAW

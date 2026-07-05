@@ -22,6 +22,10 @@ def test_field_entrypoint_uses_product_launch_and_passes_core_args():
     assert 'PROFILE="inspection_dry_run"' in entry
     assert 'PROFILE="supervised_bird_patrol"' in entry
     assert 'PROFILE="autonomous_bird_patrol_locked"' in entry
+    assert "--speed-tier" in entry
+    assert "first-wheel-on" in entry
+    assert "supervised-low-speed" in entry
+    assert "WAVER_ACK_PRODUCTION_SPEED_EVIDENCE" in entry
     assert 'DEFAULT_FIELD_READINESS_LEVEL="L2"' in entry
     assert 'DEFAULT_FIELD_READINESS_LEVEL="L5"' in entry
     assert "waver_real_bird_autonomy.launch.py" in production

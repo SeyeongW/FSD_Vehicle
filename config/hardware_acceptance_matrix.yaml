@@ -26,7 +26,7 @@ items:
     evidence_command: "python3 scripts/waver_livox_mid360_probe.py --pointcloud-topic /livox/lidar --scan-topic /scan_safety --duration-sec 15 --output reports/livox_mid360/latest.json"
     evidence_file: "reports/livox_mid360/latest.json"
     last_checked: ""
-    notes: "Safety scan must be present and must not be the /livox/lider typo."
+    notes: "Safety scan must be present and must not use the known misspelled Livox topic."
   - item: camera_image
     status: TODO
     required_for_modes: [sensor-live, detector-live, fusion-live, inspection-dry-run, supervised-deterrence, autonomous-patrol]

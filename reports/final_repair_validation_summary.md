@@ -496,3 +496,35 @@ Final real-hardware judgment remains unchanged:
 - `UI_SLAM_AND_BIRD_DETECTION_SIM_READY`: YES, simulation-only
 - `GAZEBO_BIRD_PATROL_MECHANISM_SIM_READY`: YES, simulation-only
 - `BIRD_PATROL_AUTONOMOUS_READY`: NOT_RUN until live Jetson/Livox/camera/base/sound field evidence exists.
+
+## 2026-07-06 Prompt 361 Final Field Pass
+
+- Handoff reference head: `170c38b` series from the older handoff note.
+- Actual package head at this validation start: `e5bd067`; later commits must be checked with `git rev-parse --short HEAD`.
+- Clean deploy artifact is the bird mission field release tarball, not the raw workspace zip.
+- Latest release archive: `/tmp/waver_bird_mission_field_release_0706_prompt361.tar.gz`.
+- Latest release sidecar: `/tmp/waver_bird_mission_field_release_0706_prompt361.tar.gz.manifest.json`.
+- Latest release sha256: `90b3b698633a7e0bd06c921fee86badf21f181c270b2ad19e02e738e99b67488`.
+- Release self-test wrapper: PASS with `--self-test-timeout-sec` and sidecar hash validation.
+- Staged profiles clarified: sensor-live monitoring only, inspection-dry-run first-wheel-on capped motion, supervised-bird-patrol supervised low-speed, autonomous-patrol locked behind hardware evidence.
+- Real readiness remains `BIRD_PATROL_SOURCE_READY`; no live Jetson/Livox/camera/base/sound evidence was collected in this local source/sim run.
+
+Fresh Gazebo remote UI SLAM + bird detection smoke:
+
+- command:
+  `ROS_DOMAIN_ID=68 GAZEBO_MASTER_URI=http://127.0.0.1:11361 TIMEOUT_SEC=220 WAVER_USE_GUI=false WAVER_START_RVIZ=false bash scripts/run_ui_slam_bird_detection_gazebo_smoke.sh`
+- result: `UI_SLAM_BIRD_DETECTION_SMOKE=PASS`
+- `/map` publisher count: 1, node `laser_scan_occupancy_mapper_node`
+- `/cmd_vel` publisher count: 1, node `safety_cmd_mux_node`
+- `/waver/mode` publisher count: 1, node `mission_patrol_manager_node`
+- `map_quality_pass=True`, `mapping_path_visible=True`, `bird_topics_fresh=True`, `no_patrol_emergency_stop=True`
+
+Fresh Gazebo LiDAR spatial response mechanism smoke:
+
+- command:
+  `ROS_DOMAIN_ID=69 GAZEBO_MASTER_URI=http://127.0.0.1:11362 TIMEOUT_SEC=320 RANDOM_SEED=709 WAVER_USE_GUI=false WAVER_START_RVIZ=false bash scripts/run_gazebo_lidar_spatial_response_smoke.sh`
+- result: `VERIFY_GAZEBO_SPATIAL_RESPONSE=PASS`
+- run dir:
+  `experiment_results/gazebo_spatial_response/spatial_lidar_20260706_074944_seed709_20260706_074944`
+- notable PASS checks: `detector_mode_lidar`, `lidar_only_decision_clean`, `has_dynamic_lock`, `has_object_mission_goal`, `has_active_target_nav_goal`, `patrol_preempt_to_target_goal`, `preempt_before_first_patrol_success`, `return_resume_sequence_success`, `removed_bird_count`, `cmd_vel_safety_mux_sole_publisher`
+- measured values: removed birds 2, target preempt to target cmd 0.20 s, odom path length 53.08 m, final `/cmd_vel` publisher count 1.

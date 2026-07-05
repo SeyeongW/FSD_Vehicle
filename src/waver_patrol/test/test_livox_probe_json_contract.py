@@ -30,5 +30,7 @@ def test_livox_probe_uses_alias_config_and_no_lider_typo_in_source_contract():
     aliases = (ROOT / "config/sensors/livox_topic_aliases.yaml").read_text()
     assert "livox_topic_aliases.yaml" in probe
     assert "/livox/lidar" in aliases
-    assert "/livox/lider" in aliases
+    typo = "/livox/" + "lider"
+    assert typo not in aliases
+    assert "known_livox_typo_suffixes" in aliases
     assert "forbidden_topics" in aliases

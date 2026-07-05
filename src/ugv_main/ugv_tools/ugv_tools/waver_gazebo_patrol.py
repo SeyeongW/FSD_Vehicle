@@ -201,6 +201,7 @@ class WaverGazeboPatrol(Node):
         self.blocked_since = 0.0
         self.recovery_until = 0.0
         self.recovery_attempts = 0
+        self.recovery_latched_stop = False
         self.best_distance = math.inf
         self.last_progress_time = time.monotonic()
         self.last_assist_warn_time = 0.0
@@ -439,6 +440,7 @@ class WaverGazeboPatrol(Node):
         self.blocked_since = 0.0
         self.recovery_attempts = 0
         self.recovery_until = 0.0
+        self.recovery_latched_stop = False
         self.active = True
         self._set_state(PatrolState.CRUISE, reason)
 
@@ -525,6 +527,10 @@ class WaverGazeboPatrol(Node):
                 self.publish_stop()
                 return
             self._set_state(PatrolState.COMPLETE, "inactive")
+            self.publish_stop()
+            return
+        if self.recovery_latched_stop:
+            self._set_state(PatrolState.EMERGENCY_STOP, "recovery latched stop")
             self.publish_stop()
             return
         if self.pose is None:
@@ -699,12 +705,15 @@ class WaverGazeboPatrol(Node):
         if now - self.blocked_since < self.blocked_wait_s:
             return
         if self.recovery_attempts >= self.max_recovery_attempts:
+            self.recovery_latched_stop = True
+            self.active = False
             self._set_state(PatrolState.EMERGENCY_STOP, "recovery attempts exceeded")
             self.publish_stop()
             return
         hint = self.assist.recovery_hint()
         self.recovery_attempts += 1
         self.recovery_until = now + self.recovery_action_s
+        self.blocked_since = now
         if hint == "turn_left":
             self._set_state(PatrolState.RECOVERY_TURN, "turn left around obstacle")
             self.publish_drive(
@@ -759,6 +768,7 @@ class WaverGazeboPatrol(Node):
             if self.assist.scan.hazard != HazardLevel.STOP:
                 self.blocked_since = 0.0
                 self.recovery_attempts = 0
+                self.recovery_latched_stop = False
 
     def _is_stuck(self, distance: float) -> bool:
         # 역할: 장애물이 아닌데도 목표 접근이 없으면 무리하게 밀지 않고 정지 상태로 전환한다.
@@ -783,6 +793,7 @@ class WaverGazeboPatrol(Node):
         self.last_progress_time = time.monotonic()
         self.blocked_since = 0.0
         self.recovery_attempts = 0
+        self.recovery_latched_stop = False
         if self.current_index < len(self.waypoints):
             self._set_state(PatrolState.CRUISE, "next waypoint")
             return

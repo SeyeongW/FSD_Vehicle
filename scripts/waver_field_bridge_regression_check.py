@@ -44,6 +44,9 @@ def main() -> int:
     parser.add_argument("--host", default=os.environ.get("JETSON_HOST", ""))
     parser.add_argument("--user", default=os.environ.get("JETSON_USER", "sw"))
     parser.add_argument("--container", default=os.environ.get("CONTAINER", "fsd_dev_jetson"))
+    parser.add_argument("--jetson-ws", default=os.environ.get("JETSON_WS", "/home/sw/ros2_ws5/FSD_Vehicle"))
+    parser.add_argument("--ros-domain-id", default=os.environ.get("ROS_DOMAIN_ID", "0"))
+    parser.add_argument("--serial-port", default=os.environ.get("SERIAL_PORT", "auto"))
     parser.add_argument("--output", default=str(ROOT / "reports/field_bridge_regression/latest.json"))
     args = parser.parse_args()
 
@@ -69,6 +72,15 @@ def main() -> int:
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "dry_run": bool(args.dry_run),
         "field_bridge": "local PC -> SSH -> Jetson host -> docker exec -> fsd_dev_jetson -> ROS2 nodes -> Waver USB serial",
+        "jetson_host": args.host,
+        "jetson_user": args.user,
+        "jetson_ws": args.jetson_ws,
+        "container": args.container,
+        "ros_domain_id": args.ros_domain_id,
+        "docker_exec_command": f"docker exec {args.container} bash -lc 'cd /ros2_ws/ros2_ws5 && source /opt/ros/humble/setup.bash && source install_docker/setup.bash && ros2 launch waver_patrol bird_patrol_production.launch.py'",
+        "product_launch_target": "waver_patrol bird_patrol_production.launch.py",
+        "serial_port_policy": args.serial_port,
+        "expected_command_chain": "/waver/manual_cmd_vel -> safety_cmd_mux_node -> /waver/cmd_vel_safety -> nav2_collision_monitor -> /cmd_vel -> waver_base_driver_node",
         "findings": findings,
     }
     if args.remote_smoke:

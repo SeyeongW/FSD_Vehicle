@@ -164,6 +164,7 @@ class CombinedMonitor(Node):
         self.create_subscription(String, "/waver/sound_alert_state", self.str_cb("sound_alert_state"), 10)
         self.create_subscription(Bool, "/waver/sound_task_done", self.bool_cb("sound_task_done"), 10)
         self.create_subscription(String, "/waver/mission_state", self.str_cb("mission_state"), 10)
+        self.create_subscription(String, "/waver/patrol_state", self.str_cb("patrol_state"), 10)
         self.create_subscription(String, "/waver/object_mission_goal_state", self.str_cb("object_goal_state"), 10)
         self.create_timer(1.0, self.write_report)
 
@@ -209,6 +210,7 @@ class CombinedMonitor(Node):
         cmd_count, cmd_nodes = topic_info("/cmd_vel")
         mode_count, mode_nodes = topic_info("/waver/mode")
         mission = str(self.values.get("mission_state", ""))
+        patrol = str(self.values.get("patrol_state", ""))
         object_goal = str(self.values.get("object_goal_state", ""))
         sound = str(self.values.get("sound_alert_state", ""))
         current_map_source = str(self.values.get("current_map_source", ""))
@@ -243,6 +245,7 @@ class CombinedMonitor(Node):
             "mapping_path_visible": self.ever("mapping_path"),
             "map_visible": self.ever("map"),
             "no_patrol_conflict": "PATROL_NAVIGATING" not in mission.upper(),
+            "no_patrol_emergency_stop": "EMERGENCY_STOP" not in patrol.upper(),
             "no_target_approach_without_arm": "APPROACH" not in object_goal.upper(),
             "no_sound_without_arm": "ACTIVE" not in sound.upper() and "REQUEST" not in sound.upper(),
             "values": self.values,
@@ -282,8 +285,8 @@ timeout --foreground "${TIMEOUT_SEC}" \
     mapping_backend:="${WAVER_MAPPING_BACKEND:-scan_mapper}" \
     start_rviz:="${WAVER_START_RVIZ:-false}" \
     spawn_static_obstacle:="${WAVER_SPAWN_TEST_OBSTACLE:-true}" \
-    static_obstacle_x:="${WAVER_TEST_OBSTACLE_X:-1.35}" \
-    static_obstacle_y:="${WAVER_TEST_OBSTACLE_Y:-0.65}" \
+    static_obstacle_x:="${WAVER_TEST_OBSTACLE_X:-2.20}" \
+    static_obstacle_y:="${WAVER_TEST_OBSTACLE_Y:-1.60}" \
     static_obstacle_z:="${WAVER_TEST_OBSTACLE_Z:-0.0}" \
     start_remote_panel:=true \
     remote_panel_demo_script:="${WAVER_REMOTE_PANEL_DEMO:-mapping_workflow_smoke}" \
@@ -306,8 +309,8 @@ python3 scripts/check_remote_ui_slam_mapping_result.py \
   --map-yaml "$WORKSPACE_ROOT/maps/waver_latest_map.yaml" \
   --skip-graph \
   --expect-obstacle \
-  --obstacle-x "${WAVER_TEST_OBSTACLE_X:-1.35}" \
-  --obstacle-y "${WAVER_TEST_OBSTACLE_Y:-0.65}" \
+  --obstacle-x "${WAVER_TEST_OBSTACLE_X:-2.20}" \
+  --obstacle-y "${WAVER_TEST_OBSTACLE_Y:-1.60}" \
   --obstacle-radius-m "${WAVER_TEST_OBSTACLE_CHECK_RADIUS_M:-0.8}" \
   --min-obstacle-occupied "${WAVER_TEST_OBSTACLE_MIN_OCCUPIED:-10}" \
   >"$REPORT_DIR/map_quality.txt" 2>&1
@@ -339,6 +342,7 @@ required_true = [
     "bird_fusion_state_fresh",
     "mapping_path_visible",
     "no_patrol_conflict",
+    "no_patrol_emergency_stop",
     "no_target_approach_without_arm",
     "no_sound_without_arm",
     "map_quality_pass",

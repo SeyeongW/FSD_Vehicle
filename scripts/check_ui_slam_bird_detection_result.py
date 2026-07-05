@@ -16,6 +16,7 @@ REQUIRED_TRUE_FIELDS = [
     "bird_fusion_state_fresh",
     "mapping_path_visible",
     "no_patrol_conflict",
+    "no_patrol_emergency_stop",
     "no_target_approach_without_arm",
     "no_sound_without_arm",
     "map_quality_pass",

@@ -19,5 +19,6 @@ def test_release_wrapper_records_timeout_and_never_runs_gazebo_or_hardware():
     assert "WAVER_BLOCK_SERIAL=1" in runner
     assert "WAVER_DISABLE_SOUND_OUTPUT=1" in runner
     assert "timeout --kill-after=5s" in runner
+    assert "RELEASE_SELF_TEST_TIMEOUT_PER_PYTEST" in runner
     assert "run_ui_slam_bird_detection_gazebo_smoke.sh" not in runner
     assert "run_gazebo_lidar_spatial_response_smoke.sh" not in runner

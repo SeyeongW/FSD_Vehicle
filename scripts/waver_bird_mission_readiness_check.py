@@ -126,18 +126,34 @@ def add_blocked(report: dict[str, Any], name: str, detail: str = "") -> None:
     report["blocked_capabilities"].append({"name": name, "detail": detail})
 
 
-def source_checks(report: dict[str, Any], profile_path: Path, profile: dict[str, Any]) -> None:
+def source_checks(report: dict[str, Any], profile_path: Path, profile: dict[str, Any], mode: str = "source") -> None:
     missing = [rel for rel in SOURCE_REQUIRED if not (ROOT / rel).exists()]
     add_check(report, not missing, "source_required_files", ", ".join(missing) if missing else "all present")
     add_check(report, profile_path.exists(), "profile_exists", str(profile_path))
     if profile:
-        add_check(report, find_leaf(profile, "enable_bird_detector") is True, "profile_enables_bird_detector")
-        add_check(report, find_leaf(profile, "enable_bird_3d_fusion") is True, "profile_enables_bird_3d_fusion")
-        add_check(report, find_leaf(profile, "enable_sound_deterrent") is True, "profile_enables_sound_deterrent")
+        profile_name = str(profile.get("profile", profile_path.stem))
+        bird_stack_expected = mode in {
+            "source",
+            "detector-live",
+            "fusion-live",
+            "inspection-dry-run",
+            "supervised-deterrence",
+            "autonomous-patrol",
+        }
+        if bird_stack_expected:
+            add_check(report, find_leaf(profile, "enable_bird_detector") is True, "profile_enables_bird_detector")
+            add_check(report, find_leaf(profile, "enable_bird_3d_fusion") is True, "profile_enables_bird_3d_fusion")
+            add_check(report, find_leaf(profile, "enable_sound_deterrent") is True, "profile_enables_sound_deterrent")
         add_check(report, find_leaf(profile, "enable_sound_output") is False, "profile_sound_output_default_false")
         add_check(report, str(find_leaf(profile, "scan_topic", "")) == "/scan_safety", "profile_scan_topic_is_scan_safety")
-        add_check(report, float(find_leaf(profile, "max_linear_speed", 99.0)) <= 0.05, "profile_linear_speed_cap")
-        add_check(report, float(find_leaf(profile, "max_angular_speed", 99.0)) <= 0.20, "profile_angular_speed_cap")
+        max_linear = float(find_leaf(profile, "max_linear_speed", 99.0))
+        max_angular = float(find_leaf(profile, "max_angular_speed", 99.0))
+        if profile_name == "supervised_bird_patrol":
+            add_check(report, 0.08 <= max_linear <= 0.12, "profile_supervised_linear_speed_tier")
+            add_check(report, 0.25 <= max_angular <= 0.35, "profile_supervised_angular_speed_tier")
+        else:
+            add_check(report, max_linear <= 0.05, "profile_linear_speed_cap")
+            add_check(report, max_angular <= 0.20, "profile_angular_speed_cap")
         add_check(report, find_leaf(profile, "require_camera_lidar_extrinsic") is True, "profile_requires_camera_lidar_extrinsic")
         add_check(report, find_leaf(profile, "require_detector_model") is True, "profile_requires_detector_model")
 
@@ -334,7 +350,7 @@ def main() -> int:
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     }
 
-    source_checks(report, profile_path, profile)
+    source_checks(report, profile_path, profile, args.mode)
     if args.no_hardware and args.mode != "source":
         add_blocked(report, "hardware_access", "--no-hardware only supports source mode")
         report["failed_checks"].append({"name": "hardware_required_for_mode", "detail": args.mode})

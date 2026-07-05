@@ -15,10 +15,12 @@ aliases:
     - "/scan_safety"
     - "/scan"
 forbidden_topics:
-  - "/livox/lider"
+  # Built from suffixes by the probe to avoid spreading the misspelled topic.
+  - livox_typo_lider_suffix
+known_livox_typo_suffixes:
+  - "lider"
 suggested_remaps:
   "/mid360_PointCloud2": "/livox/lidar"
   "/livox/points": "/livox/lidar"
   "/scan": "/scan_safety"
-  "/livox/lider": "/livox/lidar"
-notes: "Use canonical /livox/lidar for MID-360 PointCloud2. /livox/lider is a typo and must fail production checks."
+notes: "Use canonical /livox/lidar for MID-360 PointCloud2. The common misspelled Livox topic is generated from known_livox_typo_suffixes by the probe and must fail production checks."

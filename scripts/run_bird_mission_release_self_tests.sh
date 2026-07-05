@@ -116,9 +116,11 @@ for target in "${PYTEST_TARGETS[@]}"; do
     EXISTING_TARGETS+=("${target}")
   fi
 done
-if [ "${#EXISTING_TARGETS[@]}" -gt 0 ]; then
-  run_step targeted_pytest "${RELEASE_SELF_TEST_TIMEOUT_TARGETED_PYTEST:-240}" python3 -m pytest -q "${EXISTING_TARGETS[@]}"
-fi
+for target in "${EXISTING_TARGETS[@]}"; do
+  label="pytest_$(basename "${target}" .py)"
+  per_pytest_timeout="${RELEASE_SELF_TEST_TIMEOUT_PER_PYTEST:-${RELEASE_SELF_TEST_TIMEOUT_TARGETED_PYTEST:-75}}"
+  run_step "${label}" "${per_pytest_timeout}" python3 -m pytest -q "${target}"
+done
 
 python3 - "${REPORT}" "${STEPS_JSONL}" "${STATUS}" "${START_TS}" "${FINDINGS[@]}" <<'PY'
 import json

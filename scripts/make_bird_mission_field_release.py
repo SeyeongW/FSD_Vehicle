@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import io
 import json
+import subprocess
 import tarfile
 import time
 from pathlib import Path
@@ -76,6 +77,13 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def git_output(root: Path, args: list[str]) -> str:
+    try:
+        return subprocess.check_output(["git", "-C", str(root), *args], text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return "UNKNOWN"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create a clean bird mission field release archive.")
     parser.add_argument("--root", default=str(ROOT))
@@ -127,7 +135,28 @@ def main() -> int:
             tar.addfile(info, io.BytesIO(payload))
     size = output.stat().st_size
     sha = file_sha256(output)
+    sidecar = Path(str(output) + ".manifest.json")
+    sidecar.write_text(
+        json.dumps(
+            {
+                "archive": str(output),
+                "archive_sha256": sha,
+                "archive_size_bytes": size,
+                "artifact_type": "bird_mission_field_release_sidecar",
+                "deploy_artifact_is_clean_release_tarball": True,
+                "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                "git_branch": git_output(root, ["branch", "--show-current"]),
+                "git_head": git_output(root, ["rev-parse", "--short", "HEAD"]),
+                "manifest_inside_archive_has_placeholder_hash": True,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     print(f"BIRD_MISSION_FIELD_RELEASE_WRITTEN={output}")
+    print(f"BIRD_MISSION_FIELD_RELEASE_SIDECAR={sidecar}")
     print(f"BIRD_MISSION_FIELD_RELEASE_FILE_COUNT={len(files) + len(generated)}")
     print(f"BIRD_MISSION_FIELD_RELEASE_SIZE_BYTES={size}")
     print(f"BIRD_MISSION_FIELD_RELEASE_SHA256={sha}")

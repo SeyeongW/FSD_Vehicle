@@ -61,12 +61,19 @@ def test_staged_bird_profiles_are_evidence_gated_and_sound_locked():
     assert sensor["scan_topic"] == "/scan_safety"
 
     assert inspection["enable_target_goal_manager"] is True
-    assert inspection["enable_waver_base_driver"] is False
+    assert inspection["enable_waver_base_driver"] is True
+    assert inspection["enable_nav2"] is True
+    assert inspection["max_linear_speed"] <= 0.05
+    assert inspection["max_angular_speed"] <= 0.20
     assert inspection["enable_sound_output"] is False
 
+    assert 0.08 <= supervised["max_linear_speed"] <= 0.12
+    assert 0.25 <= supervised["max_angular_speed"] <= 0.35
+    assert supervised["operator_confirmation_required"] is True
+    assert supervised["collision_monitor_required"] is True
+    assert supervised["blackbox_required"] is True
+
     for profile in (supervised, autonomous):
-        assert profile["max_linear_speed"] <= 0.05
-        assert profile["max_angular_speed"] <= 0.20
         assert profile["enable_bird_detector"] is True
         assert profile["enable_bird_3d_fusion"] is True
         assert profile["enable_sound_output"] is False
@@ -77,6 +84,7 @@ def test_staged_bird_profiles_are_evidence_gated_and_sound_locked():
     docs = (ROOT / "docs/bird_patrol_field_profiles.md").read_text()
     readme = (ROOT / "README_BIRD_PATROL_FIELD.md").read_text()
     assert "sensor-live` -> `sensor_live.yaml" in readme
+    assert "supervised-bird-patrol" in readme
     for token in ("inspection_dry_run.yaml", "supervised_bird_patrol.yaml", "autonomous_bird_patrol_locked.yaml"):
         assert token in readme
         assert token in docs

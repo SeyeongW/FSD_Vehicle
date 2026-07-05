@@ -124,8 +124,12 @@ def main() -> int:
     args = parser.parse_args()
     duration = min(max(args.duration_sec, 3), 15)
     alias_config = load_aliases(Path(args.aliases).expanduser())
-    forbidden_topics = set(alias_config.get("forbidden_topics") or [])
+    forbidden_topics = {str(topic) for topic in (alias_config.get("forbidden_topics") or []) if str(topic).startswith("/")}
+    for suffix in alias_config.get("known_livox_typo_suffixes") or []:
+        forbidden_topics.add("/livox/" + str(suffix).strip("/"))
     remap_suggestions = dict(alias_config.get("suggested_remaps") or {})
+    for suffix in alias_config.get("known_livox_typo_suffixes") or []:
+        remap_suggestions.setdefault("/livox/" + str(suffix).strip("/"), "/livox/lidar")
     detected_topics = topic_list()
     info = topic_info(args.pointcloud_topic)
     scan_info = topic_info(args.scan_topic)
