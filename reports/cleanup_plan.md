@@ -118,6 +118,9 @@
 - `reports/field_docker_ssh_check/20260630_190314/cycle_1/`
 - `reports/field_docker_ssh_check/20260630_190314/summary.csv`
 - `reports/field_hardware_readiness_audit.md`
+- `reports/field_probe_session/`
+- `reports/field_probe_session/session_metadata.json`
+- `reports/final_field_probe_summary.md`
 - `reports/final_repair_validation_summary.md`
 - `reports/full_readiness_loop/`
 - `reports/full_readiness_loop/20260630_190110/`
@@ -408,6 +411,12 @@
 - `reports/ui_slam_bird_detection/ui_slam_bird_20260706_074541/map_quality.txt`
 - `reports/ui_slam_bird_detection/ui_slam_bird_20260706_074541/monitor.json`
 - `reports/ui_slam_bird_detection/ui_slam_bird_20260706_074541/summary.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_083154/`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_083154/deterministic_bird_ui_status_publisher.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_083154/launch.log`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_083154/map_quality.txt`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_083154/monitor.json`
+- `reports/ui_slam_bird_detection/ui_slam_bird_20260706_083154/summary.json`
 
 ### LEGACY_BUT_REFERENCED
 
