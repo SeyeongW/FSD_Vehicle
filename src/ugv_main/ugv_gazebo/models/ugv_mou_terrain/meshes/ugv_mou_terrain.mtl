@@ -1,0 +1,6 @@
+newmtl ugv_mou_mountain_surface
+Ka 0.45 0.55 0.32
+Kd 0.70 0.78 0.44
+Ks 0.018 0.018 0.018
+Ns 10
+map_Kd ../materials/textures/ugv_mou_terrain_diffuse.png
