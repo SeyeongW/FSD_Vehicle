@@ -1,61 +1,55 @@
 #!/usr/bin/env python3
 #
-# Copyright 2019 ROBOTIS CO., LTD.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-# Authors: Joep Tool
+# Minimal gz (Harmonic) bringup: world + bridge + robot_state_publisher + spawn.
+# Uses worlds/ugv_world.world (no birds / managers).
 
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, SetEnvironmentVariable
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch.actions import ExecuteProcess
+from launch_ros.actions import Node
+
 
 def generate_launch_description():
-    # Get the directory of the launch file
-    launch_file_dir = os.path.join(get_package_share_directory('ugv_gazebo'), 'launch/bringup')
-    # Get the directory of the gazebo_ros package
-    pkg_gazebo_ros = get_package_share_directory('gazebo_ros')
+    pkg_share = get_package_share_directory('ugv_gazebo')
+    ros_gz_sim_share = get_package_share_directory('ros_gz_sim')
 
-    # Get the use_sim_time parameter from the launch file
+    launch_file_dir = os.path.join(pkg_share, 'launch', 'bringup')
+    world = os.path.join(pkg_share, 'worlds', 'ugv_world.world')
+    bridge_config = os.path.join(pkg_share, 'config', 'ugv_bridge.yaml')
+
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
 
-    # Get the world file
-    world = os.path.join(
-        get_package_share_directory('ugv_gazebo'),
-        'worlds',
-        'ugv_world.world'
+    gz_resource_path = SetEnvironmentVariable(
+        name='GZ_SIM_RESOURCE_PATH',
+        value=os.pathsep.join([
+            os.path.join(pkg_share, 'models'),
+            os.path.dirname(get_package_share_directory('ugv_description')),
+            os.environ.get('GZ_SIM_RESOURCE_PATH', ''),
+        ])
     )
 
-    # Include the gzserver launch file
-    gzserver_cmd = IncludeLaunchDescription(
+    gz_sim_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_gazebo_ros, 'launch', 'gzserver.launch.py')
-        )
+            os.path.join(ros_gz_sim_share, 'launch', 'gz_sim.launch.py')
+        ),
+        launch_arguments={'gz_args': f'-r -v4 {world}'}.items()
     )
 
-    # Include the gzclient launch file
-    gzclient_cmd = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py')
-        )
+    bridge_cmd = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        name='ugv_gz_bridge',
+        parameters=[{
+            'config_file': bridge_config,
+            'use_sim_time': True,
+        }],
+        output='screen',
     )
-            
-    # Include the robot_state_publisher launch file
+
     robot_state_publisher_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(launch_file_dir, 'robot_state_publisher.launch.py')
@@ -63,19 +57,16 @@ def generate_launch_description():
         launch_arguments={'use_sim_time': use_sim_time}.items()
     )
 
-    # Include the spawn_ugv launch file
     spawn_ugv_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(launch_file_dir, 'spawn_ugv.launch.py')
         )
     )
 
-    # Create a launch description
     ld = LaunchDescription()
-
-    # Add the commands to the launch description
-    ld.add_action(gzserver_cmd)
-    ld.add_action(gzclient_cmd)
+    ld.add_action(gz_resource_path)
+    ld.add_action(gz_sim_cmd)
+    ld.add_action(bridge_cmd)
     ld.add_action(robot_state_publisher_cmd)
     ld.add_action(spawn_ugv_cmd)
 

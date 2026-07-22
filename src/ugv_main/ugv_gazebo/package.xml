@@ -11,8 +11,6 @@
   <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <depend>rclpy</depend>
-  <depend>gazebo_msgs</depend>
-  <depend>gazebo_ros</depend>
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
   <depend>nav_msgs</depend>
@@ -21,6 +19,12 @@
   <depend>robot_state_publisher</depend>
   <depend>rviz2</depend>
   <depend>joint_state_publisher_gui</depend>
+
+  <!-- gz (Harmonic) simulation -->
+  <depend>ros_gz_sim</depend>
+  <depend>ros_gz_bridge</depend>
+  <depend>ros_gz_image</depend>
+  <depend>ros_gz_interfaces</depend>
 
   <exec_depend>python3</exec_depend>
 

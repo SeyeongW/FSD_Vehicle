@@ -7,10 +7,15 @@ from dataclasses import dataclass
 import rclpy
 from rclpy.node import Node
 from rclpy.utilities import ok as rclpy_ok
-from gazebo_msgs.srv import SetEntityState, GetEntityState
-from gazebo_msgs.msg import EntityState
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Bool
+
+# gz (Harmonic) transport — teleport entities via the world set_pose service.
+from gz.transport13 import Node as GzNode
+from gz.msgs10.pose_pb2 import Pose as GzPose
+from gz.msgs10.boolean_pb2 import Boolean as GzBoolean
+from gz.msgs10.empty_pb2 import Empty as GzEmpty
+from gz.msgs10.stringmsg_v_pb2 import StringMsg_V as GzStringMsgV
 
 
 def clamp(v, vmin, vmax):
@@ -122,9 +127,6 @@ class BirdManager(Node):
         self.z_max = 8.0
 
         self.dt = 0.08
-        self.busy = False
-        self.current_states = {}
-        self.pending_gets = 0
 
         self.model_yaw_offset = math.pi / 2.0
 
@@ -158,7 +160,7 @@ class BirdManager(Node):
         self.weight_cohesion = 0.8
         self.weight_center_follow = 1.6
 
-        self.state_fail_count = {}
+        self.set_fail_count = {}
 
         self.birds = [
             BirdConfig('bird_single', False, 3.0, 0.75, 7.0, 0.0, 0.0),
@@ -170,6 +172,22 @@ class BirdManager(Node):
         ]
 
         self.runtime = {bird.name: BirdRuntime() for bird in self.birds}
+
+        # Authoritative pose cache. The manager is the only mover of the birds,
+        # so we track their pose internally and teleport with gz set_pose,
+        # seeded at the spawn positions used by bringup.launch.py.
+        spawn_positions = {
+            'bird_single': (0.0, 0.0, 15.0),
+            'bird_swarm_1': (0.0, 0.0, 20.0),
+            'bird_swarm_2': (3.0, 2.0, 19.0),
+            'bird_swarm_3': (-3.0, -2.0, 21.0),
+            'bird_swarm_4': (4.0, -3.0, 18.0),
+            'bird_swarm_5': (-4.0, 3.0, 22.0),
+        }
+        self.pose = {
+            bird.name: spawn_positions.get(bird.name, (0.0, 0.0, 6.5))
+            for bird in self.birds
+        }
 
         swarm_offsets = [
             (-6.0, 0.0, 0.0),
@@ -188,22 +206,11 @@ class BirdManager(Node):
                 self.runtime[bird.name].offset_z = oz
                 idx += 1
 
-        self.set_service_name = self.find_service_name(
-            preferred=['/gazebo/set_entity_state', '/set_entity_state'],
-            service_type='gazebo_msgs/srv/SetEntityState'
-        )
-        self.get_service_name = self.find_service_name(
-            preferred=['/gazebo/get_entity_state', '/get_entity_state'],
-            service_type='gazebo_msgs/srv/GetEntityState'
-        )
-
-        self.set_cli = self.create_client(SetEntityState, self.set_service_name)
-        self.get_cli = self.create_client(GetEntityState, self.get_service_name)
-
-        while not self.set_cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info(f'{self.set_service_name} waiting...')
-        while not self.get_cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info(f'{self.get_service_name} waiting...')
+        # ── gz transport: resolve world name and set_pose service ──
+        self.gz = GzNode()
+        world_name = self.resolve_world_name()
+        self.set_service = f'/world/{world_name}/set_pose'
+        self.get_logger().info(f'bird_manager gz set_pose service: {self.set_service}')
 
         self.bird_pose_pub = self.create_publisher(PoseStamped, '/bird/nearest_pose', 10)
         self.bird_visible_pub = self.create_publisher(Bool, '/bird/visible', 10)
@@ -214,24 +221,17 @@ class BirdManager(Node):
         self.timer = self.create_timer(self.dt, self.update_all)
         self.get_logger().info('bird_manager started')
 
-    def find_service_name(self, preferred, service_type):
+    def resolve_world_name(self):
+        """Ask gz for the running world name; fall back to a sane default."""
         for _ in range(50):
-            services = self.get_service_names_and_types()
-
-            for name, types in services:
-                if service_type in types and name in preferred:
-                    return name
-
-            for name, types in services:
-                if service_type in types:
-                    return name
-
-            rclpy.spin_once(self, timeout_sec=0.2)
-
-        raise RuntimeError(
-            f'Could not find service type {service_type}. '
-            f'Available services: {self.get_service_names_and_types()}'
-        )
+            ok, rep = self.gz.request(
+                '/gazebo/worlds', GzEmpty(), GzEmpty, GzStringMsgV, 1000
+            )
+            if ok and len(rep.data) > 0:
+                return rep.data[0]
+            self.get_logger().info('waiting for gz /gazebo/worlds ...')
+        self.get_logger().warn('could not resolve gz world, using plane_fit_50x50')
+        return 'plane_fit_50x50'
 
     def pick_random_target(self):
         return (
@@ -278,87 +278,28 @@ class BirdManager(Node):
         self.swarm_center_z = clamp(self.swarm_center_z + dz / dist * step, self.z_min, self.z_max)
 
     def update_all(self):
-        if self.busy:
-            return
-
         self.update_swarm_center()
-
-        self.busy = True
-        self.current_states = {}
-        self.pending_gets = len(self.birds)
-
-        for bird in self.birds:
-            req = GetEntityState.Request()
-            req.name = bird.name
-            req.reference_frame = 'world'
-            future = self.get_cli.call_async(req)
-            future.add_done_callback(lambda fut, b=bird: self.on_got_state(fut, b))
-
-    def on_got_state(self, future, bird):
-        try:
-            res = future.result()
-        except Exception as e:
-            self.get_logger().error(f'[{bird.name}] get_entity_state exception: {e}')
-            self.pending_gets -= 1
-            self.finish_get_phase_if_ready()
-            return
-
-        if not res.success:
-            c = self.state_fail_count.get(bird.name, 0) + 1
-            self.state_fail_count[bird.name] = c
-            if c % 20 == 1:
-                self.get_logger().warn(f'[{bird.name}] get_entity_state failed')
-            self.pending_gets -= 1
-            self.finish_get_phase_if_ready()
-            return
-
-        self.state_fail_count[bird.name] = 0
-        self.current_states[bird.name] = res.state
-        self.pending_gets -= 1
-        self.finish_get_phase_if_ready()
-
-    def finish_get_phase_if_ready(self):
-        if self.pending_gets > 0:
-            return
-
-        if not self.current_states:
-            self.publish_detection(None)
-            self.busy = False
-            return
 
         world_info = self.build_world_info()
 
         for bird in self.birds:
-            if bird.name not in self.current_states:
-                continue
             self.move_one_bird(bird, world_info)
 
         self.publish_nearest_bird()
-        self.busy = False
 
     def build_world_info(self):
         info = {}
         for bird in self.birds:
-            state = self.current_states.get(bird.name)
-            if state is None:
-                continue
-
             rt = self.runtime[bird.name]
-
-            x = state.pose.position.x
-            y = state.pose.position.y
-            z = state.pose.position.z
+            x, y, z = self.pose[bird.name]
 
             if not rt.initialized:
-                yaw_guess = math.atan2(state.twist.linear.y, state.twist.linear.x) if horizontal_len(
-                    state.twist.linear.x, state.twist.linear.y
-                ) > 1e-6 else 0.0
-                rt.yaw = yaw_guess + self.model_yaw_offset
+                rt.yaw = self.model_yaw_offset
                 rt.pitch = 0.0
                 rt.roll = 0.0
-                rt.vx = state.twist.linear.x
-                rt.vy = state.twist.linear.y
-                rt.vz = state.twist.linear.z
+                rt.vx = 0.0
+                rt.vy = 0.0
+                rt.vz = 0.0
                 rt.initialized = True
 
             info[bird.name] = {
@@ -500,12 +441,9 @@ class BirdManager(Node):
         return limited
 
     def move_one_bird(self, bird, world_info):
-        state = self.current_states[bird.name]
         rt = self.runtime[bird.name]
 
-        x = state.pose.position.x
-        y = state.pose.position.y
-        z = state.pose.position.z
+        x, y, z = self.pose[bird.name]
         pos = (x, y, z)
         vel = (rt.vx, rt.vy, rt.vz)
 
@@ -566,31 +504,29 @@ class BirdManager(Node):
 
         qx, qy, qz, qw = euler_to_quaternion(rt.roll, -rt.pitch, rt.yaw)
 
-        new_state = EntityState()
-        new_state.name = bird.name
-        new_state.reference_frame = 'world'
+        # Update internal cache and teleport the entity in gz.
+        self.pose[bird.name] = (nx, ny, nz)
+        self.set_gz_pose(bird.name, nx, ny, nz, qx, qy, qz, qw)
 
-        new_state.pose.position.x = nx
-        new_state.pose.position.y = ny
-        new_state.pose.position.z = nz
+    def set_gz_pose(self, name, x, y, z, qx, qy, qz, qw):
+        req = GzPose()
+        req.name = name
+        req.position.x = x
+        req.position.y = y
+        req.position.z = z
+        req.orientation.x = qx
+        req.orientation.y = qy
+        req.orientation.z = qz
+        req.orientation.w = qw
 
-        new_state.pose.orientation.x = qx
-        new_state.pose.orientation.y = qy
-        new_state.pose.orientation.z = qz
-        new_state.pose.orientation.w = qw
-
-        new_state.twist.linear.x = rt.vx
-        new_state.twist.linear.y = rt.vy
-        new_state.twist.linear.z = rt.vz
-        new_state.twist.angular.x = 0.0
-        new_state.twist.angular.y = 0.0
-        new_state.twist.angular.z = 0.0
-
-        req = SetEntityState.Request()
-        req.state = new_state
-
-        future = self.set_cli.call_async(req)
-        future.add_done_callback(lambda fut, name=bird.name: self.on_set_done(fut, name))
+        ok, _ = self.gz.request(self.set_service, req, GzPose, GzBoolean, 300)
+        if not ok:
+            c = self.set_fail_count.get(name, 0) + 1
+            self.set_fail_count[name] = c
+            if c % 20 == 1:
+                self.get_logger().warn(f'[{name}] gz set_pose failed')
+        else:
+            self.set_fail_count[name] = 0
 
     def apply_boundary_soft_push(self, pos, vel):
         x, y, z = pos
@@ -639,7 +575,7 @@ class BirdManager(Node):
         self.bird_pose_pub.publish(pose_msg)
 
     def publish_nearest_bird(self):
-        if not self.current_states:
+        if not self.birds:
             self.publish_detection(None)
             return
 
@@ -647,10 +583,7 @@ class BirdManager(Node):
         best_z = float('inf')
 
         for bird in self.birds:
-            if bird.name not in self.current_states:
-                continue
-            state = self.current_states[bird.name]
-            z = state.pose.position.z
+            z = self.pose[bird.name][2]
             if z < best_z:
                 best_z = z
                 best_name = bird.name
@@ -659,21 +592,7 @@ class BirdManager(Node):
             self.publish_detection(None)
             return
 
-        state = self.current_states[best_name]
-        pos = (
-            state.pose.position.x,
-            state.pose.position.y,
-            state.pose.position.z
-        )
-        self.publish_detection(pos)
-
-    def on_set_done(self, future, name):
-        try:
-            res = future.result()
-            if hasattr(res, 'success') and not res.success:
-                self.get_logger().warn(f'[{name}] set_entity_state failed')
-        except Exception as e:
-            self.get_logger().error(f'[{name}] set_entity_state exception: {e}')
+        self.publish_detection(self.pose[best_name])
 
 
 def main(args=None):

@@ -81,17 +81,7 @@ def launch_setup(context, *args, **kwargs):
         }.items(),
         condition=LaunchConfigurationEquals('use_localization', 'emcl')
     )
-    
-    # Get the path to the Cartographer parameter file
-    nav2_bringup_cartographer_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ugv_gazebo'), 'launch/nav_bringup', 'bringup_launch_cartographer.launch.py')),
-         launch_arguments={
-            'params_file': os.path.join(get_package_share_directory('ugv_gazebo'), 'param', 'emcl_dwa.yaml'),
-            'use_sim_time': use_sim_time
-        }.items(),
-        condition=LaunchConfigurationEquals('use_localization', 'cartographer')
-    )
-    
+
     # Create the RViz2 node
     rviz2_node = Node(
         package='rviz2',
@@ -118,7 +108,6 @@ def launch_setup(context, *args, **kwargs):
         nav2_bringup_amcl_launch,
         nav2_bringup_emcl_launch,
         emcl_launch,
-        nav2_bringup_cartographer_launch,
         rviz2_node,
         robot_pose_publisher_node
     ]

@@ -1,11 +1,10 @@
 #!/bin/bash
 # =============================================================
-# FSD_Vehicle 로컬 환경 설정 스크립트
+# ugv_hack 로컬 환경 설정 스크립트
 # 사용법: source setup_local_env.sh
 #
 # 이 스크립트는 워크스페이스 경로를 자동 감지하여
 # UGV_WS_PATH 환경변수를 설정합니다.
-# Docker가 아닌 로컬에서 직접 실행할 때 사용하세요.
 # =============================================================
 
 # 스크립트 위치 기반으로 워크스페이스 경로 자동 감지
@@ -27,7 +26,7 @@ fi
 export UGV_WS_PATH="${SCRIPT_DIR}"
 
 echo "============================================="
-echo " FSD_Vehicle 로컬 환경 설정 완료"
+echo " ugv_hack 로컬 환경 설정 완료"
 echo " UGV_WS_PATH = ${UGV_WS_PATH}"
 echo " UGV_MODEL   = ${UGV_MODEL:-not set}"
 echo " ROS_DOMAIN_ID = ${ROS_DOMAIN_ID:-0}"

@@ -39,23 +39,14 @@ def generate_launch_description():
         }],
         )
                 
-    # Create a Node object for the joint_state_publisher node
-    joint_state_publisher_node = Node(
-        package='joint_state_publisher',
-        executable='joint_state_publisher',
-        name='joint_state_publisher',
-        arguments=[urdf_model_path],
-        parameters=[{
-             'use_sim_time': use_sim_time
-        }],        
-        )       
-                
+    # NOTE: no joint_state_publisher node here — in gz the wheel joint states
+    # are produced by the model's JointStatePublisher system and bridged to
+    # /joint_states by ros_gz_bridge. Running a second publisher would clash.
+
     # Add the use_sim_time_arg to the LaunchDescription
-    ld.add_action(use_sim_time_arg)     
+    ld.add_action(use_sim_time_arg)
     # Add the robot_state_publisher_node to the LaunchDescription
-    ld.add_action(robot_state_publisher_node) 
-    # Add the joint_state_publisher_node to the LaunchDescription
-    ld.add_action(joint_state_publisher_node)
-    
+    ld.add_action(robot_state_publisher_node)
+
     # Return the LaunchDescription
     return ld

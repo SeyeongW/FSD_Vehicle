@@ -1,6 +1,6 @@
-# FSD_Vehicle 기술 연구일지
+# ugv_hack 기술 연구일지
 
-**프로젝트**: FSD_Vehicle — UGV 자율주행 플랫폼  
+**프로젝트**: ugv_hack — UGV 자율주행 플랫폼  
 **작성자**: SeyeongW  
 **작성일**: 2026-05-11  
 **대상 플랫폼**: UGV ROVER / UGV BEAST / RASP ROVER  
@@ -11,9 +11,8 @@
 ## 목차
 
 1. [개발 환경 구성](#1-개발-환경-구성)
-2. [Docker 환경 설계](#2-docker-환경-설계)
-3. [Unitree 4D LiDAR 탐지 기술](#3-unitree-4d-lidar-탐지-기술)
-4. [시스템 통합 구조](#4-시스템-통합-구조)
+2. [Unitree 4D LiDAR 탐지 기술](#2-unitree-4d-lidar-탐지-기술)
+3. [시스템 통합 구조](#3-시스템-통합-구조)
 
 ---
 
@@ -21,28 +20,22 @@
 
 ### 1.1 배경 및 목적
 
-UGV 자율주행 플랫폼을 개발하면서 가장 먼저 맞닥뜨린 문제는 **환경 일관성**이었다. ROS2 패키지는 의존성이 복잡하고, 팀원마다 PC 환경이 달라 "내 환경에서는 되는데 네 환경에서는 안 된다"는 상황이 빈번했다. 또한 실제 배포 대상인 Jetson Orin과 개발용 x86 PC는 아키텍처가 달라, 빌드 환경 자체를 분리해서 관리할 필요가 있었다.
+UGV 자율주행 플랫폼을 개발하면서 가장 먼저 맞닥뜨린 문제는 **환경 일관성**이었다. ROS2 패키지는 의존성이 복잡하고, 팀원마다 PC 환경이 달라 "내 환경에서는 되는데 네 환경에서는 안 된다"는 상황이 빈번했다. 개발과 검증은 Gazebo 시뮬레이션 환경에서 수행하는 것을 기본 방침으로 삼았다.
 
-이를 해결하기 위해 다음 세 가지 원칙을 세웠다.
+이를 해결하기 위해 다음 두 가지 원칙을 세웠다.
 
-- **재현 가능성**: Docker 이미지로 환경을 코드화하여 누구나 동일한 환경을 구축할 수 있게 한다
-- **멀티 플랫폼 지원**: x86_64 PC용 이미지와 ARM64 Jetson용 이미지를 별도로 관리한다
-- **중앙 집중 설정**: 하드웨어 모델명, 시리얼 포트 등 배포 환경마다 달라지는 값들은 `.env` 파일 하나에서 관리한다
+- **재현 가능한 빌드 절차**: 외부 SDK 다운로드부터 워크스페이스 빌드까지 스크립트로 코드화하여 누구나 동일한 절차로 환경을 구축할 수 있게 한다
+- **중앙 집중 설정**: 하드웨어 모델명, 시리얼 포트 등 실행 환경마다 달라지는 값들은 `.env` 파일 하나에서 관리한다
 
 ---
 
 ### 1.2 환경 변수 설계 (`.env`)
 
-모든 환경 의존적인 설정값은 프로젝트 루트의 `.env` 파일에 집중시켰다. Docker Compose가 이 파일을 자동으로 읽어 컨테이너에 전달하고, 로컬 실행 시에는 `setup_local_env.sh`가 동일한 파일을 로드한다.
+모든 환경 의존적인 설정값은 프로젝트 루트의 `.env` 파일에 집중시켰다. 로컬 실행 시 `setup_local_env.sh`가 이 파일을 로드한다.
 
 ```bash
 # 주요 설정값
-COMPOSE_PROJECT_NAME=fsd_vehicle
-IMAGE_NAME=fsd-vehicle
-CONTAINER_NAME=fsd_dev
-
 UGV_MODEL=ugv_rover          # ugv_rover | ugv_beast | rasp_rover
-SERIAL_PORT_JETSON=/dev/ttyTHS1
 SERIAL_PORT_PC=/dev/ttyUSB0
 VIDEO_DEVICE=/dev/video0
 ROS_DOMAIN_ID=0
@@ -50,7 +43,7 @@ ROS_DOMAIN_ID=0
 
 이렇게 하면 새로운 하드웨어 모델을 추가하거나 시리얼 포트가 바뀌더라도 `.env` 파일 한 줄만 수정하면 된다. Launch 파일이나 소스코드를 직접 수정할 필요가 없다.
 
-**로컬 실행 지원**: Docker 없이 직접 ROS2를 실행하는 경우를 위해 `setup_local_env.sh`를 별도로 작성했다. 이 스크립트는 자신의 위치를 기반으로 `UGV_WS_PATH`를 자동 감지하기 때문에, 팀원마다 워크스페이스 경로가 달라도 문제없이 동작한다.
+**워크스페이스 경로 자동 감지**: `setup_local_env.sh`는 자신의 위치를 기반으로 `UGV_WS_PATH`를 자동 감지하기 때문에, 팀원마다 워크스페이스 경로가 달라도 문제없이 동작한다.
 
 ```bash
 source setup_local_env.sh   # 워크스페이스 루트에서 1회 실행
@@ -86,172 +79,11 @@ SDK 디렉토리가 이미 존재하는지 먼저 확인하기 때문에, 스크
 
 AprilTag는 C 라이브러리를 먼저 시스템에 설치해야 ROS2 wrapper가 빌드된다. 이 절차가 다른 패키지 빌드와 순서가 엄격하여 별도 스크립트로 분리했다.
 
-#### 크로스 플랫폼 지원
-
-Windows 환경에서도 동일한 명령을 사용할 수 있도록 `.bat` 파일을 함께 제공했다.
-
-| 명령 | Linux/macOS | Windows |
-|------|-------------|----------|
-| 이미지 빌드 | `make build_pc` | `build_pc.bat` |
-| 컨테이너 실행 | `make run_pc` | `run_pc.bat` |
-
 ---
 
-## 2. Docker 환경 설계
+## 2. Unitree 4D LiDAR 탐지 기술
 
-### 2.1 이중 이미지 전략 (Dual-Image Strategy)
-
-개발 단계와 배포 단계의 요구사항이 다르기 때문에, 이미지를 두 개로 분리하는 전략을 선택했다.
-
-```
-개발 (PC / x86_64)                 배포 (Jetson / ARM64)
-─────────────────────────────      ─────────────────────────────
-osrf/ros:humble-desktop-full  →   dustynv/ros:humble-desktop-l4t-r36.4.0
-PyTorch CPU (개발/시뮬레이션)       PyTorch + CUDA (기본 포함)
-Gazebo 시뮬레이터 포함              Gazebo 제외 (실물 로봇 전용)
-OpenCV, MediaPipe 포함              Livox SDK2 이미지 내 빌드
-```
-
-PC 이미지는 시뮬레이션 환경(Gazebo)과 GUI 도구가 포함되어 개발과 디버깅에 최적화되어 있다. Jetson 이미지는 실제 하드웨어 배포를 위해 CUDA를 활용한 AI 추론에 집중하고, 불필요한 Gazebo를 제외하여 이미지 크기와 메모리 사용량을 줄였다.
-
----
-
-### 2.2 PC Dockerfile (`docker/Dockerfile`)
-
-베이스 이미지로 `osrf/ros:humble-desktop-full`을 선택했다. ROS2 Humble의 공식 이미지로, 신뢰성이 높고 RViz 등 GUI 도구가 포함되어 있다.
-
-**레이어 구성 설계**
-
-Docker 이미지는 레이어 캐시를 활용하기 위해 변경 빈도가 낮은 것부터 높은 것 순으로 레이어를 구성했다.
-
-```dockerfile
-# 레이어 1: 기본 시스템 도구 (가장 안정적)
-RUN apt-get install -y \
-    python3.10 python3.10-dev cmake build-essential ninja-build \
-    libssl-dev libusb-1.0-0-dev libopencv-dev \
-    # Cartographer 의존성
-    liblua5.3-dev libgoogle-glog-dev libeigen3-dev libceres-dev ...
-
-# 레이어 2: ROS2 Humble 확장 패키지
-RUN apt-get install -y \
-    ros-humble-navigation2 ros-humble-nav2-bringup \
-    ros-humble-slam-toolbox ros-humble-cartographer-ros \
-    ros-humble-gazebo-ros-pkgs ros-humble-gazebo-ros2-control \
-    ros-humble-rtabmap-ros ros-humble-realsense2-camera \
-    ros-humble-robot-localization ros-humble-pcl-ros ...
-
-# 레이어 3: Python ML 패키지 (버전 고정)
-RUN pip3 install pyserial==3.5 flask==3.0.3 numpy==1.26.4 scikit-learn
-RUN pip3 install mediapipe==0.10.14
-RUN pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-RUN pip3 install ultralytics
-```
-
-NumPy 버전을 `1.26.4`로 고정한 것은 scikit-learn과의 ABI 호환성을 위해서다. PyTorch는 PC 개발 환경에서 CUDA 불필요하므로 CPU 버전을 설치하여 이미지 크기를 크게 줄였다 (GPU 버전 대비 약 4GB 절약).
-
-**sympy 충돌 처리**
-
-ROS2 기본 이미지의 시스템 sympy와 pip sympy 간 distutils 충돌이 발생하는 문제가 있었다. `--ignore-installed` 플래그로 pip 버전을 강제 설치하여 해결했다.
-
----
-
-### 2.3 Jetson Dockerfile (`docker/Dockerfile.jetson`)
-
-Jetson 환경에서는 Livox SDK2를 이미지 빌드 시점에 컴파일해서 포함시켰다. PC 환경에서는 `build_first.sh`가 런타임에 SDK를 다운로드하지만, Jetson은 네트워크 환경이 불안정한 현장 배포를 고려해 이미지 자체에 포함시키는 방식을 택했다.
-
-```dockerfile
-# Livox SDK2 이미지 내 컴파일
-RUN git clone https://github.com/Livox-SDK/Livox-SDK2.git /tmp/Livox-SDK2 \
-    && cd /tmp/Livox-SDK2 \
-    && mkdir build && cd build \
-    && cmake .. -DCMAKE_BUILD_TYPE=Release \
-    && make -j$(nproc) && make install \
-    && ldconfig \
-    && rm -rf /tmp/Livox-SDK2    # 빌드 소스 제거로 이미지 크기 절약
-```
-
-**ARM64 APT 소스 재구성 문제**
-
-`dustynv` 베이스 이미지는 L4T(Linux for Tegra) 전용 APT 소스만 포함하고 있어, 일반 Ubuntu 패키지 설치 시 `404 Not Found` 오류가 발생했다. ARM64용 Ubuntu 포트 저장소를 수동으로 추가하고 ROS2 GPG 키를 재등록하는 방식으로 해결했다.
-
-```dockerfile
-RUN rm -f /etc/apt/sources.list.d/ros2* && \
-    echo "deb http://ports.ubuntu.com/ubuntu-ports jammy universe multiverse" \
-    >> /etc/apt/sources.list
-```
-
----
-
-### 2.4 Docker Compose 설정
-
-#### PC 환경 (`docker-compose.yml`)
-
-개발 환경에서는 RViz와 Gazebo 등 GUI 애플리케이션을 사용해야 하기 때문에 X11 소켓을 컨테이너에 마운트했다.
-
-```yaml
-services:
-  fsd-dev:
-    environment:
-      - DISPLAY=${DISPLAY}
-      - QT_X11_NO_MITSHM=1
-    volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw   # X11 GUI 지원
-      - .:/ros2_ws/ugv_ws                  # 소스코드 실시간 반영
-      - ${HOME}/.gazebo:/root/.gazebo      # Gazebo 모델 캐시
-    network_mode: host      # ROS2 DDS 멀티캐스트를 위해 host 네트워크 사용
-    privileged: true        # 하드웨어 직접 접근
-```
-
-`network_mode: host`를 사용한 이유는 ROS2의 DDS(Data Distribution Service) 통신이 UDP 멀티캐스트를 사용하기 때문이다. NAT 없이 호스트 네트워크를 직접 공유해야 노드 간 자동 탐색이 정상 동작한다.
-
-소스코드 디렉토리를 bind mount로 연결했기 때문에, 호스트에서 코드를 수정하면 컨테이너 내부에서 즉시 반영된다. `--symlink-install`로 빌드된 패키지는 재빌드 없이 변경사항이 적용된다.
-
-#### Jetson 배포 환경 (`docker-compose.jetson.yml`)
-
-실제 하드웨어가 연결되는 Jetson에서는 센서 디바이스 파일 접근이 핵심이다.
-
-```yaml
-services:
-  fsd-jetson:
-    runtime: nvidia                           # CUDA 활성화
-    restart: unless-stopped                   # 재부팅 시 자동 시작
-    volumes:
-      - /dev:/dev                             # 전체 디바이스 마운트
-      - /run/udev:/run/udev:ro                # udev 핫플러그 감지
-    devices:
-      - ${SERIAL_PORT_JETSON}:${SERIAL_PORT_JETSON}   # 직렬 통신 (모터 컨트롤러)
-      - ${VIDEO_DEVICE}:${VIDEO_DEVICE}               # 카메라
-      - /dev/snd:/dev/snd                             # 오디오
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all,compute,video
-```
-
-`restart: unless-stopped` 정책으로 Jetson이 재부팅되면 컨테이너가 자동으로 재시작되도록 했다. 이를 통해 현장 배포 후 전원이 꺼졌다 켜지더라도 별도 조작 없이 시스템이 복구된다.
-
----
-
-### 2.5 컨테이너 관리 스크립트
-
-매번 긴 `docker compose` 명령을 입력하는 불편함을 줄이기 위해 `docker/run.sh` 래퍼 스크립트를 작성했다.
-
-```bash
-bash docker/run.sh pc           # PC 컨테이너 시작 및 접속
-bash docker/run.sh jetson       # Jetson 컨테이너 시작 및 접속
-bash docker/run.sh stop         # 모든 컨테이너 정지
-bash docker/run.sh build-pc     # PC 이미지만 빌드
-bash docker/run.sh build-jetson # Jetson 이미지만 빌드
-```
-
-스크립트는 실행 전 X11 xhost 설정을 자동으로 처리하고, 디바이스 파일의 존재 여부를 확인한 뒤 컨테이너를 시작한다.
-
-`docker/entrypoint.sh`는 컨테이너 진입 시 ROS2 환경을 자동으로 소싱하고, 워크스페이스가 아직 빌드되지 않은 경우 빌드 방법을 안내하는 메시지를 출력한다.
-
----
-
-## 3. Unitree 4D LiDAR 탐지 기술
-
-### 3.1 센서 선정 배경
+### 2.1 센서 선정 배경
 
 UGV의 주변 환경을 인식하기 위한 센서를 검토하면서 **Unitree 4D LiDAR**를 선택했다. 기존 2D LiDAR는 단일 평면만 스캔하기 때문에 높이 정보가 없어 장애물 높이를 구분할 수 없다는 한계가 있었다. Unitree의 4D LiDAR는 공간 3차원(X, Y, Z) 좌표에 반사 강도(Intensity)까지 포함한 4차원 데이터를 실시간으로 제공한다. 이를 통해 입체적인 장애물 인식과 객체 구분이 가능하다.
 
@@ -267,7 +99,7 @@ cmake .. && make -j$(nproc) && sudo make install
 
 ---
 
-### 3.2 기본 탐지 노드: `ugv_lidar_detection`
+### 2.2 기본 탐지 노드: `ugv_lidar_detection`
 
 #### 설계 목적
 
@@ -322,7 +154,7 @@ parameters=[
 
 ---
 
-### 3.3 시계열 트래킹 노드: `pcd_cluster_pkg`
+### 2.3 시계열 트래킹 노드: `pcd_cluster_pkg`
 
 #### 설계 목적
 
@@ -415,7 +247,7 @@ cmd.angular.z = angular_gain(1.5) * target_angle  # ±1.2 rad/s 클램핑
 
 ---
 
-### 3.4 운동 상태 시각화
+### 2.4 운동 상태 시각화
 
 추적 중인 물체의 상태를 RViz에서 색상으로 구분하여 직관적으로 확인할 수 있게 했다.
 
@@ -430,7 +262,7 @@ cmd.angular.z = angular_gain(1.5) * target_angle  # ±1.2 rad/s 클램핑
 
 ---
 
-### 3.5 지면 분리: `plane_fit_pkg`
+### 2.5 지면 분리: `plane_fit_pkg`
 
 #### 설계 목적
 
@@ -495,7 +327,7 @@ plane_ls = self.kalman.update(plane_ls_raw)
 
 ---
 
-### 3.6 포인트 클라우드→LaserScan 변환: `pcd_to_scan_pkg`
+### 2.6 포인트 클라우드→LaserScan 변환: `pcd_to_scan_pkg`
 
 4D LiDAR의 3D 포인트 클라우드를 2D `LaserScan`으로 변환하는 노드다. Nav2의 일부 플래너나 SLAM 알고리즘은 2D 레이저 스캔만 입력으로 받기 때문에, 3D 포인트 클라우드를 2D로 투영하는 변환 레이어가 필요하다.
 
@@ -503,9 +335,9 @@ plane_ls = self.kalman.update(plane_ls_raw)
 
 ---
 
-## 4. 시스템 통합 구조
+## 3. 시스템 통합 구조
 
-### 4.1 ROS2 토픽 흐름도
+### 3.1 ROS2 토픽 흐름도
 
 ```
 [Unitree 4D LiDAR 드라이버]
@@ -542,7 +374,7 @@ plane_ls = self.kalman.update(plane_ls_raw)
        [RViz + 로봇 제어]
 ```
 
-### 4.2 패키지 구성 요약
+### 3.2 패키지 구성 요약
 
 | 패키지 | 역할 | 입력 토픽 | 출력 토픽 |
 |--------|------|-----------|----------|
@@ -551,7 +383,7 @@ plane_ls = self.kalman.update(plane_ls_raw)
 | `plane_fit_pkg` | RANSAC 지면 분리 + Kalman 안정화 | `/mid360_PointCloud2` | `/plane_fit/markers` |
 | `pcd_to_scan_pkg` | 포인트 클라우드→2D LaserScan 변환 | PointCloud2 | `LaserScan` |
 
-### 4.3 주요 파라미터 요약
+### 3.3 주요 파라미터 요약
 
 | 항목 | 값 | 위치 |
 |------|----|------|
@@ -569,4 +401,4 @@ plane_ls = self.kalman.update(plane_ls_raw)
 
 ---
 
-*본 연구일지는 FSD_Vehicle 프로젝트의 개발 환경 구성 및 Unitree 4D LiDAR 탐지 기술 구현 내용을 기록한 문서입니다.*
+*본 연구일지는 ugv_hack 프로젝트의 개발 환경 구성 및 Unitree 4D LiDAR 탐지 기술 구현 내용을 기록한 문서입니다.*

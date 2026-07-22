@@ -9,9 +9,9 @@ cd "$WS_ROOT"
 source /opt/ros/humble/setup.bash
 
 # 기존 빌드 캐시가 다른 경로에서 만들어졌으면 자동 삭제
-if [ -f "build/apriltag/CMakeCache.txt" ]; then
-    CACHED_PATH=$(grep "CMAKE_CACHEFILE_DIR" build/apriltag/CMakeCache.txt 2>/dev/null | cut -d= -f2)
-    if [ "$CACHED_PATH" != "$WS_ROOT/build/apriltag" ]; then
+if [ -f "build/costmap_converter/CMakeCache.txt" ]; then
+    CACHED_PATH=$(grep "CMAKE_CACHEFILE_DIR" build/costmap_converter/CMakeCache.txt 2>/dev/null | cut -d= -f2)
+    if [ "$CACHED_PATH" != "$WS_ROOT/build/costmap_converter" ]; then
         echo "[build_first] 경로 불일치 감지 → build/ install/ log/ 삭제 중..."
         rm -rf build/ install/ log/
     fi
@@ -29,17 +29,6 @@ if [ ! -d "Livox-SDK2" ]; then
     cd "$WS_ROOT/src"
 fi
 
-if [ ! -d "unilidar_sdk" ]; then
-    echo ">> Cloning unilidar_sdk (Unitree L1 4D LiDAR ROS2 driver)..."
-    # L1 = unilidar_sdk (L2는 unilidar_sdk2). ROS2 패키지 CMakeLists가
-    # ../../../unitree_lidar_sdk/lib/${CMAKE_SYSTEM_PROCESSOR} 의 프리컴파일
-    # 정적 라이브러리를 직접 링크하므로 별도 make install 불필요.
-    # arm64(Pi 5)는 lib/aarch64 가 포함되어 있음.
-    git clone https://github.com/unitreerobotics/unilidar_sdk.git
-    # 같은 repo 안의 ROS1 패키지는 colcon 빌드에서 제외 (ROS2 워크스페이스 충돌 방지)
-    touch unilidar_sdk/unitree_lidar_ros/COLCON_IGNORE
-fi
-
 if [ ! -d "livox_ros_driver2" ]; then
     echo ">> Cloning livox_ros_driver2..."
     git clone https://github.com/Livox-SDK/livox_ros_driver2.git
@@ -54,26 +43,18 @@ cd "$WS_ROOT"
 
 # 1. 외부 패키지 빌드 (ugv_else, livox 등)
 colcon build --packages-select \
-    apriltag apriltag_msgs apriltag_ros \
-    cartographer \
     costmap_converter_msgs costmap_converter \
     emcl2 \
-    explore_lite \
-    openslam_gmapping slam_gmapping \
     ldlidar \
-    rf2o_laser_odometry \
     robot_pose_publisher \
     teb_msgs teb_local_planner \
-    vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server \
     ros2_livox_simulation livox_ros_driver2 \
-    unitree_lidar_ros2 \
     ugv_base_node ugv_interface \
     --cmake-args -DHUMBLE_ROS=humble
 
 # 2. 메인 패키지 빌드
 colcon build --packages-select \
-    ugv_bringup ugv_chat_ai ugv_description ugv_gazebo \
-    ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app ugv_lidar_detection \
+    ugv_description ugv_gazebo \
     livox_ros_driver2 livox_laser_simulation_RO2 \
     --symlink-install
 
