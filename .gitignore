@@ -15,7 +15,7 @@ __pycache__/
 .Python
 
 # 에디터
-.vscode/settings.json
+.vscode/
 .idea/
 *.swp
 *.swo
@@ -39,4 +39,7 @@ map_points.txt
 
 # Gazebo 임시 파일
 .gazebo/
+
+# 모델 가중치 (별도 저장소에서 관리)
+*.pt
 

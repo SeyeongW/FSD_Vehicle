@@ -29,6 +29,7 @@ import numpy as np
 import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
+from rclpy.time import Time
 
 from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import OccupancyGrid
@@ -36,6 +37,22 @@ from sensor_msgs.msg import PointCloud2, LaserScan
 from sensor_msgs_py import point_cloud2
 
 from tf2_ros import Buffer, TransformException, TransformListener
+
+
+def _fast_read_xyz(msg: PointCloud2) -> np.ndarray:
+    """point_step=12(x,y,z float32)일 때 numpy.frombuffer로 벡터화 파싱.
+    point_cloud2.read_points()를 파이썬 루프(리스트 컴프리헨션)로 돌리면 대량
+    포인트클라우드(수만 개, 초당 여러 번)에서 CPU를 과도하게 먹어 시스템 전체
+    TF 발행이 밀림. 비표준 레이아웃이면 안전하게 느린 경로로 폴백."""
+    if msg.point_step != 12 or len(msg.data) % 12 != 0:
+        pts = np.array(list(point_cloud2.read_points(msg, field_names=('x', 'y', 'z'), skip_nans=True)))
+        if pts.size == 0:
+            return np.empty((0, 3), dtype=np.float32)
+        return np.stack([pts['x'], pts['y'], pts['z']], axis=-1)
+
+    arr = np.frombuffer(msg.data, dtype=np.float32).reshape(-1, 3)
+    valid = ~np.isnan(arr).any(axis=1)
+    return arr[valid]
 
 
 def quaternion_to_rotation_matrix(x: float, y: float, z: float, w: float) -> np.ndarray:
@@ -193,7 +210,7 @@ class PointCloudToScanAndMapNode(Node):
                 f'cells={self.width_cells} x {self.height_cells}'
             )
 
-    def lookup_transform_matrix(self, target_frame: str, source_frame: str) -> Optional[np.ndarray]:
+    def lookup_transform_matrix(self, target_frame: str, source_frame: str, stamp) -> Optional[np.ndarray]:
         if target_frame == source_frame:
             return np.eye(4, dtype=np.float32)
 
@@ -201,7 +218,7 @@ class PointCloudToScanAndMapNode(Node):
             tf_msg = self.tf_buffer.lookup_transform(
                 target_frame,
                 source_frame,
-                rclpy.time.Time(),
+                stamp,
                 timeout=Duration(seconds=0.2)
             )
             return transform_to_matrix(tf_msg)
@@ -226,19 +243,18 @@ class PointCloudToScanAndMapNode(Node):
             )
             return
 
-        # source_frame -> scan_frame 변환
-        tf_scan_from_source = self.lookup_transform_matrix(self.scan_frame, source_frame)
+        # source_frame -> scan_frame 변환. 이 콜백 안에서 나오는 모든 TF 조회는 반드시
+        # 이 포인트클라우드의 캡처 시각(msg.header.stamp)으로 고정해서 써야 한다 — "최신
+        # TF"(Time())로 각각 따로 조회하면, update_projected_map()의 역방향 왕복 변환
+        # (scan_frame->target_frame)이 그 사이 도착한 새 odom 샘플과 섞여 서로 다른 로봇
+        # 자세를 기준으로 계산되고, 왕복이 상쇄되지 않아 회전 중 오차가 커진다.
+        cloud_stamp = Time.from_msg(msg.header.stamp)
+        tf_scan_from_source = self.lookup_transform_matrix(self.scan_frame, source_frame, cloud_stamp)
         if tf_scan_from_source is None:
             return
 
         try:
-            pts_iter = point_cloud2.read_points(
-                msg,
-                field_names=('x', 'y', 'z'),
-                skip_nans=True
-            )
-
-            points = np.array([[p[0], p[1], p[2]] for p in pts_iter], dtype=np.float32)
+            points = _fast_read_xyz(msg)
 
             if points.size == 0:
                 return
@@ -280,7 +296,7 @@ class PointCloudToScanAndMapNode(Node):
                 self.publish_scan(points_scan, msg.header.stamp)
 
             if self.enable_map:
-                self.update_projected_map(points_scan)
+                self.update_projected_map(points_scan, cloud_stamp)
 
         except Exception as ex:
             self.get_logger().error(f'Failed to process point cloud: {ex}')
@@ -361,9 +377,9 @@ class PointCloudToScanAndMapNode(Node):
 
         self.scan_pub.publish(scan_msg)
 
-    def update_projected_map(self, points_scan: np.ndarray):
-        # scan_frame -> target_frame 변환
-        tf_target_from_scan = self.lookup_transform_matrix(self.target_frame, self.scan_frame)
+    def update_projected_map(self, points_scan: np.ndarray, stamp):
+        # scan_frame -> target_frame 변환 (cloud_callback과 동일한 stamp 사용 — 위 주석 참고)
+        tf_target_from_scan = self.lookup_transform_matrix(self.target_frame, self.scan_frame, stamp)
 
         if tf_target_from_scan is None:
             return

@@ -1,3 +1,21 @@
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: True
+    smoothing_frequency: 20.0
+    scale_velocities: False
+    feedback: "OPEN_LOOP"
+    # 여기 theta 상한은 TEB 주행중 회전(0.8)이 아니라 제자리 회전
+    # (rotate_to_heading_angular_vel=1.5, 더 큼)에 맞춘다 — 안 그러면
+    # 제자리 회전이 다시 여기서 clamp돼버림
+    max_velocity: [1.0, 0.0, 1.5]
+    min_velocity: [-1.0, 0.0, -1.5]
+    max_accel: [2.5, 0.0, 1.5]
+    max_decel: [-2.5, 0.0, -1.5]
+    odom_topic: "odom"
+    odom_duration: 0.1
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0
+
 amcl:
   ros__parameters:
     use_sim_time: True
@@ -133,10 +151,12 @@ controller_server:
     FollowPath:
       plugin: "nav2_rotation_shim_controller::RotationShimController"
       primary_controller: "teb_local_planner::TebLocalPlannerROS"
-      angular_dist_threshold: 0.785
+      # 45도(0.785)만 넘어도 무조건 멈춰서 제자리 회전부터 하던 걸 완화 —
+      # 거의 반대 방향(114도)일 때만 제자리 회전, 그 외엔 TEB가 회전+전진을 섞어서 처리
+      angular_dist_threshold: 2.0
       forward_sampling_distance: 0.5
-      rotate_to_heading_angular_vel: 1.8
-      max_angular_accel: 3.2
+      rotate_to_heading_angular_vel: 1.5
+      max_angular_accel: 1.5
       simulate_ahead_time: 1.0
       footprint_model.type: circular
       footprint_model.radius: 0.1
@@ -153,10 +173,13 @@ controller_server:
       max_samples: 20
       max_global_plan_lookahead_dist: 1.0
       visualize_hc_graph: True
-      max_vel_x: 0.26
-      max_vel_theta: 1.0
+      max_vel_x: 1.0
+      max_vel_theta: 0.8
       acc_lim_x: 2.5
-      acc_lim_theta: 3.2
+      acc_lim_theta: 1.5
+      # 후진 억제 — 기본값이 약해서 웨이포인트 목표 yaw를 맞출 때 후진을
+      # "효율적"이라고 판단해버림. 크게 키워서 후진에 강한 벌점을 줌.
+      weight_kinematics_forward_drive: 1000.0
 
 local_costmap:
   local_costmap:

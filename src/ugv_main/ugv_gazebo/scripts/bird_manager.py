@@ -30,27 +30,24 @@ class BirdManager(Node):
 
     BIRD_NAME = 'bird_single'
 
-    # 원형 비행 파라미터
-    CIRCLE_RADIUS  = 5.0    # m
-    CIRCLE_SPEED   = 0.18   # rad/s  → 한 바퀴 ≈ 35s
-    Z_CENTER       = 3.5    # m  — 최저 3.0m, 최고 4.0m
-    Z_AMP          = 0.5    # m  — 고도 진동 진폭 (Z_CENTER ± Z_AMP)
-    MODEL_YAW_OFF  = math.pi / 2.0   # 모델 기본 방향 오프셋
+    # 랜덤 방향전환 비행 파라미터
+    FLIGHT_SPEED     = 1.2   # m/s — 목표점을 향한 이동 속도
+    WAYPOINT_RADIUS  = 0.5   # m  — 이 거리 이내로 도달하면 새 목표점 재선정
+    MODEL_YAW_OFF    = math.pi / 2.0   # 모델 기본 방향 오프셋
 
-    # 맵 바운더리 (내부 여유 포함)
-    X_MIN, X_MAX = -6.5, 6.5
-    Y_MIN, Y_MAX = -6.5, 6.5
+    # 맵 바운더리 (20x20 방, 내부 여유 포함) — 목표점은 이 범위 안에서만 랜덤 선정
+    X_MIN, X_MAX = -9.0, 9.0
+    Y_MIN, Y_MAX = -9.0, 9.0
+    # ground_z_limit(2.1m) 위, 벽 높이(2m)보다 확실히 높은 고도대
+    Z_MIN, Z_MAX = 2.5, 5.0
 
     def __init__(self):
         super().__init__('bird_manager')
 
         # 비행 속도 파라미터 (launch argument로 주입 가능)
-        self.declare_parameter('circle_speed', self.CIRCLE_SPEED)
-        self.CIRCLE_SPEED = self.get_parameter('circle_speed').value
-        self.get_logger().info(
-            f'[bird_manager] circle_speed={self.CIRCLE_SPEED:.3f} rad/s '
-            f'(접선속도 {self.CIRCLE_RADIUS * self.CIRCLE_SPEED:.2f} m/s)'
-        )
+        self.declare_parameter('flight_speed', self.FLIGHT_SPEED)
+        self.FLIGHT_SPEED = self.get_parameter('flight_speed').value
+        self.get_logger().info(f'[bird_manager] flight_speed={self.FLIGHT_SPEED:.3f} m/s (랜덤 방향전환 비행)')
 
         pkg_share = get_package_share_directory('ugv_gazebo')
         sdf_path = os.path.join(pkg_share, 'models', 'bird', 'model.sdf')
@@ -58,8 +55,10 @@ class BirdManager(Node):
             self.bird_sdf = f.read()
 
         self.bird_spawned = False
-        self.circle_angle = 0.0     # 현재 원 위 각도 (rad)
-        self._anim_timer  = None    # 비행 애니메이션 타이머
+        self.pos    = [0.0, 0.0, 0.0]   # 현재 위치 (world)
+        self.target = [0.0, 0.0, 0.0]   # 현재 목표점 (world)
+        self.yaw    = 0.0
+        self._anim_timer = None    # 비행 애니메이션 타이머
 
         # ── 서비스 클라이언트 ──────────────────────────────────────
         self.spawn_cli  = self.create_client(SpawnEntity,  '/spawn_entity')
@@ -69,16 +68,16 @@ class BirdManager(Node):
         self.spawn_cli.wait_for_service(timeout_sec=15.0)
         self.delete_cli.wait_for_service(timeout_sec=15.0)
 
-        # SetEntityState: /set_entity_state 또는 /gazebo/set_entity_state
-        self.set_cli = None
-        for svc_name in ['/set_entity_state', '/gazebo/set_entity_state']:
-            cli = self.create_client(SetEntityState, svc_name)
-            if cli.wait_for_service(timeout_sec=3.0):
-                self.set_cli = cli
-                self.get_logger().info(f'SetEntityState ready: {svc_name}')
-                break
-        if self.set_cli is None:
-            self.get_logger().error('SetEntityState service not found — bird will not move!')
+        # SetEntityState: 클라이언트는 서비스가 아직 안 떠 있어도 즉시 생성 가능하고
+        # ROS2가 알아서 나중에 자동으로 연결해준다(DDS discovery). wait_for_service로
+        # 한 번 확인해서 실패하면 self.set_cli를 영영 None으로 남기던 예전 방식은
+        # 시스템이 느려서 시작 시점에 gzserver의 상태 서비스가 아직 준비 안 됐을 때
+        # (오늘 계속 겪은 문제) 그 세션 내내 새가 스폰만 되고 절대 안 움직이는 버그였다.
+        self.set_cli = self.create_client(SetEntityState, '/set_entity_state')
+        if not self.set_cli.wait_for_service(timeout_sec=10.0):
+            self.get_logger().warn(
+                '/set_entity_state 서비스가 아직 안 떠 있음 — 준비되는 대로 자동 연결됨'
+            )
 
         # ── 퍼블리셔 / 서브스크라이버 ─────────────────────────────
         self.bird_pose_pub    = self.create_publisher(PoseStamped, '/bird/nearest_pose', 10)
@@ -90,8 +89,15 @@ class BirdManager(Node):
 
         self.get_logger().info(
             'bird_manager ready. '
-            '"bird_in" → 스폰 + 원형 비행 시작  |  "bird_out" → 제거'
+            '"bird_in" → 스폰 + 랜덤 방향전환 비행 시작  |  "bird_out" → 제거'
         )
+
+    def _random_point(self):
+        return [
+            random.uniform(self.X_MIN, self.X_MAX),
+            random.uniform(self.Y_MIN, self.Y_MAX),
+            random.uniform(self.Z_MIN, self.Z_MAX),
+        ]
 
     # ------------------------------------------------------------------ #
     #  명령 처리
@@ -113,28 +119,25 @@ class BirdManager(Node):
     #  스폰
     # ------------------------------------------------------------------ #
     def _spawn_bird(self):
-        # 랜덤 진입 각도
-        self.circle_angle = random.uniform(0.0, 2.0 * math.pi)
-        x = self.CIRCLE_RADIUS * math.cos(self.circle_angle)
-        y = self.CIRCLE_RADIUS * math.sin(self.circle_angle)
-        z = self.Z_CENTER
+        self.pos    = self._random_point()
+        self.target = self._random_point()
 
         req = SpawnEntity.Request()
         req.name            = self.BIRD_NAME
         req.xml             = self.bird_sdf
         req.reference_frame = 'world'
         pose = Pose()
-        pose.position.x = float(x)
-        pose.position.y = float(y)
-        pose.position.z = float(z)
+        pose.position.x = float(self.pos[0])
+        pose.position.y = float(self.pos[1])
+        pose.position.z = float(self.pos[2])
         pose.orientation.w = 1.0
         req.initial_pose = pose
 
         future = self.spawn_cli.call_async(req)
         future.add_done_callback(self._on_spawn_done)
         self.get_logger().info(
-            f'[CMD] bird_in — spawning at ({x:.2f}, {y:.2f}, {z:.2f}), '
-            f'angle={math.degrees(self.circle_angle):.1f}°'
+            f'[CMD] bird_in — spawning at ({self.pos[0]:.2f}, {self.pos[1]:.2f}, {self.pos[2]:.2f}), '
+            f'target=({self.target[0]:.2f}, {self.target[1]:.2f}, {self.target[2]:.2f})'
         )
 
     def _on_spawn_done(self, future):
@@ -146,7 +149,7 @@ class BirdManager(Node):
 
         if res.success:
             self.bird_spawned = True
-            self.get_logger().info('Bird spawned — starting circular flight.')
+            self.get_logger().info('Bird spawned — starting random-direction flight.')
             self._anim_timer = self.create_timer(0.05, self._animate_bird)
         else:
             self.get_logger().error(f'Spawn rejected: {res.status_message}')
@@ -179,51 +182,59 @@ class BirdManager(Node):
             self.get_logger().error(f'Delete rejected: {res.status_message}')
 
     # ------------------------------------------------------------------ #
-    #  원형 비행 애니메이션
+    #  랜덤 방향전환 비행 애니메이션
     # ------------------------------------------------------------------ #
     def _animate_bird(self):
-        if not self.bird_spawned or self.set_cli is None:
+        if not self.bird_spawned:
             return
 
         dt = 0.05  # 타이머 주기와 일치
 
-        self.circle_angle += self.CIRCLE_SPEED * dt
-        if self.circle_angle > 2.0 * math.pi:
-            self.circle_angle -= 2.0 * math.pi
+        dx = self.target[0] - self.pos[0]
+        dy = self.target[1] - self.pos[1]
+        dz = self.target[2] - self.pos[2]
+        dist = math.sqrt(dx * dx + dy * dy + dz * dz)
 
-        θ = self.circle_angle
-        x = self.CIRCLE_RADIUS * math.cos(θ)
-        y = self.CIRCLE_RADIUS * math.sin(θ)
-        z = self.Z_CENTER + self.Z_AMP * math.sin(θ * 2.0)
+        if dist < self.WAYPOINT_RADIUS:
+            # 목표점 도달 → 새 목표점 재선정 (랜덤 방향 전환)
+            self.target = self._random_point()
+            dx = self.target[0] - self.pos[0]
+            dy = self.target[1] - self.pos[1]
+            dz = self.target[2] - self.pos[2]
+            dist = math.sqrt(dx * dx + dy * dy + dz * dz)
 
-        # 속도 방향(CCW): (-sin θ, cos θ)
-        # 기체 yaw = θ + π/2 + 모델오프셋
-        yaw = θ + math.pi / 2.0 + self.MODEL_YAW_OFF
-        pitch = math.atan2(
-            self.Z_AMP * 2.0 * math.cos(θ * 2.0) * self.CIRCLE_SPEED,
-            self.CIRCLE_RADIUS * self.CIRCLE_SPEED
-        )
-        pitch = max(-0.2, min(0.2, pitch))
+        step = min(self.FLIGHT_SPEED * dt, dist) if dist > 1e-6 else 0.0
+        ux, uy, uz = (dx / dist, dy / dist, dz / dist) if dist > 1e-6 else (0.0, 0.0, 0.0)
+
+        self.pos[0] += ux * step
+        self.pos[1] += uy * step
+        self.pos[2] += uz * step
+
+        vx, vy, vz = ux * self.FLIGHT_SPEED, uy * self.FLIGHT_SPEED, uz * self.FLIGHT_SPEED
+
+        # 기체 방향 = 이동 방향
+        horiz = math.sqrt(vx * vx + vy * vy)
+        yaw = math.atan2(vy, vx) + self.MODEL_YAW_OFF
+        pitch = math.atan2(vz, horiz) if horiz > 1e-6 else 0.0
+        pitch = max(-0.3, min(0.3, pitch))
+        self.yaw = yaw
 
         qx, qy, qz, qw = _euler_to_quat(0.0, -pitch, yaw)
 
         state = EntityState()
         state.name            = self.BIRD_NAME
         state.reference_frame = 'world'
-        state.pose.position.x = x
-        state.pose.position.y = y
-        state.pose.position.z = z
+        state.pose.position.x = self.pos[0]
+        state.pose.position.y = self.pos[1]
+        state.pose.position.z = self.pos[2]
         state.pose.orientation.x = qx
         state.pose.orientation.y = qy
         state.pose.orientation.z = qz
         state.pose.orientation.w = qw
 
-        # 속도 정보 (Gazebo 물리 엔진 보조용)
-        vx = -self.CIRCLE_RADIUS * self.CIRCLE_SPEED * math.sin(θ)
-        vy =  self.CIRCLE_RADIUS * self.CIRCLE_SPEED * math.cos(θ)
         state.twist.linear.x = vx
         state.twist.linear.y = vy
-        state.twist.linear.z = self.Z_AMP * 2.0 * self.CIRCLE_SPEED * math.cos(θ * 2.0)
+        state.twist.linear.z = vz
 
         req = SetEntityState.Request()
         req.state = state
@@ -248,7 +259,6 @@ class BirdManager(Node):
     #  상태 퍼블리시
     # ------------------------------------------------------------------ #
     def _publish_status(self):
-        θ = self.circle_angle
         visible_msg = Bool()
         pose_msg    = PoseStamped()
         pose_msg.header.stamp    = self.get_clock().now().to_msg()
@@ -256,9 +266,9 @@ class BirdManager(Node):
 
         if self.bird_spawned:
             visible_msg.data = True
-            pose_msg.pose.position.x = self.CIRCLE_RADIUS * math.cos(θ)
-            pose_msg.pose.position.y = self.CIRCLE_RADIUS * math.sin(θ)
-            pose_msg.pose.position.z = self.Z_CENTER + self.Z_AMP * math.sin(θ * 2.0)
+            pose_msg.pose.position.x = self.pos[0]
+            pose_msg.pose.position.y = self.pos[1]
+            pose_msg.pose.position.z = self.pos[2]
             pose_msg.pose.orientation.w = 1.0
         else:
             visible_msg.data = False

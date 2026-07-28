@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'cluster_node = pcd_cluster_pkg.cluster_node:main',
+            'bird_detector_node = pcd_cluster_pkg.bird_detector_node:main',
+            'bird_pursuit_node = pcd_cluster_pkg.bird_pursuit_node:main',
             'cluster_node_backup = pcd_cluster_pkg.cluster_node_backup:main',
             'bird_yolo_node = pcd_cluster_pkg.bird_yolo_node:main',
             'patrol_node = pcd_cluster_pkg.patrol_node:main',
@@ -32,6 +33,7 @@ setup(
             'robot_status_monitor = pcd_cluster_pkg.robot_status_monitor:main',
             'quit_handler_node = pcd_cluster_pkg.quit_handler_node:main',
             'data_logger_node = pcd_cluster_pkg.data_logger_node:main',
+            'trajectory_viz_node = pcd_cluster_pkg.trajectory_viz_node:main',
         ],
     },
 )
