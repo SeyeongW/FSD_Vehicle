@@ -24,7 +24,7 @@ class TrajectoryVizNode(Node):
         self.declare_parameter('max_points', 1000)
         # 새 경로는 최근 이 시간(초)만큼만 남기고 그 전 구간은 잘라내서, 지나간
         # 경로가 뒤로 갈수록 자연스럽게 사라지는 것처럼 보이게 함
-        self.declare_parameter('bird_path_window_sec', 3.0)
+        self.declare_parameter('bird_path_window_sec', 15.0)
         self.frame_id = self.get_parameter('frame_id').value
         self.max_points = int(self.get_parameter('max_points').value)
         self.bird_path_window_sec = float(self.get_parameter('bird_path_window_sec').value)

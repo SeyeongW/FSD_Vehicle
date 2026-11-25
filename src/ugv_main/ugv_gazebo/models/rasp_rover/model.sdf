@@ -285,7 +285,7 @@
             </noise>
           </ray>
           <visualize>false</visualize>
-          <samples>40000</samples>
+          <samples>20000</samples>
           <downsample>1</downsample>
 	  <csv_file_name>/home/seo/ros2_ws/ugv_ws/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv</csv_file_name>
           <topic>mid360</topic>

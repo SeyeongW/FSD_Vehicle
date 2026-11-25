@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>gimbal_camera_pkg</name>
+  <version>0.0.0</version>
+  <description>Standalone 3-axis gimbal camera (PX4 CGO3 port, Gazebo Classic) + YOLO 기반 조류 비전 트래킹 (PX4-ROS2 wang 브랜치에서 이식)</description>
+  <maintainer email="seoyu0207@naver.com">seo</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>gazebo_ros</depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

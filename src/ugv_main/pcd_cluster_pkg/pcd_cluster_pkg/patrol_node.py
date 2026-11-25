@@ -41,6 +41,7 @@ AMCL은 그대로 유지한다 — map 프레임 위치를 알아야 웨이포�
 import math
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import PoseWithCovarianceStamped, Quaternion, Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
@@ -86,28 +87,41 @@ class PatrolNode(Node):
         self.state     = PATROL
         self._started       = False
         self._startup_count = 0
+        # TRACKING 중 로봇이 새를 쫓아 경로와 무관한 곳으로 이동했다가 복귀할 때,
+        # _turn_aim_point()의 "이전 웨이포인트에서 오는 중"이라는 진입방향 전제가
+        # 깨져서 조준점이 엉뚱해진다 — 복귀 첫 구간만 오프셋 없이 실제 웨이포인트를
+        # 직접 조준하도록 하는 플래그.
+        self._resuming_from_tracking = False
 
         # ── 순찰 주행 파라미터 (bird_pursuit_node의 Pure Pursuit와 동일 패턴) ──
         # 코너에 딱 붙어야 다음 목표로 넘어가면 정확히 그 점을 찍고 꺾어야 해서
         # 지그재그처럼 보였음. 반경을 넉넉히 키워서 코너에 못 미쳐서부터 다음
         # 웨이포인트를 보고 미리 커브를 그리며 넘어가게 함 (Pure Pursuit의
         # look-ahead와 같은 효과).
-        self.waypoint_tolerance = 1.5
+        # 예전엔 1.5였는데, x_tracks 간격(2.67m)에 비해 너무 커서 짧은 가로
+        # 구간(예: 2.67m 길이)에서 도착판정 반경이 구간 전체를 덮어버려 실제
+        # 웨이포인트 근처에 가지도 않고 다음 구간으로 넘어가는 문제가 있었음.
+        self.waypoint_tolerance = 0.6
         self.angular_gain = 1.5
         # 실측 각속도(오돔)에 비례해서 빼주는 감쇠항 — 목표에 가까워질수록
         # (=이미 빠르게 돌고 있을수록) 제동이 걸려 오버슈트를 막음
-        self.angular_damping = 0.8
+        self.angular_damping = 1.6
         self.max_angular_speed = 1.2
         self.linear_gain = 0.5
         self.max_linear_speed = 1.0
         # 코너를 바깥으로 도는 정도 — 급한 턴(U턴에 가까움)일수록 이 값 전체가,
         # 완만한 턴이면 그 비율만큼만 웨이포인트를 바깥쪽으로 밀어서 조준한다.
-        self.corner_offset = 1.5
+        # 예전 1.5m는 x_tracks 간격(2.67m)의 절반 이상이라 짧은 가로 구간에서
+        # 조준점이 실제 웨이포인트에서 너무 많이 벗어났었음.
+        self.corner_offset = 0.6
 
         # ── 전방 장애물 회피 (bird_pursuit_node와 동일) ──
         self.obstacle_stop_dist = 0.5
         self.obstacle_slow_dist = 1.2
-        self.obstacle_half_angle = 0.40
+        # 0.40rad(±23도)이던 걸 1.0rad(±57도)로 넓힘 — 코너 회전 오버슈트 중에는
+        # 벽이 정면이 아니라 옆쪽에 있는 순간이 생기는데, 좁은 정면 콘 밖이면
+        # 벽이 코앞이어도 정지/감속이 전혀 안 걸려서 충돌했던 문제 완화.
+        self.obstacle_half_angle = 1.0
 
         # ── cmd_vel 스무딩 ──
         # 새 추적(bird_pursuit_node)과 달리 AMCL 위치는 깨끗해서 무겁게 스무딩할
@@ -133,7 +147,9 @@ class PatrolNode(Node):
 
         self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self._amcl_cb, 10)
         self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
-        self.create_subscription(LaserScan, '/scan', self._scan_cb, 10)
+        # pointcloud_to_laserscan_node가 /scan을 BEST_EFFORT(qos_profile_sensor_data)로
+        # 내므로 여기도 맞춰야 한다 — 안 맞으면 QoS 불일치로 메시지를 아예 못 받는다.
+        self.create_subscription(LaserScan, '/scan', self._scan_cb, qos_profile_sensor_data)
         self.bird_sub = self.create_subscription(
             Bool, '/bird_detected', self._bird_cb, 10
         )
@@ -221,9 +237,23 @@ class PatrolNode(Node):
                     self._bird_lost_count = 0
                     self.state = PATROL
                     self._set_tracking_active(False)
+                    # 추적 중 원래 순찰 경로와 무관한 곳으로 이동했을 수 있으므로,
+                    # 이전 wp_idx를 그대로 이어가지 않고 현재 위치에서 가장 가까운
+                    # 웨이포인트부터 다시 시작한다.
+                    if self.have_pose:
+                        self.wp_idx = self._nearest_waypoint_idx()
+                    self._resuming_from_tracking = True
                     self._status('━' * 50)
                     self._status(f'[ 조류 사라짐 ] 추적 {elapsed:.1f}초 후 순찰로 복귀합니다.')
                     self._status('━' * 50)
+
+    def _nearest_waypoint_idx(self) -> int:
+        best_i, best_d = 0, float('inf')
+        for i, wp in enumerate(self.waypoints):
+            d = math.hypot(wp[0] - self.robot_x, wp[1] - self.robot_y)
+            if d < best_d:
+                best_d, best_i = d, i
+        return best_i
 
     def _set_tracking_active(self, active: bool):
         msg = Bool()
@@ -271,17 +301,37 @@ class PatrolNode(Node):
         return (curr_wp[0] + perp_dx * offset, curr_wp[1] + perp_dy * offset)
 
     def _patrol_control_loop(self):
+        # /tracking_active는 상태 전환 시점(_bird_cb)에도 발행되지만 그건 단발성이라,
+        # 그 순간에 구독을 놓친 노드(예: 나중에 켠 data_logger_node)는 실제 상태를
+        # 영원히 모르게 된다. 매 제어 주기(10Hz)마다 현재 상태를 같이 발행해서
+        # 늦게 붙는 구독자도 곧바로 정확한 값을 받게 한다.
+        if self._started:
+            self._set_tracking_active(self.state == TRACKING)
+
         if self.state != PATROL or not self._started or not self.have_pose:
             return
 
-        aim = self._turn_aim_point(self.wp_idx)
+        # TRACKING 복귀 직후 첫 구간은 "이전 웨이포인트에서 오는 중"이라는
+        # _turn_aim_point()의 진입방향 전제가 깨져있으므로 오프셋 없이 실제
+        # 웨이포인트를 직접 조준한다.
+        if self._resuming_from_tracking:
+            aim = self.waypoints[self.wp_idx]
+        else:
+            aim = self._turn_aim_point(self.wp_idx)
         dx = aim[0] - self.robot_x
         dy = aim[1] - self.robot_y
         dist = math.hypot(dx, dy)
 
-        if dist < self.waypoint_tolerance:
+        # 도착 판정은 조준점이 아니라 실제 웨이포인트까지 거리로 한다 — 조준점
+        # 기준으로 하면 코너 오프셋만큼 앞당겨져서, 짧은 구간에서는 실제
+        # 웨이포인트 근처에 가지도 않고 다음 구간으로 넘어가버렸었다.
+        curr_wp = self.waypoints[self.wp_idx]
+        wp_dist = math.hypot(curr_wp[0] - self.robot_x, curr_wp[1] - self.robot_y)
+
+        if wp_dist < self.waypoint_tolerance:
             self._status(f'[ 순찰 기동 중 ] 웨이포인트 {self.wp_idx + 1} 도착')
             self.wp_idx = (self.wp_idx + 1) % len(self.waypoints)
+            self._resuming_from_tracking = False
             return
 
         # 표적 방위각(로봇 기준) — bird_pursuit_node의 Pure Pursuit와 동일 계산

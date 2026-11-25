@@ -6,6 +6,7 @@ from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header
 import sensor_msgs_py.point_cloud2 as pc2
 import tf2_ros
+import message_filters
 
 
 def _quat_to_rotation_matrix(q):
@@ -15,10 +16,6 @@ def _quat_to_rotation_matrix(q):
         [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
         [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
     ])
-
-
-def _stamp_to_sec(stamp):
-    return stamp.sec + stamp.nanosec * 1e-9
 
 
 def _fast_read_xyz(msg: PointCloud2):
@@ -73,17 +70,21 @@ def _make_cloud_xyz32(header, points: np.ndarray) -> PointCloud2:
 
 
 class LidarFusionNode(Node):
-    """Fuses each source's most recent scan into one PointCloud2 on a timer.
+    """message_filters.ApproximateTimeSynchronizer로 세 소스를 실제 시간 동기화해서
+    합친다.
 
-    Tried ApproximateTimeSynchronizer here first (requiring all 3 sources'
-    headers to land within a small slop of each other), but measured actual
-    publish periods are ~3-7s per source (heavy sample counts make each
-    Gazebo ray sensor slow) and not mutually correlated at all -- a tight
-    sync essentially never finds a match, so /fused_pointcloud2 went silent.
-    Given that, each source's latest message is kept independently (no
-    history/accumulation -- just overwrite) and world-transformed once, at
-    its own capture timestamp, in the subscription callback. A timer just
-    republishes the union of whatever is currently the latest per source.
+    과거(2026-07-24)엔 부하가 큰 상황에서 소스별 갱신 주기가 3~7초로 서로
+    무관하게 흔들려 slop 0.35s로도 35초에 1번만 매칭되는 것을 실측하고, opportunistic
+    merge(소스별 최신값 캐시, 아무거나 갱신되면 즉시 병합·발행) 방식으로 대체했었다.
+    이후 CPU/스레드 과점유(OpenBLAS 미제한) 문제를 해결하고 LiDAR 샘플 수를
+    낮추면서 소스별 발행 주기가 ~8Hz(약 125ms)로 크게 개선됐고, 이 조건에서
+    재실측한 결과 slop 0.03~0.07s만으로도 개별 소스 발행률의 ~88%가 매칭되는
+    것으로 확인되어(60초간 slop=0.07s에서 424회 매칭, 7.06/s) 하드 동기화로
+    되돌렸다.
+
+    단, 세 소스 중 하나라도 완전히 멈추면(opportunistic merge와 달리) 매칭 자체가
+    발생하지 않아 /fused_pointcloud2가 함께 멈춘다 — 소스 하나가 죽어도 나머지로
+    계속 발행되던 이전 방식과의 트레이드오프.
     """
 
     def __init__(self):
@@ -95,80 +96,87 @@ class LidarFusionNode(Node):
         )
         self.declare_parameter('target_frame', 'world')
         self.declare_parameter('output_topic', 'fused_pointcloud2')
-        self.declare_parameter('publish_rate', 5.0)
         # input_topics 순서와 1:1 대응하는 소스별 최대 포인트 수. 길이가 안 맞으면
         # 마지막 값을 나머지 소스에도 그대로 씀.
         self.declare_parameter('max_points_per_source', [50000])
         # world 프레임 기준 |x|, |y| 경계. 방 크기 밖 포인트는 손상된 값으로 간주하고 버림.
         self.declare_parameter('bounds_xy', 8.0)
+        # ApproximateTimeSynchronizer 허용 오차. 60초 실측(전체 파이프라인 부하 상태,
+        # 소스별 발행률 ~8Hz)에서 0.07s와 0.03s가 동일하게 424회(7.06/s, 개별 소스
+        # 발행률의 ~88%)를 매칭해 이 값으로 이미 충분함을 확인. 약간의 여유를 둠.
+        self.declare_parameter('sync_slop', 0.07)
+        self.declare_parameter('sync_queue_size', 30)
 
         input_topics = list(self.get_parameter('input_topics').value)
         self.target_frame = self.get_parameter('target_frame').value
         output_topic = self.get_parameter('output_topic').value
-        publish_rate = self.get_parameter('publish_rate').value
         max_points_list = list(self.get_parameter('max_points_per_source').value)
         if len(max_points_list) < len(input_topics):
             max_points_list += [max_points_list[-1]] * (len(input_topics) - len(max_points_list))
-        self.max_points = {topic: int(n) for topic, n in zip(input_topics, max_points_list)}
+        self.max_points = [int(n) for n in max_points_list[:len(input_topics)]]
         self.bounds_xy = self.get_parameter('bounds_xy').value
+        sync_slop = self.get_parameter('sync_slop').value
+        sync_queue_size = self.get_parameter('sync_queue_size').value
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
-        # topic -> (t_sec, world_xyz ndarray) for that source's latest message only
-        self.latest = {}
-        for topic in input_topics:
-            self.create_subscription(
-                PointCloud2, topic,
-                lambda msg, topic=topic: self._on_cloud(topic, msg),
-                qos_profile_sensor_data,
-            )
+        self.input_topics = input_topics
+        self.filters = [
+            message_filters.Subscriber(self, PointCloud2, topic, qos_profile=qos_profile_sensor_data)
+            for topic in input_topics
+        ]
+        self.ts = message_filters.ApproximateTimeSynchronizer(
+            self.filters, queue_size=sync_queue_size, slop=sync_slop)
+        self.ts.registerCallback(self._on_synced)
 
-        self.pub = self.create_publisher(PointCloud2, output_topic, 10)
-        self.create_timer(1.0 / publish_rate, self.publish_fused)
+        # RELIABLE(기본 QoS)로 최대 480KB(4만 포인트)짜리 클라우드를 이 빈도로 보내면
+        # publish() 자체가 (프로파일링 실측) 최대 100ms까지 걸려 CPU를 잡아먹는다 —
+        # 입력 구독과 동일하게 BEST_EFFORT로 맞춰서 이 비용을 없앤다.
+        self.pub = self.create_publisher(PointCloud2, output_topic, qos_profile_sensor_data)
 
         self.get_logger().info(
-            f'Fusing {list(input_topics)} -> /{output_topic} in frame "{self.target_frame}" '
-            f'(max pts/source: {self.max_points}, bounds +-{self.bounds_xy}m)'
+            f'Synchronizing {list(input_topics)} -> /{output_topic} in frame "{self.target_frame}" '
+            f'(slop={sync_slop}s, queue={sync_queue_size}; '
+            f'max pts/source: {self.max_points}, bounds +-{self.bounds_xy}m)'
         )
 
-    def _on_cloud(self, topic, msg: PointCloud2):
-        try:
-            transform = self.tf_buffer.lookup_transform(
-                self.target_frame, msg.header.frame_id, msg.header.stamp)
-        except tf2_ros.TransformException as ex:
-            self.get_logger().warn(f'TF lookup failed for {msg.header.frame_id}: {ex}')
+    def _on_synced(self, *msgs: PointCloud2):
+        clouds = []
+        latest_stamp = None
+        for topic, cap, msg in zip(self.input_topics, self.max_points, msgs):
+            try:
+                transform = self.tf_buffer.lookup_transform(
+                    self.target_frame, msg.header.frame_id, msg.header.stamp)
+            except tf2_ros.TransformException as ex:
+                self.get_logger().warn(f'TF lookup failed for {msg.header.frame_id}: {ex}')
+                continue
+
+            local = _fast_read_xyz(msg)
+            if local.shape[0] == 0:
+                continue
+
+            local = _stride_downsample(local, cap)
+
+            t = transform.transform.translation
+            R = _quat_to_rotation_matrix(transform.transform.rotation)
+            world = local @ R.T + np.array([t.x, t.y, t.z])
+
+            in_bounds = (np.abs(world[:, 0]) <= self.bounds_xy) & (np.abs(world[:, 1]) <= self.bounds_xy)
+            clouds.append(world[in_bounds])
+
+            if latest_stamp is None or (msg.header.stamp.sec, msg.header.stamp.nanosec) > latest_stamp:
+                latest_stamp = (msg.header.stamp.sec, msg.header.stamp.nanosec)
+
+        if not clouds:
             return
-
-        local = _fast_read_xyz(msg)
-        if local.shape[0] == 0:
-            return
-
-        local = _stride_downsample(local, self.max_points[topic])
-
-        t = transform.transform.translation
-        R = _quat_to_rotation_matrix(transform.transform.rotation)
-        world = local @ R.T + np.array([t.x, t.y, t.z])
-
-        self.latest[topic] = (_stamp_to_sec(msg.header.stamp), world)
-
-    def publish_fused(self):
-        if not self.latest:
-            return
-
-        world_chunks = [w for _, w in self.latest.values()]
-        latest_stamp_sec = max(t for t, _ in self.latest.values())
-
-        world_points = np.concatenate(world_chunks, axis=0)
-        in_bounds = (np.abs(world_points[:, 0]) <= self.bounds_xy) & (np.abs(world_points[:, 1]) <= self.bounds_xy)
-        world_points = world_points[in_bounds]
 
         header = Header()
-        header.stamp.sec = int(latest_stamp_sec)
-        header.stamp.nanosec = int(round((latest_stamp_sec % 1.0) * 1e9))
+        header.stamp.sec, header.stamp.nanosec = latest_stamp
         header.frame_id = self.target_frame
 
-        self.pub.publish(_make_cloud_xyz32(header, world_points))
+        merged = np.concatenate(clouds, axis=0)
+        self.pub.publish(_make_cloud_xyz32(header, merged))
 
 
 def main():

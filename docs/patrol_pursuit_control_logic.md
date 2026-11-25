@@ -14,7 +14,7 @@ lidar_fusion_node → /fused_pointcloud2 (odom 프레임)
         ↓
 bird_detector_node (DBSCAN + 칼만필터) → /bird_detected, /bird_target(+velocity)
         │                                        │
-        ├→ patrol_node (PATROL↔TRACKING 상태기계) └→ bird_pursuit_node (PN/Pure Pursuit)
+        ├→ patrol_node (PATROL↔TRACKING 상태기계)  └→ bird_pursuit_node (PN/Pure Pursuit)
         │        └→ /tracking_active ──────────────────────┘
         └→ AMCL(map_server만, Nav2 순찰 스택은 안 씀) — patrol_node의 위치 센서 역할
 ```

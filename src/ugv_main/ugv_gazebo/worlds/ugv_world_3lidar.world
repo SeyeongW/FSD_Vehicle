@@ -11,7 +11,10 @@
     <gravity>0 0 -9.8</gravity>
 
     <light name="sun" type="directional">
-      <cast_shadows>true</cast_shadows>
+      <!-- 그림자를 끔 — YOLO로 새를 인식해야 하는데 그림자 진 쪽이 어둡게
+           나와서 인식률이 떨어지는 문제가 있었음 (실사 사실감보다 검출
+           안정성이 우선). -->
+      <cast_shadows>false</cast_shadows>
       <pose>0 0 10 0 0 0</pose>
       <diffuse>0.8 0.8 0.8 1</diffuse>
       <specular>0.2 0.2 0.2 1</specular>
@@ -31,9 +34,9 @@
     </physics>
 
     <scene>
-      <ambient>0.65 0.65 0.65 1</ambient>
+      <ambient>0.85 0.85 0.85 1</ambient>
       <background>0.68 0.83 1.0 1</background>
-      <shadows>true</shadows>
+      <shadows>false</shadows>
     </scene>
 
     <model name="map_floor">
@@ -410,7 +413,7 @@
               </noise>
             </ray>
             <visualize>false</visualize>
-            <samples>25000</samples>
+            <samples>12000</samples>
             <downsample>1</downsample>
             <csv_file_name>/home/seo/ros2_ws/ugv_ws/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv</csv_file_name>
             <topic>lidar1</topic>
@@ -463,7 +466,7 @@
               </noise>
             </ray>
             <visualize>false</visualize>
-            <samples>25000</samples>
+            <samples>12000</samples>
             <downsample>1</downsample>
             <csv_file_name>/home/seo/ros2_ws/ugv_ws/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv</csv_file_name>
             <topic>lidar2</topic>
@@ -471,6 +474,15 @@
         </sensor>
       </link>
     </model>
+
+    <!-- 짐벌 카메라를 북쪽 벽(wall_north, y=10.1667, 안쪽 면 y=10.0) 안쪽에 직접
+         부착 (관제탑 구조물 제거, 벽걸이형으로 변경). world_fix 조인트(parent=world)가
+         스폰이 아니라 월드 로드 시점에만 제대로 붙기 때문에 <include>로 넣는다.
+         yaw 1.5708(방 중앙/남쪽 방향)은 관제탑일 때 확인된 값 그대로 유지. -->
+    <include>
+      <uri>model://gimbal_classic</uri>
+      <pose>0 9.85 1.8 0 0 1.5708</pose>
+    </include>
 
   </world>
 </sdf>

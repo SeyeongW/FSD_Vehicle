@@ -15,11 +15,13 @@ data_logger_node.py — 논문용 CSV 데이터 로거 (10 Hz)
   tracking_active — 추적 모드 여부
 
 [사용]
-  ros2 run pcd_cluster_pkg data_logger_node
+  ros2 run pcd_cluster_pkg data_logger_node --ros-args -p steering_mode:=smc
   또는 patrol_nav.launch.py log_data:=true 옵션으로 자동 시작
+  steering_mode는 bird_pursuit_node에 준 값과 동일하게 맞춰서 넘길 것
+  (이 노드가 bird_pursuit_node의 실제 파라미터를 읽어오지는 않음 — 파일명 구분용)
 
 [출력 경로]
-  ~/ros2_ws/ugv_ws/logs/bird_tracking_YYYYMMDD_HHMMSS.csv
+  ~/ros2_ws/ugv_ws/logs/exp_<steering_mode>_spd<속도>_<kf조건>_YYYYMMDD_HHMMSS.csv
 """
 
 import csv
@@ -65,15 +67,18 @@ class DataLoggerNode(Node):
         self.declare_parameter('use_kf', True)
         self.declare_parameter('kf_lookahead_sec', 0.15)
         self.declare_parameter('bird_speed', 0.18)
-        use_kf     = self.get_parameter('use_kf').value
-        kf_la      = self.get_parameter('kf_lookahead_sec').value
-        bird_speed = self.get_parameter('bird_speed').value
+        self.declare_parameter('steering_mode', 'pn')  # 'pn' / 'pure_pursuit' / 'smc'
+        use_kf        = self.get_parameter('use_kf').value
+        kf_la         = self.get_parameter('kf_lookahead_sec').value
+        bird_speed    = self.get_parameter('bird_speed').value
+        steering_mode = self.get_parameter('steering_mode').value
 
         stamp   = datetime.now().strftime('%Y%m%d_%H%M%S')
         log_dir = os.path.expanduser('~/ros2_ws/ugv_ws/logs')
         os.makedirs(log_dir, exist_ok=True)
         kf_cond = 'nokf' if not use_kf else f'kf{kf_la:.2f}'
-        self._path = os.path.join(log_dir, f'exp_spd{bird_speed:.2f}_{kf_cond}_{stamp}.csv')
+        self._path = os.path.join(
+            log_dir, f'exp_{steering_mode}_spd{bird_speed:.2f}_{kf_cond}_{stamp}.csv')
 
         self._file   = open(self._path, 'w', newline='', encoding='utf-8')
         self._writer = csv.writer(self._file)

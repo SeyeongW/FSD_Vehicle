@@ -1,0 +1,832 @@
+[INFO] [launch]: All log files can be found below /home/seo/.ros/log/2026-08-05-15-31-35-019006-seo-8799
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [gzserver-1]: process started with pid [8804]
+[INFO] [gzclient-2]: process started with pid [8806]
+[INFO] [rviz2-3]: process started with pid [8808]
+[INFO] [robot_state_publisher-4]: process started with pid [8810]
+[INFO] [joint_state_publisher-5]: process started with pid [8812]
+[INFO] [spawn_entity.py-6]: process started with pid [8814]
+[INFO] [static_transform_publisher-7]: process started with pid [8816]
+[INFO] [static_transform_publisher-8]: process started with pid [8818]
+[INFO] [lidar_fusion_node-9]: process started with pid [8820]
+[INFO] [pointcloud_to_laserscan_node-10]: process started with pid [8822]
+[INFO] [map_server-11]: process started with pid [8824]
+[INFO] [amcl-12]: process started with pid [8826]
+[INFO] [lifecycle_manager-13]: process started with pid [8828]
+[INFO] [bird_detector_node-14]: process started with pid [8830]
+[INFO] [bird_pursuit_node-15]: process started with pid [8832]
+[INFO] [trajectory_viz_node-16]: process started with pid [8834]
+[static_transform_publisher-7] [WARN] [1785911495.135616299] []: Old-style arguments are deprecated; see --help for new-style arguments
+[static_transform_publisher-8] [WARN] [1785911495.135866376] []: Old-style arguments are deprecated; see --help for new-style arguments
+[static_transform_publisher-8] [INFO] [1785911495.147370118] [tf_odom_lidar2]: Spinning until stopped - publishing transform
+[static_transform_publisher-8] translation: ('9.333300', '0.000000', '1.800000')
+[static_transform_publisher-8] rotation: ('0.000000', '0.000000', '1.000000', '0.000001')
+[static_transform_publisher-8] from 'odom' to 'lidar2'
+[robot_state_publisher-4] [WARN] [1785911495.147361330] [robot_state_publisher]: No robot_description parameter, but command-line argument available.  Assuming argument is name of URDF file.  This backwards compatibility fallback will be removed in the future.
+[static_transform_publisher-7] [INFO] [1785911495.149783892] [tf_odom_lidar1]: Spinning until stopped - publishing transform
+[static_transform_publisher-7] translation: ('-9.333300', '0.000000', '1.800000')
+[static_transform_publisher-7] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-7] from 'odom' to 'lidar1'
+[robot_state_publisher-4] [INFO] [1785911495.152773876] [robot_state_publisher]: got segment 3d_camera_link
+[robot_state_publisher-4] [INFO] [1785911495.152809056] [robot_state_publisher]: got segment base_footprint
+[robot_state_publisher-4] [INFO] [1785911495.152816382] [robot_state_publisher]: got segment base_imu_link
+[robot_state_publisher-4] [INFO] [1785911495.152823901] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-4] [INFO] [1785911495.152829846] [robot_state_publisher]: got segment left_down_wheel_link
+[robot_state_publisher-4] [INFO] [1785911495.152834566] [robot_state_publisher]: got segment left_up_wheel_link
+[robot_state_publisher-4] [INFO] [1785911495.152838216] [robot_state_publisher]: got segment livox
+[robot_state_publisher-4] [INFO] [1785911495.152841781] [robot_state_publisher]: got segment pt_base_link
+[robot_state_publisher-4] [INFO] [1785911495.152845173] [robot_state_publisher]: got segment pt_camera_link
+[robot_state_publisher-4] [INFO] [1785911495.152848364] [robot_state_publisher]: got segment pt_link1
+[robot_state_publisher-4] [INFO] [1785911495.152851674] [robot_state_publisher]: got segment pt_link2
+[robot_state_publisher-4] [INFO] [1785911495.152854815] [robot_state_publisher]: got segment right_down_wheel_link
+[robot_state_publisher-4] [INFO] [1785911495.152858295] [robot_state_publisher]: got segment right_up_wheel_link
+[lifecycle_manager-13] [INFO] [1785911495.154398092] [lifecycle_manager_localization]: Creating
+[lifecycle_manager-13] [INFO] [1785911495.156719692] [lifecycle_manager_localization]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[amcl-12] [INFO] [1785911495.159760383] [amcl]: 
+[amcl-12] 	amcl lifecycle node launched. 
+[amcl-12] 	Waiting on external lifecycle transitions to activate
+[amcl-12] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[amcl-12] [INFO] [1785911495.160331045] [amcl]: Creating
+[map_server-11] [INFO] [1785911495.165415103] [map_server]: 
+[map_server-11] 	map_server lifecycle node launched. 
+[map_server-11] 	Waiting on external lifecycle transitions to activate
+[map_server-11] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[map_server-11] [INFO] [1785911495.165516204] [map_server]: Creating
+[lifecycle_manager-13] [INFO] [1785911495.165910565] [lifecycle_manager_localization]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-13] [INFO] [1785911495.165959248] [lifecycle_manager_localization]: [34m[1mConfiguring map_server[0m[0m
+[map_server-11] [INFO] [1785911495.166208733] [map_server]: Configuring
+[map_server-11] [INFO] [1785911495.166239878] [map_io]: Loading yaml file: /home/seo/ros2_ws/ugv_ws/install/ugv_gazebo/share/ugv_gazebo/maps/map_3lidar_20x20.yaml
+[map_server-11] [INFO] [1785911495.166424447] [map_io]: resolution: 0.05
+[map_server-11] [INFO] [1785911495.166430074] [map_io]: origin[0]: -11
+[map_server-11] [INFO] [1785911495.166433325] [map_io]: origin[1]: -11
+[map_server-11] [INFO] [1785911495.166436471] [map_io]: origin[2]: 0
+[map_server-11] [INFO] [1785911495.166439799] [map_io]: free_thresh: 0.25
+[map_server-11] [INFO] [1785911495.166442998] [map_io]: occupied_thresh: 0.65
+[map_server-11] [INFO] [1785911495.166446227] [map_io]: mode: trinary
+[map_server-11] [INFO] [1785911495.166449873] [map_io]: negate: 0
+[map_server-11] [INFO] [1785911495.166590897] [map_io]: Loading image_file: /home/seo/ros2_ws/ugv_ws/install/ugv_gazebo/share/ugv_gazebo/maps/map_3lidar_20x20.pgm
+[map_server-11] [INFO] [1785911495.180795442] [map_io]: Read map /home/seo/ros2_ws/ugv_ws/install/ugv_gazebo/share/ugv_gazebo/maps/map_3lidar_20x20.pgm: 440 X 440 map @ 0.05 m/cell
+[rviz2-3] Warning: Ignoring XDG_SESSION_TYPE=wayland on Gnome. Use QT_QPA_PLATFORM=wayland to run on Wayland anyway.
+[lifecycle_manager-13] [INFO] [1785911495.183693343] [lifecycle_manager_localization]: [34m[1mConfiguring amcl[0m[0m
+[amcl-12] [INFO] [1785911495.184055272] [amcl]: Configuring
+[amcl-12] [INFO] [1785911495.184170632] [amcl]: initTransforms
+[amcl-12] [INFO] [1785911495.191420647] [amcl]: initPubSub
+[amcl-12] [INFO] [1785911495.195151973] [amcl]: Subscribed to map topic.
+[lifecycle_manager-13] [INFO] [1785911495.197698544] [lifecycle_manager_localization]: [34m[1mActivating map_server[0m[0m
+[map_server-11] [INFO] [1785911495.197840426] [map_server]: Activating
+[map_server-11] [INFO] [1785911495.198384070] [map_server]: Creating bond (map_server) to lifecycle manager.
+[amcl-12] [INFO] [1785911495.198859617] [amcl]: Received a 440 X 440 map @ 0.050 m/pix
+[lifecycle_manager-13] [INFO] [1785911495.301433883] [lifecycle_manager_localization]: Server map_server connected with bond.
+[lifecycle_manager-13] [INFO] [1785911495.301487929] [lifecycle_manager_localization]: [34m[1mActivating amcl[0m[0m
+[amcl-12] [INFO] [1785911495.301877884] [amcl]: Activating
+[amcl-12] [INFO] [1785911495.301924989] [amcl]: initialPoseReceived
+[amcl-12] [INFO] [1785911495.302016160] [amcl]: Setting pose (0.000000): 0.000 0.000 0.000
+[amcl-12] [INFO] [1785911495.302852130] [amcl]: Creating bond (amcl) to lifecycle manager.
+[lifecycle_manager-13] [INFO] [1785911495.405853716] [lifecycle_manager_localization]: Server amcl connected with bond.
+[lifecycle_manager-13] [INFO] [1785911495.405917751] [lifecycle_manager_localization]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-13] [INFO] [1785911495.405935583] [lifecycle_manager_localization]: [34m[1mCreating bond timer...[0m[0m
+[gzserver-1] Gazebo multi-robot simulator, version 11.10.2
+[gzserver-1] Copyright (C) 2012 Open Source Robotics Foundation.
+[gzserver-1] Released under the Apache 2 License.
+[gzserver-1] http://gazebosim.org
+[gzserver-1] 
+[trajectory_viz_node-16] [INFO] [1785911495.429990996] [trajectory_viz_node]: Trajectory viz node started (frame=odom, max_points=1000).
+[lidar_fusion_node-9] [INFO] [1785911495.490971601] [lidar_fusion_node]: Synchronizing ['lidar1_PointCloud2', 'lidar2_PointCloud2', 'mid360_PointCloud2'] -> /fused_pointcloud2 in frame "odom" (slop=0.07s, queue=30; max pts/source: [8000, 8000, 15000], bounds +-11.0m)
+[spawn_entity.py-6] [INFO] [1785911495.511533771] [spawn_entity]: Spawn Entity started
+[spawn_entity.py-6] [INFO] [1785911495.511820525] [spawn_entity]: Loading entity XML from file /home/seo/ros2_ws/ugv_ws/install/ugv_gazebo/share/ugv_gazebo/models/ugv_rover/model.sdf
+[spawn_entity.py-6] [INFO] [1785911495.512565958] [spawn_entity]: Waiting for service /spawn_entity, timeout = 30
+[spawn_entity.py-6] [INFO] [1785911495.512758402] [spawn_entity]: Waiting for service /spawn_entity
+[pointcloud_to_laserscan_node-10] [INFO] [1785911495.515190140] [pointcloud_to_laserscan_node]: Subscribed PointCloud2: /fused_pointcloud2
+[pointcloud_to_laserscan_node-10] [INFO] [1785911495.515507380] [pointcloud_to_laserscan_node]: Publishing LaserScan: /scan
+[pointcloud_to_laserscan_node-10] [INFO] [1785911495.515730951] [pointcloud_to_laserscan_node]: LaserScan frame: base_footprint
+[pointcloud_to_laserscan_node-10] [INFO] [1785911495.515924957] [pointcloud_to_laserscan_node]: Publishing OccupancyGrid: /projected_map
+[pointcloud_to_laserscan_node-10] [INFO] [1785911495.516115039] [pointcloud_to_laserscan_node]: Map target frame: odom
+[pointcloud_to_laserscan_node-10] [INFO] [1785911495.516328950] [pointcloud_to_laserscan_node]: Map size: 30.0 x 30.0 m, resolution=0.050, cells=600 x 600
+[bird_pursuit_node-15] [INFO] [1785911495.520885740] [bird_pursuit_node]: Bird pursuit node started (steering_mode=pure_pursuit, pn_gain=3.5, pp_angular_gain=2.0, sta_k1=1.5, sta_k2=0.2, bearing_deadband=0.05, sta_u1_limit=1.0, sta_kd=1.0).
+[rviz2-3] [INFO] [1785911495.579317502] [rviz2]: Stereo is NOT SUPPORTED
+[rviz2-3] [INFO] [1785911495.579459273] [rviz2]: OpenGl version: 4.6 (GLSL 4.6)
+[rviz2-3] [INFO] [1785911495.591146533] [rviz2]: Stereo is NOT SUPPORTED
+[gzserver-1] [1;33m[Wrn] [gazebo_ros_init.cpp:178] [0m[1;33m
+[gzserver-1] #     # ####### ####### ###  #####  #######
+[gzserver-1] ##    # #     #    #     #  #     # #
+[gzserver-1] # #   # #     #    #     #  #       #
+[gzserver-1] #  #  # #     #    #     #  #       #####
+[gzserver-1] #   # # #     #    #     #  #       #
+[gzserver-1] #    ## #     #    #     #  #     # #
+[gzserver-1] #     # #######    #    ###  #####  #######
+[gzserver-1] 
+[gzserver-1] This version of Gazebo, now called Gazebo classic, reaches end-of-life
+[gzserver-1] in January 2025. Users are highly encouraged to migrate to the new Gazebo
+[gzserver-1] using our migration guides (https://gazebosim.org/docs/latest/gazebo_classic_migration?utm_source=gazebo_ros_pkgs&utm_medium=cli)
+[gzserver-1] 
+[gzserver-1] [0m[1;33m
+[bird_detector_node-14] [INFO] [1785911496.151554646] [bird_detector_node]: Bird detector node (DBSCAN + KF, world frame) started.
+[gzserver-1] [0m[1;33m[0m[1;33m[0m[INFO] [1785911496.446876114] [LivoxPointsPlugin]: load csv file name: /home/seo/ros2_ws/ugv_ws/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv
+[spawn_entity.py-6] [INFO] [1785911496.517421471] [spawn_entity]: Calling service /spawn_entity
+[gzserver-1] [1;32m[Msg] [0m[1;32mWaiting for master.[0m[1;32m
+[gzserver-1] [0m[1;32m[0m[1;32m[0m[1;32m[Msg] [0m[1;32mConnected to gazebo master @ [0m[1;32mhttp://127.0.0.1:11345[0m[1;32m
+[gzserver-1] [0m[1;32m[0m[1;32m[0m[1;32m[Msg] [0m[1;32mPublicized address: [0m[1;32m192.168.123.143[0m[1;32m
+[gzserver-1] [0m[1;32m[0m[1;32m[0m[1;32m[Msg] [0m[1;32mLoading world file [[0m[1;32m/home/seo/ros2_ws/ugv_ws/install/ugv_gazebo/share/ugv_gazebo/worlds/ugv_world_3lidar.world[0m[1;32m][0m[1;32m
+[gzserver-1] cannot convert str:
+[gzserver-1] data size:800000
+[gzserver-1] [INFO] [1785911497.255679044] [LivoxPointsPlugin]: ros topic name: lidar1
+[gzserver-1] [INFO] [1785911497.309693791] [LivoxPointsPlugin]: scan info size: 800000
+[gzserver-1] [INFO] [1785911497.310662658] [LivoxPointsPlugin]: sample: 12000
+[gzserver-1] [INFO] [1785911497.310672172] [LivoxPointsPlugin]: downsample: 1
+[gzserver-1] [INFO] [1785911498.880496834] [LivoxPointsPlugin]: load csv file name: /home/seo/ros2_ws/ugv_ws/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv
+[gzserver-1] cannot convert str:
+[gzserver-1] data size:800000
+[gzserver-1] [INFO] [1785911499.705737806] [LivoxPointsPlugin]: ros topic name: lidar2
+[gzserver-1] [INFO] [1785911499.762788789] [LivoxPointsPlugin]: scan info size: 800000
+[gzserver-1] [INFO] [1785911499.763053161] [LivoxPointsPlugin]: sample: 12000
+[gzserver-1] [INFO] [1785911499.763057368] [LivoxPointsPlugin]: downsample: 1
+[INFO] [patrol_node-17]: process started with pid [9203]
+[gzserver-1] [INFO] [1785911501.308370370] [gimbal.camera_imu_plugin]: <initial_orientation_as_reference> is unset, using default value of false to comply with REP 145 (world as orientation reference)
+[gzserver-1] [1;33m[Wrn] [Event.cc:61] [0m[1;33mWarning: Deleting a connection right after creation. [0m[1;33mMake sure to save the ConnectionPtr from a Connect call
+[gzserver-1] [0m[INFO] [1785911501.459463941] [gimbal_camera_plugin]: Publishing camera info to [/gimbal/camera_info]
+[gzserver-1] [INFO] [1785911501.477186981] [gazebo_ros_state]: Publishing states of gazebo models at [/model_states]
+[gzserver-1] [INFO] [1785911501.477641990] [gazebo_ros_state]: Publishing states of gazebo links at [/link_states]
+[gzserver-1] [INFO] [1785911501.498752775] [gimbal_joint_controller_cgo3_horizontal_arm_joint]: joint 'cgo3_horizontal_arm_joint' <- /gimbal/roll_cmd  (p=0.800 i=0.03500 d=0.0200, cmd +/-5.00 N.m)
+[gzserver-1] [INFO] [1785911501.504729014] [gimbal_joint_controller_cgo3_camera_joint]: joint 'cgo3_camera_joint' <- /gimbal/pitch_cmd  (p=0.800 i=0.01245 d=0.0150, cmd +/-5.00 N.m)
+[gzserver-1] [INFO] [1785911501.511828757] [gimbal_joint_controller_cgo3_vertical_arm_joint]: joint 'cgo3_vertical_arm_joint' <- /gimbal/yaw_cmd  (p=0.300 i=0.01245 d=0.0150, cmd +/-5.00 N.m)
+[gzserver-1] [INFO] [1785911501.524292949] [gimbal.gimbal_joint_states]: Going to publish joint [cgo3_vertical_arm_joint]
+[gzserver-1] [INFO] [1785911501.524354882] [gimbal.gimbal_joint_states]: Going to publish joint [cgo3_horizontal_arm_joint]
+[gzserver-1] [INFO] [1785911501.524374847] [gimbal.gimbal_joint_states]: Going to publish joint [cgo3_camera_joint]
+[gzserver-1] [INFO] [1785911501.593877171] [imu_plugin]: <initial_orientation_as_reference> is unset, using default value of false to comply with REP 145 (world as orientation reference)
+[spawn_entity.py-6] [INFO] [1785911501.693544461] [spawn_entity]: Spawn status: SpawnEntity: Successfully spawned entity [ugv_rover]
+[gzserver-1] [INFO] [1785911501.698908589] [LivoxPointsPlugin]: load csv file name: /home/seo/ros2_ws/ugv_ws/install/ros2_livox_simulation/share/ros2_livox_simulation/scan_mode/mid360.csv
+[INFO] [spawn_entity.py-6]: process has finished cleanly [pid 8814]
+[gzserver-1] cannot convert str:
+[gzserver-1] data size:800000
+[gzserver-1] [INFO] [1785911502.533838362] [LivoxPointsPlugin]: ros topic name: mid360
+[gzserver-1] [INFO] [1785911502.592441807] [LivoxPointsPlugin]: scan info size: 800000
+[gzserver-1] [INFO] [1785911502.592751346] [LivoxPointsPlugin]: sample: 12000
+[gzserver-1] [INFO] [1785911502.592756135] [LivoxPointsPlugin]: downsample: 1
+[INFO] [python3-18]: process started with pid [9232]
+[python3-18] [INFO] [1785911503.917279060] [bird_manager]: [bird_manager] flight_speed=1.200 m/s, max_turn_rate=120.0 deg/s (랜덤 방향전환 비행)
+[python3-18] [INFO] [1785911503.920611059] [bird_manager]: Waiting for spawn/delete services...
+[gzserver-1] [INFO] [1785911504.113091033] [skid_steer_drive_controller]: Wheel pair 1 separation set to [0.175000m]
+[gzserver-1] [INFO] [1785911504.113146751] [skid_steer_drive_controller]: Wheel pair 2 separation set to [0.175000m]
+[gzserver-1] [INFO] [1785911504.113155392] [skid_steer_drive_controller]: Wheel pair 1 diameter set to [0.050000m]
+[gzserver-1] [INFO] [1785911504.113162076] [skid_steer_drive_controller]: Wheel pair 2 diameter set to [0.050000m]
+[gzserver-1] [INFO] [1785911504.114261218] [skid_steer_drive_controller]: Subscribed to [/cmd_vel]
+[gzserver-1] [INFO] [1785911504.116073766] [skid_steer_drive_controller]: Advertise odometry on [/odom]
+[gzserver-1] [INFO] [1785911504.118814979] [skid_steer_drive_controller]: Publishing odom transforms between [odom] and [base_footprint]
+[gzserver-1] [INFO] [1785911504.125468002] [gazebo_ros_joint_state_publisher]: Going to publish joint [left_up_wheel_link_joint]
+[gzserver-1] [INFO] [1785911504.125497696] [gazebo_ros_joint_state_publisher]: Going to publish joint [right_up_wheel_link_joint]
+[gzserver-1] [INFO] [1785911504.125504019] [gazebo_ros_joint_state_publisher]: Going to publish joint [left_down_wheel_link_joint]
+[gzserver-1] [INFO] [1785911504.125508987] [gazebo_ros_joint_state_publisher]: Going to publish joint [right_down_wheel_link_joint]
+[gzserver-1] [INFO] [1785911504.125514737] [gazebo_ros_joint_state_publisher]: Going to publish joint [pt_link1_to_pt_link2]
+[amcl-12] [INFO] [1785911504.405876502] [amcl]: createLaserObject
+[python3-18] [INFO] [1785911504.927485287] [bird_manager]: bird_manager ready. "bird_in" → 스폰 + 랜덤 방향전환 비행 시작  |  "bird_out" → 제거
+[INFO] [python3-19]: process started with pid [9248]
+[INFO] [gnome-terminal-20]: process started with pid [9250]
+[INFO] [gnome-terminal-21]: process started with pid [9252]
+[INFO] [gnome-terminal-20]: process has finished cleanly [pid 9250]
+[INFO] [gnome-terminal-21]: process has finished cleanly [pid 9252]
+[python3-19] [INFO] [1785911508.578681446] [gimbal_bird_tracker]: Loading YOLO model: yolo11l.pt
+[python3-19] [INFO] [1785911509.682668921] [gimbal_bird_tracker]: YOLO model ready.
+[python3-19] [INFO] [1785911509.690649707] [gimbal_bird_tracker]: GimbalBirdTracker started. conf=0.2, fov_h=2.000rad, img=1280x720, model=yolo11l.pt
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[amcl-12] [INFO] [1785911510.463135368] [amcl]: initialPoseReceived
+[amcl-12] [INFO] [1785911510.463211300] [amcl]: Setting pose (5.000000): -0.000 -0.000 0.000
+[python3-19] WARNING ⚠️ not enough matching points
+[patrol_node-17] [INFO] [1785911510.478729297] [patrol_node]: [LOCALIZER] Initial pose published: (0, 0, yaw=0).
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-18] [INFO] [1785911518.456311486] [bird_manager]: [CMD] bird_in — spawning at (7.37, -2.62, 4.94), target=(5.23, 5.70, 4.39)
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-18] [INFO] [1785911518.683446755] [bird_manager]: Bird spawned — starting random-direction flight.
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[bird_detector_node-14] [INFO] [1785911519.523648600] [bird_detector_node]: [BIRD] world x=7.242 y=-1.837 z=4.464 | dist=6.96m bearing=+121.8deg | id=0
+[bird_detector_node-14] [INFO] [1785911520.176868580] [bird_detector_node]: [BIRD] world x=6.994 y=-1.133 z=4.367 | dist=6.84m bearing=+132.9deg | id=0
+[bird_detector_node-14] [INFO] [1785911520.829833637] [bird_detector_node]: [BIRD] world x=6.705 y=-0.375 z=4.305 | dist=6.69m bearing=+112.4deg | id=0
+[bird_detector_node-14] [INFO] [1785911521.487000817] [bird_detector_node]: [BIRD] world x=6.709 y=0.406 z=4.275 | dist=6.92m bearing=+75.6deg | id=0
+[lidar_fusion_node-9] [WARN] [1785911521.732341861] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 13.600000 but the latest data is at time 13.541000, when looking up transform from frame [livox] to frame [odom]
+[bird_detector_node-14] [INFO] [1785911522.140093483] [bird_detector_node]: [BIRD] world x=6.510 y=1.064 z=4.412 | dist=6.98m bearing=+25.1deg | id=0
+[bird_detector_node-14] [INFO] [1785911522.795009218] [bird_detector_node]: [BIRD] world x=6.249 y=1.707 z=4.436 | dist=6.98m bearing=-16.5deg | id=0
+[bird_detector_node-14] [INFO] [1785911523.480061900] [bird_detector_node]: [BIRD] world x=6.039 y=2.392 z=4.410 | dist=6.82m bearing=-37.5deg | id=0
+[bird_detector_node-14] [INFO] [1785911524.137552568] [bird_detector_node]: [BIRD] world x=5.848 y=3.189 z=4.286 | dist=6.59m bearing=-46.4deg | id=0
+[bird_detector_node-14] [INFO] [1785911524.801632944] [bird_detector_node]: [BIRD] world x=5.616 y=3.961 z=4.292 | dist=6.15m bearing=-35.6deg | id=0
+[bird_detector_node-14] [INFO] [1785911525.458128424] [bird_detector_node]: [BIRD] world x=5.355 y=4.668 z=4.225 | dist=5.59m bearing=-7.7deg | id=0
+[bird_detector_node-14] [INFO] [1785911526.114098796] [bird_detector_node]: [BIRD] world x=5.033 y=5.366 z=4.212 | dist=4.94m bearing=+21.2deg | id=0
+[bird_detector_node-14] [INFO] [1785911526.767426402] [bird_detector_node]: [BIRD] world x=4.284 y=5.584 z=4.081 | dist=3.81m bearing=+44.6deg | id=0
+[bird_detector_node-14] [INFO] [1785911527.427937584] [bird_detector_node]: [BIRD] world x=3.529 y=5.664 z=3.797 | dist=3.16m bearing=+59.5deg | id=0
+[bird_detector_node-14] [INFO] [1785911528.080373008] [bird_detector_node]: [BIRD] world x=2.789 y=5.827 z=3.712 | dist=3.22m bearing=+59.6deg | id=0
+[bird_detector_node-14] [INFO] [1785911528.738324452] [bird_detector_node]: [BIRD] world x=2.048 y=5.903 z=3.665 | dist=3.47m bearing=+37.3deg | id=0
+[bird_detector_node-14] [INFO] [1785911529.397758778] [bird_detector_node]: [BIRD] world x=1.449 y=6.043 z=3.640 | dist=3.76m bearing=-1.7deg | id=0
+[lidar_fusion_node-9] [WARN] [1785911529.788748308] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 19.700000 but the latest data is at time 19.651000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911529.925495678] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 19.800000 but the latest data is at time 19.651000, when looking up transform from frame [livox] to frame [odom]
+[bird_detector_node-14] [INFO] [1785911530.056726599] [bird_detector_node]: [BIRD] world x=0.611 y=6.192 z=3.585 | dist=4.03m bearing=-24.3deg | id=0
+[lidar_fusion_node-9] [WARN] [1785911530.068286358] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 19.900000 but the latest data is at time 19.651000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911530.196764850] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 20.000000 but the latest data is at time 19.651000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911530.417478132] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 20.200000 but the latest data is at time 19.651000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911530.549379228] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 20.300000 but the latest data is at time 19.651000, when looking up transform from frame [livox] to frame [odom]
+[bird_detector_node-14] [INFO] [1785911530.706252254] [bird_detector_node]: [BIRD] world x=-0.160 y=6.279 z=3.496 | dist=3.94m bearing=-36.8deg | id=0
+[lidar_fusion_node-9] [WARN] [1785911530.719221561] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 20.400000 but the latest data is at time 19.651000, when looking up transform from frame [livox] to frame [odom]
+[bird_detector_node-14] [INFO] [1785911531.394320664] [bird_detector_node]: [BIRD] world x=-0.686 y=6.441 z=3.296 | dist=3.59m bearing=-44.1deg | id=0
+[bird_detector_node-14] [INFO] [1785911532.077405618] [bird_detector_node]: [BIRD] world x=-1.652 y=6.525 z=3.181 | dist=3.51m bearing=-35.6deg | id=0
+[bird_detector_node-14] [INFO] [1785911532.739806109] [bird_detector_node]: [BIRD] world x=-2.362 y=6.621 z=3.039 | dist=3.17m bearing=-23.2deg | id=0
+[bird_detector_node-14] [INFO] [1785911533.409264645] [bird_detector_node]: [BIRD] world x=-3.210 y=6.745 z=2.931 | dist=2.83m bearing=-5.1deg | id=0
+[bird_detector_node-14] [INFO] [1785911534.107998609] [bird_detector_node]: [BIRD] world x=-3.951 y=6.847 z=2.738 | dist=2.45m bearing=+14.9deg | id=0
+[bird_detector_node-14] [INFO] [1785911534.778491365] [bird_detector_node]: [BIRD] world x=-4.709 y=7.072 z=2.633 | dist=2.35m bearing=+29.0deg | id=0
+[bird_detector_node-14] [INFO] [1785911535.462753469] [bird_detector_node]: [BIRD] world x=-5.466 y=7.304 z=2.493 | dist=2.41m bearing=+32.5deg | id=0
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[bird_detector_node-14] [INFO] [1785911536.138089745] [bird_detector_node]: [BIRD] world x=-6.230 y=7.506 z=2.511 | dist=2.54m bearing=+25.4deg | id=0
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[bird_detector_node-14] [INFO] [1785911536.815752004] [bird_detector_node]: [BIRD] world x=-6.875 y=7.891 z=2.565 | dist=2.51m bearing=+5.1deg | id=0
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[bird_detector_node-14] [INFO] [1785911537.498092104] [bird_detector_node]: [BIRD] world x=-6.885 y=8.598 z=2.524 | dist=2.00m bearing=-31.4deg | id=0
+[bird_detector_node-14] [INFO] [1785911538.177906480] [bird_detector_node]: [BIRD] world x=-6.340 y=9.096 z=2.643 | dist=1.63m bearing=-70.8deg | id=0
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[python3-19] WARNING ⚠️ not enough matching points
+[bird_detector_node-14] [INFO] [1785911538.839845506] [bird_detector_node]: [BIRD] world x=-5.005 y=9.065 z=3.312 | dist=1.75m bearing=-103.4deg | id=0
+[bird_detector_node-14] [INFO] [1785911539.516390295] [bird_detector_node]: [BIRD] world x=-3.999 y=8.901 z=2.973 | dist=2.37m bearing=-86.0deg | id=0
+[lidar_fusion_node-9] [WARN] [1785911539.524808071] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 26.900000 but the latest data is at time 26.821000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911539.656678603] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 27.000000 but the latest data is at time 26.821000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911539.795110726] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 27.100000 but the latest data is at time 26.821000, when looking up transform from frame [livox] to frame [odom]
+[bird_detector_node-14] [INFO] [1785911540.186903990] [bird_detector_node]: [BIRD] world x=-3.229 y=8.903 z=2.985 | dist=3.04m bearing=-39.1deg | id=0
+[bird_detector_node-14] [INFO] [1785911540.876656631] [bird_detector_node]: [BIRD] world x=-2.075 y=8.907 z=3.004 | dist=4.11m bearing=+9.1deg | id=0
+[bird_detector_node-14] [INFO] [1785911541.563680561] [bird_detector_node]: [BIRD] world x=-1.112 y=8.910 z=3.019 | dist=4.80m bearing=+37.3deg | id=0
+[bird_detector_node-14] [INFO] [1785911542.226479834] [bird_detector_node]: [BIRD] world x=-1.571 y=7.774 z=3.735 | dist=3.60m bearing=+37.2deg | id=5
+[bird_detector_node-14] [INFO] [1785911542.893005583] [bird_detector_node]: [BIRD] world x=-0.729 y=7.540 z=3.978 | dist=3.65m bearing=+44.7deg | id=5
+[bird_detector_node-14] [INFO] [1785911543.582206365] [bird_detector_node]: [BIRD] world x=-0.192 y=7.245 z=3.743 | dist=3.36m bearing=+29.8deg | id=5
+[bird_detector_node-14] [INFO] [1785911544.298502068] [bird_detector_node]: [BIRD] world x=-0.019 y=6.409 z=3.467 | dist=2.73m bearing=-17.1deg | id=5
+[bird_detector_node-14] [INFO] [1785911544.992847219] [bird_detector_node]: [BIRD] world x=-0.662 y=5.543 z=3.748 | dist=1.89m bearing=-68.5deg | id=0
+[bird_detector_node-14] [INFO] [1785911545.678225032] [bird_detector_node]: [BIRD] world x=-1.245 y=4.843 z=3.549 | dist=2.09m bearing=-90.4deg | id=0
+[bird_detector_node-14] [INFO] [1785911546.348439913] [bird_detector_node]: [BIRD] world x=-1.748 y=4.334 z=3.632 | dist=2.55m bearing=-78.2deg | id=0
+[bird_detector_node-14] [INFO] [1785911547.034550478] [bird_detector_node]: [BIRD] world x=-2.403 y=3.716 z=3.432 | dist=3.22m bearing=-44.0deg | id=0
+[bird_detector_node-14] [INFO] [1785911547.704379651] [bird_detector_node]: [BIRD] world x=-2.937 y=3.138 z=3.325 | dist=3.85m bearing=+0.9deg | id=0
+[lidar_fusion_node-9] [WARN] [1785911548.374395932] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 33.400000 but the latest data is at time 33.361000, when looking up transform from frame [livox] to frame [odom]
+[bird_detector_node-14] [INFO] [1785911548.398686781] [bird_detector_node]: [BIRD] world x=-3.547 y=2.354 z=3.182 | dist=4.48m bearing=+29.6deg | id=0
+[lidar_fusion_node-9] [WARN] [1785911548.530221630] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 33.500000 but the latest data is at time 33.361000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911548.664880902] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 33.600000 but the latest data is at time 33.361000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911548.811909576] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 33.700000 but the latest data is at time 33.361000, when looking up transform from frame [livox] to frame [odom]
+[bird_detector_node-14] [INFO] [1785911549.102311410] [bird_detector_node]: [BIRD] world x=-4.064 y=1.817 z=3.213 | dist=4.60m bearing=+45.7deg | id=0
+[bird_detector_node-14] [INFO] [1785911549.798868339] [bird_detector_node]: [BIRD] world x=-3.994 y=1.704 z=3.025 | dist=4.11m bearing=+50.9deg | id=5
+[bird_detector_node-14] [INFO] [1785911550.479415419] [bird_detector_node]: [BIRD] world x=-4.814 y=1.012 z=2.916 | dist=4.36m bearing=+27.4deg | id=5
+[bird_detector_node-14] [INFO] [1785911551.187756351] [bird_detector_node]: [BIRD] world x=-5.411 y=0.346 z=2.811 | dist=4.35m bearing=+0.2deg | id=5
+[bird_detector_node-14] [INFO] [1785911551.855901251] [bird_detector_node]: [BIRD] world x=-6.198 y=-0.573 z=2.650 | dist=4.51m bearing=-23.0deg | id=0
+[bird_detector_node-14] [INFO] [1785911552.557898577] [bird_detector_node]: [BIRD] world x=-6.685 y=-1.059 z=2.593 | dist=4.07m bearing=-33.8deg | id=0
+[bird_detector_node-14] [INFO] [1785911553.252265398] [bird_detector_node]: [BIRD] world x=-6.797 y=-1.489 z=2.556 | dist=3.49m bearing=-24.5deg | id=5
+[bird_detector_node-14] [INFO] [1785911553.963692128] [bird_detector_node]: [BIRD] world x=-6.131 y=-2.191 z=2.652 | dist=2.74m bearing=+11.5deg | id=5
+[bird_detector_node-14] [INFO] [1785911554.641575939] [bird_detector_node]: [BIRD] world x=-5.548 y=-2.141 z=2.670 | dist=1.80m bearing=+45.9deg | id=5
+[bird_detector_node-14] [INFO] [1785911555.346392850] [bird_detector_node]: [BIRD] world x=-5.133 y=-1.419 z=2.993 | dist=1.02m bearing=+83.3deg | id=5
+[bird_detector_node-14] [INFO] [1785911556.040530045] [bird_detector_node]: [BIRD] world x=-4.480 y=-0.781 z=3.060 | dist=1.50m bearing=+103.8deg | id=5
+[bird_detector_node-14] [INFO] [1785911556.716718850] [bird_detector_node]: [BIRD] world x=-3.651 y=-0.224 z=2.847 | dist=2.42m bearing=+74.2deg | id=5
+[bird_detector_node-14] [INFO] [1785911557.422843111] [bird_detector_node]: [BIRD] world x=-3.346 y=0.044 z=2.990 | dist=2.79m bearing=+21.7deg | id=5
+[bird_detector_node-14] [INFO] [1785911558.122039163] [bird_detector_node]: [BIRD] world x=-2.983 y=0.655 z=3.208 | dist=3.29m bearing=-16.2deg | id=5
+[bird_detector_node-14] [INFO] [1785911558.791929025] [bird_detector_node]: [BIRD] world x=-2.244 y=1.219 z=3.407 | dist=3.82m bearing=-33.6deg | id=5
+[bird_detector_node-14] [INFO] [1785911559.479400125] [bird_detector_node]: [BIRD] world x=-1.630 y=1.908 z=3.564 | dist=4.04m bearing=-45.1deg | id=5
+[bird_detector_node-14] [INFO] [1785911560.182086218] [bird_detector_node]: [BIRD] world x=-0.988 y=2.491 z=3.647 | dist=4.17m bearing=-44.9deg | id=5
+[bird_detector_node-14] [INFO] [1785911560.904213550] [bird_detector_node]: [BIRD] world x=-0.620 y=2.993 z=3.612 | dist=4.00m bearing=-25.0deg | id=5
+[bird_detector_node-14] [INFO] [1785911561.602866839] [bird_detector_node]: [BIRD] world x=-0.124 y=3.722 z=3.730 | dist=3.87m bearing=+4.1deg | id=5
+[bird_detector_node-14] [INFO] [1785911562.270588574] [bird_detector_node]: [BIRD] world x=0.544 y=4.323 z=3.919 | dist=3.79m bearing=+28.2deg | id=5
+[bird_detector_node-14] [INFO] [1785911562.947800493] [bird_detector_node]: [BIRD] world x=0.873 y=4.988 z=3.814 | dist=3.55m bearing=+46.1deg | id=5
+[bird_detector_node-14] [INFO] [1785911563.659687510] [bird_detector_node]: [BIRD] world x=0.571 y=5.451 z=3.640 | dist=3.15m bearing=+52.4deg | id=5
+[bird_detector_node-14] [INFO] [1785911564.361038944] [bird_detector_node]: [BIRD] world x=-0.259 y=5.376 z=3.649 | dist=2.59m bearing=+46.9deg | id=5
+[bird_detector_node-14] [INFO] [1785911565.056667713] [bird_detector_node]: [BIRD] world x=-1.116 y=4.896 z=3.831 | dist=2.18m bearing=+37.7deg | id=5
+[bird_detector_node-14] [INFO] [1785911565.744164374] [bird_detector_node]: [BIRD] world x=-1.904 y=4.632 z=3.773 | dist=2.35m bearing=+17.9deg | id=5
+[bird_detector_node-14] [INFO] [1785911566.436277978] [bird_detector_node]: [BIRD] world x=-2.901 y=4.252 z=3.678 | dist=2.73m bearing=+6.3deg | id=5
+[bird_detector_node-14] [INFO] [1785911567.121580950] [bird_detector_node]: [BIRD] world x=-3.638 y=4.008 z=3.624 | dist=2.72m bearing=-4.7deg | id=5
+[bird_detector_node-14] [INFO] [1785911567.805034783] [bird_detector_node]: [BIRD] world x=-4.209 y=3.729 z=3.611 | dist=2.36m bearing=-8.5deg | id=5
+[bird_detector_node-14] [INFO] [1785911568.528086429] [bird_detector_node]: [BIRD] world x=-5.270 y=3.225 z=3.732 | dist=2.42m bearing=+0.2deg | id=5
+[bird_detector_node-14] [INFO] [1785911569.199865566] [bird_detector_node]: [BIRD] world x=-5.566 y=2.548 z=3.684 | dist=1.90m bearing=+20.7deg | id=5
+[bird_detector_node-14] [INFO] [1785911569.881341379] [bird_detector_node]: [BIRD] world x=-5.106 y=1.956 z=3.706 | dist=1.46m bearing=+60.0deg | id=5
+[bird_detector_node-14] [INFO] [1785911570.591036815] [bird_detector_node]: [BIRD] world x=-3.843 y=2.547 z=3.500 | dist=1.25m bearing=+131.1deg | id=8
+[bird_detector_node-14] [INFO] [1785911571.284747181] [bird_detector_node]: [BIRD] world x=-2.589 y=2.813 z=3.237 | dist=2.35m bearing=+136.0deg | id=8
+[bird_detector_node-14] [INFO] [1785911571.989302386] [bird_detector_node]: [BIRD] world x=-1.830 y=2.993 z=3.096 | dist=3.08m bearing=+101.4deg | id=8
+[bird_detector_node-14] [INFO] [1785911572.674162585] [bird_detector_node]: [BIRD] world x=-1.440 y=3.317 z=3.198 | dist=3.47m bearing=+52.0deg | id=8
+[bird_detector_node-14] [INFO] [1785911573.381010990] [bird_detector_node]: [BIRD] world x=-0.496 y=3.361 z=3.155 | dist=4.40m bearing=-2.4deg | id=8
+[bird_detector_node-14] [INFO] [1785911574.059851853] [bird_detector_node]: [BIRD] world x=0.273 y=3.591 z=3.118 | dist=4.93m bearing=-30.0deg | id=8
+[bird_detector_node-14] [INFO] [1785911574.739829803] [bird_detector_node]: [BIRD] world x=0.927 y=3.896 z=3.103 | dist=5.08m bearing=-44.6deg | id=8
+[bird_detector_node-14] [INFO] [1785911575.431481284] [bird_detector_node]: [BIRD] world x=1.859 y=4.140 z=3.066 | dist=5.41m bearing=-51.9deg | id=8
+[bird_detector_node-14] [INFO] [1785911576.092129855] [bird_detector_node]: [BIRD] world x=2.674 y=4.490 z=2.936 | dist=5.59m bearing=-43.7deg | id=8
+[bird_detector_node-14] [INFO] [1785911576.778449941] [bird_detector_node]: [BIRD] world x=3.353 y=4.692 z=2.852 | dist=5.58m bearing=-24.9deg | id=8
+[bird_detector_node-14] [INFO] [1785911577.470376828] [bird_detector_node]: [BIRD] world x=4.194 y=5.119 z=2.813 | dist=5.52m bearing=+1.9deg | id=8
+[bird_detector_node-14] [INFO] [1785911578.163129173] [bird_detector_node]: [BIRD] world x=5.033 y=5.306 z=2.681 | dist=5.39m bearing=+24.6deg | id=8
+[bird_detector_node-14] [INFO] [1785911578.872338546] [bird_detector_node]: [BIRD] world x=5.837 y=5.311 z=2.679 | dist=5.22m bearing=+36.6deg | id=8
+[bird_detector_node-14] [INFO] [1785911579.553709991] [bird_detector_node]: [BIRD] world x=6.402 y=5.442 z=2.692 | dist=4.87m bearing=+41.3deg | id=8
+[bird_detector_node-14] [INFO] [1785911580.240225303] [bird_detector_node]: [BIRD] world x=7.313 y=5.583 z=2.506 | dist=4.97m bearing=+35.8deg | id=8
+[lidar_fusion_node-9] [WARN] [1785911580.811460153] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 56.800000 but the latest data is at time 56.711000, when looking up transform from frame [livox] to frame [odom]
+[bird_detector_node-14] [INFO] [1785911580.939919368] [bird_detector_node]: [BIRD] world x=8.332 y=5.665 z=2.557 | dist=5.08m bearing=+23.1deg | id=8
+[lidar_fusion_node-9] [WARN] [1785911580.948750096] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 56.900000 but the latest data is at time 56.711000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911581.099812702] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 57.000000 but the latest data is at time 56.711000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911581.470994887] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 57.300000 but the latest data is at time 56.711000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911581.611508175] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 57.400000 but the latest data is at time 56.711000, when looking up transform from frame [livox] to frame [odom]
+[bird_detector_node-14] [INFO] [1785911581.615922425] [bird_detector_node]: [BIRD] world x=9.295 y=5.371 z=2.594 | dist=4.83m bearing=+3.0deg | id=8
+[lidar_fusion_node-9] [WARN] [1785911581.748312363] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 57.500000 but the latest data is at time 56.711000, when looking up transform from frame [livox] to frame [odom]
+[lidar_fusion_node-9] [WARN] [1785911581.903723214] [lidar_fusion_node]: TF lookup failed for livox: Lookup would require extrapolation into the future.  Requested time 57.600000 but the latest data is at time 56.711000, when looking up transform from frame [livox] to frame [odom]
+[bird_detector_node-14] [INFO] [1785911582.330814955] [bird_detector_node]: [BIRD] world x=8.905 y=4.734 z=2.548 | dist=3.13m bearing=-19.0deg | id=8
+[bird_detector_node-14] [INFO] [1785911583.012583118] [bird_detector_node]: [BIRD] world x=8.295 y=4.501 z=2.360 | dist=1.56m bearing=-43.7deg | id=8
+[bird_detector_node-14] [INFO] [1785911583.704616978] [bird_detector_node]: [BIRD] world x=7.414 y=4.055 z=2.714 | dist=1.14m bearing=-118.5deg | id=8
+[bird_detector_node-14] [INFO] [1785911584.401504169] [bird_detector_node]: [BIRD] world x=6.458 y=3.889 z=2.595 | dist=1.90m bearing=-153.6deg | id=8
+[bird_detector_node-14] [INFO] [1785911585.099578342] [bird_detector_node]: [BIRD] world x=5.911 y=3.958 z=2.466 | dist=2.29m bearing=-145.5deg | id=8
+[bird_detector_node-14] [INFO] [1785911585.793574162] [bird_detector_node]: [BIRD] world x=5.340 y=3.717 z=2.636 | dist=2.91m bearing=-100.6deg | id=8
+[bird_detector_node-14] [INFO] [1785911586.485231549] [bird_detector_node]: [BIRD] world x=4.570 y=3.648 z=2.732 | dist=3.60m bearing=-47.8deg | id=8
+[bird_detector_node-14] [INFO] [1785911587.182405474] [bird_detector_node]: [BIRD] world x=3.706 y=3.216 z=2.768 | dist=4.54m bearing=+4.8deg | id=8
+[bird_detector_node-14] [INFO] [1785911587.844630106] [bird_detector_node]: [BIRD] world x=3.073 y=3.151 z=2.691 | dist=4.86m bearing=+33.2deg | id=8
+[bird_detector_node-14] [INFO] [1785911588.536242433] [bird_detector_node]: [BIRD] world x=2.097 y=2.947 z=2.774 | dist=5.32m bearing=+48.4deg | id=8
+[bird_detector_node-14] [INFO] [1785911589.216316563] [bird_detector_node]: [BIRD] world x=1.282 y=2.764 z=2.765 | dist=5.55m bearing=+48.3deg | id=8
+[bird_detector_node-14] [INFO] [1785911589.890650915] [bird_detector_node]: [BIRD] world x=0.372 y=2.704 z=2.829 | dist=5.74m bearing=+21.4deg | id=8
+[bird_detector_node-14] [INFO] [1785911590.563773148] [bird_detector_node]: [BIRD] world x=-0.368 y=2.419 z=2.850 | dist=5.79m bearing=-7.2deg | id=8
+[robot_state_publisher-4] [INFO] [1785911590.744811976] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[rviz2-3] [INFO] [1785911590.744809329] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[static_transform_publisher-8] [INFO] [1785911590.744876801] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[map_server-11] [INFO] [1785911590.744924004] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[map_server-11] [INFO] [1785911590.745047910] [map_server]: Running Nav2 LifecycleNode rcl preshutdown (map_server)
+[map_server-11] [INFO] [1785911590.745149147] [map_server]: Deactivating
+[map_server-11] [INFO] [1785911590.745167988] [map_server]: Destroying bond (map_server) to lifecycle manager.
+[static_transform_publisher-7] [INFO] [1785911590.745031393] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[lifecycle_manager-13] [INFO] [1785911590.745093852] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[lifecycle_manager-13] [INFO] [1785911590.745201087] [lifecycle_manager_localization]: Running Nav2 LifecycleManager rcl preshutdown (lifecycle_manager_localization)
+[lifecycle_manager-13] [INFO] [1785911590.745255776] [lifecycle_manager_localization]: [34m[1mTerminating bond timer...[0m[0m
+[amcl-12] [INFO] [1785911590.745085001] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[amcl-12] [INFO] [1785911590.745204781] [amcl]: Running Nav2 LifecycleNode rcl preshutdown (amcl)
+[amcl-12] [INFO] [1785911590.745304329] [amcl]: Deactivating
+[amcl-12] [INFO] [1785911590.745335130] [amcl]: Destroying bond (amcl) to lifecycle manager.
+[amcl-12] [INFO] [1785911590.755791802] [amcl]: Cleaning up
+[map_server-11] [INFO] [1785911590.757403240] [map_server]: Cleaning up
+[map_server-11] [INFO] [1785911590.757542087] [map_server]: Destroying bond (map_server) to lifecycle manager.
+[map_server-11] [INFO] [1785911590.762257770] [map_server]: Destroying
+[amcl-12] [INFO] [1785911590.764702715] [amcl]: Destroying bond (amcl) to lifecycle manager.
+[amcl-12] [INFO] [1785911590.768742783] [amcl]: Destroying
+[lifecycle_manager-13] [INFO] [1785911590.777444661] [lifecycle_manager_localization]: Destroying lifecycle_manager_localization
+[python3-19] Traceback (most recent call last):
+[python3-19]   File "/home/seo/ros2_ws/ugv_ws/install/gimbal_camera_pkg/lib/gimbal_camera_pkg/gimbal_bird_tracker.py", line 417, in main
+[python3-19]     rclpy.spin(node)
+[python3-19]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+[python3-19]     executor.spin_once()
+[python3-19]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 808, in spin_once
+[python3-19]     self._spin_once_impl(timeout_sec)
+[python3-19]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 797, in _spin_once_impl
+[python3-19]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+[python3-19]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 780, in wait_for_ready_callbacks
+[python3-19]     return next(self._cb_iter)
+[python3-19]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 681, in _wait_for_ready_callbacks
+[python3-19]     raise ExternalShutdownException()
+[python3-19] rclpy.executors.ExternalShutdownException
+[python3-19] 
+[python3-19] During handling of the above exception, another exception occurred:
+[python3-19] 
+[python3-19] Traceback (most recent call last):
+[python3-19]   File "/home/seo/ros2_ws/ugv_ws/install/gimbal_camera_pkg/lib/gimbal_camera_pkg/gimbal_bird_tracker.py", line 426, in <module>
+[python3-19]     main()
+[python3-19]   File "/home/seo/ros2_ws/ugv_ws/install/gimbal_camera_pkg/lib/gimbal_camera_pkg/gimbal_bird_tracker.py", line 422, in main
+[python3-19]     rclpy.shutdown()
+[python3-19]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+[python3-19]     _shutdown(context=context)
+[python3-19]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+[python3-19]     return context.shutdown()
+[python3-19]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+[python3-19]     self.__context.shutdown()
+[python3-19] rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+[joint_state_publisher-5] Traceback (most recent call last):
+[joint_state_publisher-5]   File "/opt/ros/humble/lib/joint_state_publisher/joint_state_publisher", line 33, in <module>
+[joint_state_publisher-5]     sys.exit(load_entry_point('joint-state-publisher==2.4.0', 'console_scripts', 'joint_state_publisher')())
+[joint_state_publisher-5]   File "/opt/ros/humble/lib/python3.10/site-packages/joint_state_publisher/joint_state_publisher.py", line 466, in main
+[joint_state_publisher-5]     rclpy.spin(jsp)
+[joint_state_publisher-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+[joint_state_publisher-5]     executor.spin_once()
+[joint_state_publisher-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 808, in spin_once
+[joint_state_publisher-5]     self._spin_once_impl(timeout_sec)
+[joint_state_publisher-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 797, in _spin_once_impl
+[joint_state_publisher-5]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+[joint_state_publisher-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 780, in wait_for_ready_callbacks
+[joint_state_publisher-5]     return next(self._cb_iter)
+[joint_state_publisher-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 681, in _wait_for_ready_callbacks
+[joint_state_publisher-5]     raise ExternalShutdownException()
+[joint_state_publisher-5] rclpy.executors.ExternalShutdownException
+[bird_detector_node-14] Traceback (most recent call last):
+[bird_detector_node-14]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/python3.10/site-packages/pcd_cluster_pkg/bird_detector_node.py", line 762, in main
+[lidar_fusion_node-9] Traceback (most recent call last):
+[lidar_fusion_node-9]   File "/home/seo/ros2_ws/ugv_ws/install/lidar_fusion_pkg/lib/lidar_fusion_pkg/lidar_fusion_node", line 33, in <module>
+[lidar_fusion_node-9]     sys.exit(load_entry_point('lidar-fusion-pkg==0.0.0', 'console_scripts', 'lidar_fusion_node')())
+[lidar_fusion_node-9]   File "/home/seo/ros2_ws/ugv_ws/install/lidar_fusion_pkg/lib/python3.10/site-packages/lidar_fusion_pkg/lidar_fusion_node.py", line 185, in main
+[lidar_fusion_node-9]     rclpy.spin(node)
+[lidar_fusion_node-9]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+[lidar_fusion_node-9]     executor.spin_once()
+[lidar_fusion_node-9]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 808, in spin_once
+[lidar_fusion_node-9]     self._spin_once_impl(timeout_sec)
+[lidar_fusion_node-9]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 797, in _spin_once_impl
+[bird_detector_node-14]     rclpy.spin(node)
+[bird_detector_node-14]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+[bird_detector_node-14]     executor.spin_once()
+[bird_detector_node-14]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 808, in spin_once
+[bird_detector_node-14]     self._spin_once_impl(timeout_sec)
+[bird_detector_node-14]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 797, in _spin_once_impl
+[bird_detector_node-14]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+[bird_detector_node-14]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 780, in wait_for_ready_callbacks
+[bird_detector_node-14]     return next(self._cb_iter)
+[bird_detector_node-14]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 681, in _wait_for_ready_callbacks
+[bird_detector_node-14]     raise ExternalShutdownException()
+[bird_detector_node-14] rclpy.executors.ExternalShutdownException
+[bird_detector_node-14] 
+[bird_detector_node-14] During handling of the above exception, another exception occurred:
+[bird_detector_node-14] 
+[bird_detector_node-14] Traceback (most recent call last):
+[bird_detector_node-14]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/pcd_cluster_pkg/bird_detector_node", line 33, in <module>
+[bird_detector_node-14]     sys.exit(load_entry_point('pcd-cluster-pkg==0.0.0', 'console_scripts', 'bird_detector_node')())
+[bird_detector_node-14]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/python3.10/site-packages/pcd_cluster_pkg/bird_detector_node.py", line 767, in main
+[bird_detector_node-14]     rclpy.shutdown()
+[bird_detector_node-14]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+[lidar_fusion_node-9]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+[lidar_fusion_node-9]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 780, in wait_for_ready_callbacks
+[lidar_fusion_node-9]     return next(self._cb_iter)
+[lidar_fusion_node-9]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 681, in _wait_for_ready_callbacks
+[lidar_fusion_node-9]     raise ExternalShutdownException()
+[lidar_fusion_node-9] rclpy.executors.ExternalShutdownException
+[bird_detector_node-14]     _shutdown(context=context)
+[bird_detector_node-14]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+[bird_detector_node-14]     return context.shutdown()
+[bird_detector_node-14]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+[bird_detector_node-14]     self.__context.shutdown()
+[bird_detector_node-14] rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+[bird_pursuit_node-15] Traceback (most recent call last):
+[bird_pursuit_node-15]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/python3.10/site-packages/pcd_cluster_pkg/bird_pursuit_node.py", line 346, in main
+[bird_pursuit_node-15]     rclpy.spin(node)
+[bird_pursuit_node-15]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+[bird_pursuit_node-15]     executor.spin_once()
+[bird_pursuit_node-15]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 808, in spin_once
+[bird_pursuit_node-15]     self._spin_once_impl(timeout_sec)
+[bird_pursuit_node-15]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 797, in _spin_once_impl
+[bird_pursuit_node-15]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+[bird_pursuit_node-15]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 780, in wait_for_ready_callbacks
+[bird_pursuit_node-15]     return next(self._cb_iter)
+[bird_pursuit_node-15]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 681, in _wait_for_ready_callbacks
+[bird_pursuit_node-15]     raise ExternalShutdownException()
+[bird_pursuit_node-15] rclpy.executors.ExternalShutdownException
+[bird_pursuit_node-15] 
+[bird_pursuit_node-15] During handling of the above exception, another exception occurred:
+[bird_pursuit_node-15] 
+[bird_pursuit_node-15] Traceback (most recent call last):
+[bird_pursuit_node-15]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/pcd_cluster_pkg/bird_pursuit_node", line 33, in <module>
+[bird_pursuit_node-15]     sys.exit(load_entry_point('pcd-cluster-pkg==0.0.0', 'console_scripts', 'bird_pursuit_node')())
+[bird_pursuit_node-15]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/python3.10/site-packages/pcd_cluster_pkg/bird_pursuit_node.py", line 351, in main
+[bird_pursuit_node-15]     rclpy.shutdown()
+[bird_pursuit_node-15]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+[bird_pursuit_node-15]     _shutdown(context=context)
+[bird_pursuit_node-15]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+[bird_pursuit_node-15]     return context.shutdown()
+[bird_pursuit_node-15]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+[bird_pursuit_node-15]     self.__context.shutdown()
+[bird_pursuit_node-15] rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+[patrol_node-17] Traceback (most recent call last):
+[patrol_node-17]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/python3.10/site-packages/pcd_cluster_pkg/patrol_node.py", line 423, in main
+[patrol_node-17]     rclpy.spin(node)
+[patrol_node-17]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+[patrol_node-17]     executor.spin_once()
+[patrol_node-17]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 808, in spin_once
+[patrol_node-17]     self._spin_once_impl(timeout_sec)
+[patrol_node-17]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 797, in _spin_once_impl
+[patrol_node-17]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+[patrol_node-17]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 780, in wait_for_ready_callbacks
+[patrol_node-17]     return next(self._cb_iter)
+[patrol_node-17]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 681, in _wait_for_ready_callbacks
+[patrol_node-17]     raise ExternalShutdownException()
+[patrol_node-17] rclpy.executors.ExternalShutdownException
+[patrol_node-17] 
+[patrol_node-17] During handling of the above exception, another exception occurred:
+[patrol_node-17] 
+[patrol_node-17] Traceback (most recent call last):
+[patrol_node-17]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/pcd_cluster_pkg/patrol_node", line 33, in <module>
+[patrol_node-17]     sys.exit(load_entry_point('pcd-cluster-pkg==0.0.0', 'console_scripts', 'patrol_node')())
+[patrol_node-17]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/python3.10/site-packages/pcd_cluster_pkg/patrol_node.py", line 428, in main
+[patrol_node-17]     rclpy.shutdown()
+[patrol_node-17]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+[patrol_node-17]     _shutdown(context=context)
+[patrol_node-17]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+[patrol_node-17]     return context.shutdown()
+[patrol_node-17]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+[patrol_node-17]     self.__context.shutdown()
+[patrol_node-17] rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+[pointcloud_to_laserscan_node-10] Traceback (most recent call last):
+[pointcloud_to_laserscan_node-10]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_to_scan_pkg/lib/python3.10/site-packages/pcd_to_scan_pkg/pointcloud_to_laserscan_node.py", line 518, in main
+[pointcloud_to_laserscan_node-10]     rclpy.spin(node)
+[pointcloud_to_laserscan_node-10]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+[pointcloud_to_laserscan_node-10]     executor.spin_once()
+[pointcloud_to_laserscan_node-10]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 808, in spin_once
+[pointcloud_to_laserscan_node-10]     self._spin_once_impl(timeout_sec)
+[pointcloud_to_laserscan_node-10]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 797, in _spin_once_impl
+[pointcloud_to_laserscan_node-10]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+[pointcloud_to_laserscan_node-10]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 780, in wait_for_ready_callbacks
+[pointcloud_to_laserscan_node-10]     return next(self._cb_iter)
+[pointcloud_to_laserscan_node-10]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 681, in _wait_for_ready_callbacks
+[pointcloud_to_laserscan_node-10]     raise ExternalShutdownException()
+[pointcloud_to_laserscan_node-10] rclpy.executors.ExternalShutdownException
+[pointcloud_to_laserscan_node-10] 
+[pointcloud_to_laserscan_node-10] During handling of the above exception, another exception occurred:
+[pointcloud_to_laserscan_node-10] 
+[pointcloud_to_laserscan_node-10] Traceback (most recent call last):
+[pointcloud_to_laserscan_node-10]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_to_scan_pkg/lib/pcd_to_scan_pkg/pointcloud_to_laserscan_node", line 33, in <module>
+[pointcloud_to_laserscan_node-10]     sys.exit(load_entry_point('pcd-to-scan-pkg==0.0.1', 'console_scripts', 'pointcloud_to_laserscan_node')())
+[pointcloud_to_laserscan_node-10]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_to_scan_pkg/lib/python3.10/site-packages/pcd_to_scan_pkg/pointcloud_to_laserscan_node.py", line 525, in main
+[pointcloud_to_laserscan_node-10]     rclpy.shutdown()
+[pointcloud_to_laserscan_node-10]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+[pointcloud_to_laserscan_node-10]     _shutdown(context=context)
+[pointcloud_to_laserscan_node-10]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+[pointcloud_to_laserscan_node-10]     return context.shutdown()
+[pointcloud_to_laserscan_node-10]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+[pointcloud_to_laserscan_node-10]     self.__context.shutdown()
+[pointcloud_to_laserscan_node-10] rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+[trajectory_viz_node-16] Traceback (most recent call last):
+[trajectory_viz_node-16]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/python3.10/site-packages/pcd_cluster_pkg/trajectory_viz_node.py", line 83, in main
+[trajectory_viz_node-16]     rclpy.spin(node)
+[trajectory_viz_node-16]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+[trajectory_viz_node-16]     executor.spin_once()
+[trajectory_viz_node-16]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 808, in spin_once
+[trajectory_viz_node-16]     self._spin_once_impl(timeout_sec)
+[trajectory_viz_node-16]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 797, in _spin_once_impl
+[trajectory_viz_node-16]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+[trajectory_viz_node-16]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 780, in wait_for_ready_callbacks
+[trajectory_viz_node-16]     return next(self._cb_iter)
+[trajectory_viz_node-16]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 681, in _wait_for_ready_callbacks
+[trajectory_viz_node-16]     raise ExternalShutdownException()
+[trajectory_viz_node-16] rclpy.executors.ExternalShutdownException
+[trajectory_viz_node-16] 
+[trajectory_viz_node-16] During handling of the above exception, another exception occurred:
+[trajectory_viz_node-16] 
+[trajectory_viz_node-16] Traceback (most recent call last):
+[trajectory_viz_node-16]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/pcd_cluster_pkg/trajectory_viz_node", line 33, in <module>
+[trajectory_viz_node-16]     sys.exit(load_entry_point('pcd-cluster-pkg==0.0.0', 'console_scripts', 'trajectory_viz_node')())
+[trajectory_viz_node-16]   File "/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/python3.10/site-packages/pcd_cluster_pkg/trajectory_viz_node.py", line 88, in main
+[trajectory_viz_node-16]     rclpy.shutdown()
+[trajectory_viz_node-16]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+[trajectory_viz_node-16]     _shutdown(context=context)
+[trajectory_viz_node-16]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+[trajectory_viz_node-16]     return context.shutdown()
+[trajectory_viz_node-16]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+[trajectory_viz_node-16]     self.__context.shutdown()
+[trajectory_viz_node-16] rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+[python3-18] Traceback (most recent call last):
+[python3-18]   File "/home/seo/ros2_ws/ugv_ws/install/ugv_gazebo/lib/ugv_gazebo/bird_manager.py", line 332, in <module>
+[python3-18]     main()
+[python3-18]   File "/home/seo/ros2_ws/ugv_ws/install/ugv_gazebo/lib/ugv_gazebo/bird_manager.py", line 316, in main
+[python3-18]     rclpy.spin(node)
+[python3-18]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+[python3-18]     executor.spin_once()
+[python3-18]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 808, in spin_once
+[python3-18]     self._spin_once_impl(timeout_sec)
+[python3-18]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 797, in _spin_once_impl
+[python3-18]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+[python3-18]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 780, in wait_for_ready_callbacks
+[python3-18]     return next(self._cb_iter)
+[python3-18]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 681, in _wait_for_ready_callbacks
+[python3-18]     raise ExternalShutdownException()
+[python3-18] rclpy.executors.ExternalShutdownException
+[INFO] [static_transform_publisher-8]: process has finished cleanly [pid 8818]
+[INFO] [static_transform_publisher-7]: process has finished cleanly [pid 8816]
+[INFO] [robot_state_publisher-4]: process has finished cleanly [pid 8810]
+[INFO] [map_server-11]: process has finished cleanly [pid 8824]
+[INFO] [amcl-12]: process has finished cleanly [pid 8826]
+[INFO] [lifecycle_manager-13]: process has finished cleanly [pid 8828]
+[ERROR] [joint_state_publisher-5]: process has died [pid 8812, exit code 1, cmd '/opt/ros/humble/lib/joint_state_publisher/joint_state_publisher /home/seo/ros2_ws/ugv_ws/install/ugv_gazebo/share/ugv_gazebo/urdf/ugv_rover.urdf --ros-args -r __node:=joint_state_publisher --params-file /tmp/launch_params_p5pavpy4'].
+[ERROR] [patrol_node-17]: process has died [pid 9203, exit code 1, cmd '/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/pcd_cluster_pkg/patrol_node --ros-args -r __node:=patrol_node --params-file /tmp/launch_params_3egu_h6a'].
+[ERROR] [bird_pursuit_node-15]: process has died [pid 8832, exit code 1, cmd '/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/pcd_cluster_pkg/bird_pursuit_node --ros-args -r __node:=bird_pursuit_node --params-file /tmp/launch_params_2jqerk7u'].
+[INFO] [gzclient-2]: process has finished cleanly [pid 8806]
+[ERROR] [lidar_fusion_node-9]: process has died [pid 8820, exit code 1, cmd '/home/seo/ros2_ws/ugv_ws/install/lidar_fusion_pkg/lib/lidar_fusion_pkg/lidar_fusion_node --ros-args -r __node:=lidar_fusion_node --params-file /tmp/launch_params_j7n2axgp'].
+[INFO] [rviz2-3]: process has finished cleanly [pid 8808]
+[ERROR] [trajectory_viz_node-16]: process has died [pid 8834, exit code 1, cmd '/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/pcd_cluster_pkg/trajectory_viz_node --ros-args -r __node:=trajectory_viz_node --params-file /tmp/launch_params_ii1xkypd'].
+[ERROR] [python3-18]: process has died [pid 9232, exit code 1, cmd 'python3 /home/seo/ros2_ws/ugv_ws/install/ugv_gazebo/lib/ugv_gazebo/bird_manager.py --ros-args -p flight_speed:=1.2 -p bird_max_turn_rate_deg:=120.0'].
+[ERROR] [pointcloud_to_laserscan_node-10]: process has died [pid 8822, exit code 1, cmd '/home/seo/ros2_ws/ugv_ws/install/pcd_to_scan_pkg/lib/pcd_to_scan_pkg/pointcloud_to_laserscan_node --ros-args -r __node:=pointcloud_to_laserscan_node --params-file /tmp/launch_params_3_asbtoe'].
+[INFO] [gzserver-1]: process has finished cleanly [pid 8804]
+[gzserver-1] [0m[1;32m[0m[1;32m[0m[1;36m[0m[1;32m[0m
+[gzserver-1] [1;33m[0m[1;31m[0m
+[ERROR] [bird_detector_node-14]: process has died [pid 8830, exit code 1, cmd '/home/seo/ros2_ws/ugv_ws/install/pcd_cluster_pkg/lib/pcd_cluster_pkg/bird_detector_node --ros-args -r __node:=bird_detector_node --params-file /tmp/launch_params_7ei7w2av'].
+[ERROR] [python3-19]: process has died [pid 9248, exit code 1, cmd 'python3 /home/seo/ros2_ws/ugv_ws/install/gimbal_camera_pkg/lib/gimbal_camera_pkg/gimbal_bird_tracker.py --ros-args -p model_path:=yolo11l.pt'].

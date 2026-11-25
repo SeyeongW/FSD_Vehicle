@@ -27,12 +27,12 @@ from typing import Optional
 import numpy as np
 
 import rclpy
-from rclpy.duration import Duration
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
 
 from geometry_msgs.msg import TransformStamped
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Odometry
 from sensor_msgs.msg import PointCloud2, LaserScan
 from sensor_msgs_py import point_cloud2
 
@@ -113,6 +113,19 @@ class PointCloudToScanAndMapNode(Node):
         self.declare_parameter('enable_scan', True)
         self.declare_parameter('enable_map', True)
 
+        # ===== 자기 몸체(self-point) 제거 =====
+        # /fused_pointcloud2(odom 프레임)에는 온보드 mid360이 로봇 자신을 반사한
+        # 점도 그대로 섞여 있다(bird_detector_node.remove_self_points와 동일 문제).
+        # lidar_fusion_node가 opportunistic merge로 바뀌면서 이 반사점이 이제
+        # 매 메시지마다 상시 섞이게 됐는데, 여기엔 원래 자기 제거 필터가 없어서
+        # "로봇 바로 앞에 항상 장애물이 있다"는 /scan이 나가 patrol_node의
+        # obstacle_stop_dist 게이트가 계속 걸려 전진이 안 되고 제자리에서만
+        # 도는 문제가 생겼다. bird_detector_node와 동일한 박스로 제거한다.
+        self.declare_parameter('self_half_x', 0.6)
+        self.declare_parameter('self_half_y', 0.6)
+        self.declare_parameter('self_z_min', -0.3)
+        self.declare_parameter('self_z_max', 0.8)
+
         # ===== Height / range filter =====
         # scan_frame 기준 z 높이로 지면 제거
         self.declare_parameter('min_obstacle_height', 0.10)
@@ -170,19 +183,38 @@ class PointCloudToScanAndMapNode(Node):
         self.hit_grid = np.zeros((self.height_cells, self.width_cells), dtype=np.uint16)
         self.seen_grid = np.zeros((self.height_cells, self.width_cells), dtype=np.bool_)
 
+        self.self_half_x = float(self.get_parameter('self_half_x').value)
+        self.self_half_y = float(self.get_parameter('self_half_y').value)
+        self.self_z_min = float(self.get_parameter('self_z_min').value)
+        self.self_z_max = float(self.get_parameter('self_z_max').value)
+        # /odom과 /fused_pointcloud2 둘 다 'odom' 프레임이라 TF 조회 없이 바로 대입 가능.
+        self.robot_x = 0.0
+        self.robot_y = 0.0
+
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
+        self.odom_sub = self.create_subscription(
+            Odometry, '/odom', self.odom_callback, 10
+        )
+
+        # lidar_fusion_node의 출력 QoS(BEST_EFFORT, qos_profile_sensor_data)와
+        # 맞춰야 함 — 안 맞으면 QoS 불일치로 아예 메시지를 못 받는다.
         self.sub = self.create_subscription(
             PointCloud2,
             self.input_topic,
             self.cloud_callback,
-            10
+            qos_profile_sensor_data
         )
 
         self.scan_pub = None
         if self.enable_scan:
-            self.scan_pub = self.create_publisher(LaserScan, self.scan_topic, 10)
+            # RELIABLE(기본 QoS)로 이 빈도(최대 30Hz, 구독자 3곳)에 보내면 Fast-DDS의
+            # 신뢰성 프로토콜(ACK/NACK, 재전송) 오버헤드로 스레드풀 CPU가 폭증한다 —
+            # lidar_fusion_node의 포인트클라우드 publisher에서 이미 겪은 것과 동일 문제
+            # (해당 노드 주석 참고). 구독측(patrol_node, bird_pursuit_node)도 BEST_EFFORT로
+            # 맞춰야 한다 — 안 맞으면 QoS 불일치로 아예 못 받는다.
+            self.scan_pub = self.create_publisher(LaserScan, self.scan_topic, qos_profile_sensor_data)
 
         self.map_pub = None
         if self.enable_map:
@@ -210,16 +242,33 @@ class PointCloudToScanAndMapNode(Node):
                 f'cells={self.width_cells} x {self.height_cells}'
             )
 
-    def lookup_transform_matrix(self, target_frame: str, source_frame: str, stamp) -> Optional[np.ndarray]:
+    def odom_callback(self, msg: Odometry):
+        self.robot_x = msg.pose.pose.position.x
+        self.robot_y = msg.pose.pose.position.y
+
+    def lookup_transform_matrix(self, target_frame: str, source_frame: str) -> Optional[np.ndarray]:
         if target_frame == source_frame:
             return np.eye(4, dtype=np.float32)
 
         try:
+            # 포인트클라우드의 캡처 시각(msg.header.stamp)으로 조회하면, gzserver가
+            # 부하로 밀릴 때 odom->base_link TF가 그 시각까지 아직 안 나와서
+            # "extrapolation into the future"로 매 콜백 실패 -> /scan이 통째로
+            # 0Hz가 되는 문제가 있었다(AMCL이 굶어서 위치추정이 얼어붙고, patrol_node가
+            # 그 얼어붙은 위치 기준 방위각만 보고 제자리에서 계속 회전). 정확한 과거
+            # 시각 대신 최신 가용 TF(Time())를 쓰면 이 실패 자체가 안 생긴다 — 장애물
+            # 회피/맵 투영 용도라 수백 ms 오차는 문제되지 않는다.
+            #
+            # timeout을 넘기지 않는다(기본값 0) — tf2_ros.Buffer.can_transform()은
+            # timeout!=0일 때 sleep(0.02) 폴링 루프를 도는 별도 경로를 타는데, 이 콜백이
+            # 초당 20~30회 불리면서 매번 그 경로를 거치자 스레드가 20개 넘게 계속
+            # 바쁜 상태로 CPU를 2000%까지 잡아먹는 문제가 있었다(lidar_fusion_node는
+            # 애초에 timeout 없이 즉시 판정만 해서 이 문제가 없었음). Time()(최신)은
+            # 데이터가 있으면 즉시 True라 timeout으로 기다릴 이유도 없다.
             tf_msg = self.tf_buffer.lookup_transform(
                 target_frame,
                 source_frame,
-                stamp,
-                timeout=Duration(seconds=0.2)
+                Time(),
             )
             return transform_to_matrix(tf_msg)
 
@@ -243,13 +292,8 @@ class PointCloudToScanAndMapNode(Node):
             )
             return
 
-        # source_frame -> scan_frame 변환. 이 콜백 안에서 나오는 모든 TF 조회는 반드시
-        # 이 포인트클라우드의 캡처 시각(msg.header.stamp)으로 고정해서 써야 한다 — "최신
-        # TF"(Time())로 각각 따로 조회하면, update_projected_map()의 역방향 왕복 변환
-        # (scan_frame->target_frame)이 그 사이 도착한 새 odom 샘플과 섞여 서로 다른 로봇
-        # 자세를 기준으로 계산되고, 왕복이 상쇄되지 않아 회전 중 오차가 커진다.
-        cloud_stamp = Time.from_msg(msg.header.stamp)
-        tf_scan_from_source = self.lookup_transform_matrix(self.scan_frame, source_frame, cloud_stamp)
+        # source_frame -> scan_frame 변환 (최신 가용 TF 사용 — 위 lookup_transform_matrix 참고)
+        tf_scan_from_source = self.lookup_transform_matrix(self.scan_frame, source_frame)
         if tf_scan_from_source is None:
             return
 
@@ -261,6 +305,18 @@ class PointCloudToScanAndMapNode(Node):
 
             finite_mask = np.isfinite(points).all(axis=1)
             points = points[finite_mask]
+
+            if points.size == 0:
+                return
+
+            # 자기 몸체(온보드 mid360이 로봇 자신을 반사한 점) 제거 — points는 아직
+            # source_frame('odom')이고 robot_x/y도 odom 프레임이라 TF 없이 바로 비교.
+            self_mask = ~(
+                (self.robot_x - self.self_half_x < points[:, 0]) & (points[:, 0] < self.robot_x + self.self_half_x) &
+                (self.robot_y - self.self_half_y < points[:, 1]) & (points[:, 1] < self.robot_y + self.self_half_y) &
+                (self.self_z_min < points[:, 2]) & (points[:, 2] < self.self_z_max)
+            )
+            points = points[self_mask]
 
             if points.size == 0:
                 return
@@ -296,7 +352,7 @@ class PointCloudToScanAndMapNode(Node):
                 self.publish_scan(points_scan, msg.header.stamp)
 
             if self.enable_map:
-                self.update_projected_map(points_scan, cloud_stamp)
+                self.update_projected_map(points_scan)
 
         except Exception as ex:
             self.get_logger().error(f'Failed to process point cloud: {ex}')
@@ -377,9 +433,9 @@ class PointCloudToScanAndMapNode(Node):
 
         self.scan_pub.publish(scan_msg)
 
-    def update_projected_map(self, points_scan: np.ndarray, stamp):
-        # scan_frame -> target_frame 변환 (cloud_callback과 동일한 stamp 사용 — 위 주석 참고)
-        tf_target_from_scan = self.lookup_transform_matrix(self.target_frame, self.scan_frame, stamp)
+    def update_projected_map(self, points_scan: np.ndarray):
+        # scan_frame -> target_frame 변환 (최신 가용 TF 사용 — 위 lookup_transform_matrix 참고)
+        tf_target_from_scan = self.lookup_transform_matrix(self.target_frame, self.scan_frame)
 
         if tf_target_from_scan is None:
             return

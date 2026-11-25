@@ -35,6 +35,13 @@ class BirdManager(Node):
     WAYPOINT_RADIUS  = 0.5   # m  — 이 거리 이내로 도달하면 새 목표점 재선정
     MODEL_YAW_OFF    = math.pi / 2.0   # 모델 기본 방향 오프셋
 
+    # 최대 선회율(deg/s) — 실제 새는 웨이포인트를 반경 0으로 순간 전환하지 못하고
+    # 유한한 선회반경을 그린다. 이 상한이 없으면(기존 구현) 웨이포인트 도달마다
+    # 속도벡터가 그 자리에서 즉시 홱 꺾여서, PN 항법이 절대 대응 못 하는
+    # 비현실적인 반경 0 회전이 매번 발생했다. 120deg/s는 급하게 쫓기는 상황도
+    # 표현할 만큼 날카롭지만, 여전히 물리적으로 유한한 값.
+    MAX_TURN_RATE_DEG = 120.0
+
     # 맵 바운더리 (20x20 방, 내부 여유 포함) — 목표점은 이 범위 안에서만 랜덤 선정
     X_MIN, X_MAX = -9.0, 9.0
     Y_MIN, Y_MAX = -9.0, 9.0
@@ -44,20 +51,39 @@ class BirdManager(Node):
     def __init__(self):
         super().__init__('bird_manager')
 
-        # 비행 속도 파라미터 (launch argument로 주입 가능)
+        # 비행 속도 / 최대 선회율 파라미터 (launch argument로 주입 가능)
         self.declare_parameter('flight_speed', self.FLIGHT_SPEED)
         self.FLIGHT_SPEED = self.get_parameter('flight_speed').value
-        self.get_logger().info(f'[bird_manager] flight_speed={self.FLIGHT_SPEED:.3f} m/s (랜덤 방향전환 비행)')
+        self.declare_parameter('bird_max_turn_rate_deg', self.MAX_TURN_RATE_DEG)
+        self.MAX_TURN_RATE = math.radians(self.get_parameter('bird_max_turn_rate_deg').value)
+        self.get_logger().info(
+            f'[bird_manager] flight_speed={self.FLIGHT_SPEED:.3f} m/s, '
+            f'max_turn_rate={math.degrees(self.MAX_TURN_RATE):.1f} deg/s (랜덤 방향전환 비행)'
+        )
+
+        # 졸업논문 실험용 파라미터 (기본값은 기존 동작과 동일)
+        #   bird_sdf_path : 다른 크기의 새 모델 사용 ('default' = ugv_gazebo/models/bird)
+        #   random_seed   : >=0이면 비행 궤적 재현 (단일/다중 LiDAR를 같은 궤적으로 비교)
+        #   status_rate_hz: /bird/nearest_pose(GT) 발행 주기 — 위치 오차 평가엔 1Hz가 부족
+        self.declare_parameter('bird_sdf_path', 'default')
+        self.declare_parameter('random_seed', -1)
+        self.declare_parameter('status_rate_hz', 1.0)
+        seed = self.get_parameter('random_seed').value
+        if seed >= 0:
+            random.seed(seed)
 
         pkg_share = get_package_share_directory('ugv_gazebo')
-        sdf_path = os.path.join(pkg_share, 'models', 'bird', 'model.sdf')
+        sdf_path = self.get_parameter('bird_sdf_path').value
+        if sdf_path == 'default':
+            sdf_path = os.path.join(pkg_share, 'models', 'bird', 'model.sdf')
         with open(sdf_path, 'r') as f:
             self.bird_sdf = f.read()
 
         self.bird_spawned = False
-        self.pos    = [0.0, 0.0, 0.0]   # 현재 위치 (world)
-        self.target = [0.0, 0.0, 0.0]   # 현재 목표점 (world)
-        self.yaw    = 0.0
+        self.pos     = [0.0, 0.0, 0.0]   # 현재 위치 (world)
+        self.target  = [0.0, 0.0, 0.0]   # 현재 목표점 (world)
+        self.yaw     = 0.0
+        self.heading = 0.0   # 현재 수평 이동 방향(rad) — 선회율 상한 적용 대상
         self._anim_timer = None    # 비행 애니메이션 타이머
 
         # ── 서비스 클라이언트 ──────────────────────────────────────
@@ -84,8 +110,8 @@ class BirdManager(Node):
         self.bird_visible_pub = self.create_publisher(Bool,        '/bird/visible',      10)
         self.create_subscription(String, '/bird_command', self._on_command, 10)
 
-        # 상태 퍼블리시 1 Hz
-        self.create_timer(1.0, self._publish_status)
+        # 상태 퍼블리시 (기본 1 Hz)
+        self.create_timer(1.0 / self.get_parameter('status_rate_hz').value, self._publish_status)
 
         self.get_logger().info(
             'bird_manager ready. '
@@ -121,6 +147,10 @@ class BirdManager(Node):
     def _spawn_bird(self):
         self.pos    = self._random_point()
         self.target = self._random_point()
+        # 스폰 직후 첫 목표는 선회율 제한 없이 바로 그 방향을 보도록 초기화
+        self.heading = math.atan2(
+            self.target[1] - self.pos[1], self.target[0] - self.pos[0]
+        )
 
         req = SpawnEntity.Request()
         req.name            = self.BIRD_NAME
@@ -204,7 +234,22 @@ class BirdManager(Node):
             dist = math.sqrt(dx * dx + dy * dy + dz * dz)
 
         step = min(self.FLIGHT_SPEED * dt, dist) if dist > 1e-6 else 0.0
-        ux, uy, uz = (dx / dist, dy / dist, dz / dist) if dist > 1e-6 else (0.0, 0.0, 0.0)
+
+        # 수평 방향은 목표점을 향해 즉시 스냅하지 않고, 현재 헤딩에서
+        # 최대 선회율(MAX_TURN_RATE)만큼만 회전시킨다 — 유한한 선회반경 구현.
+        # 수직(z) 성분은 기존처럼 목표까지의 비율을 그대로 따라간다(피치 클램프로 이미 제한됨).
+        desired_heading = math.atan2(dy, dx) if (abs(dx) > 1e-9 or abs(dy) > 1e-9) else self.heading
+        heading_err = math.atan2(
+            math.sin(desired_heading - self.heading), math.cos(desired_heading - self.heading)
+        )
+        max_step = self.MAX_TURN_RATE * dt
+        self.heading += max(-max_step, min(max_step, heading_err))
+
+        uz = dz / dist if dist > 1e-6 else 0.0
+        ux, uy = math.cos(self.heading), math.sin(self.heading)
+        norm = math.sqrt(ux * ux + uy * uy + uz * uz)
+        if norm > 1e-9:
+            ux, uy, uz = ux / norm, uy / norm, uz / norm
 
         self.pos[0] += ux * step
         self.pos[1] += uy * step
@@ -214,7 +259,7 @@ class BirdManager(Node):
 
         # 기체 방향 = 이동 방향
         horiz = math.sqrt(vx * vx + vy * vy)
-        yaw = math.atan2(vy, vx) + self.MODEL_YAW_OFF
+        yaw = self.heading + self.MODEL_YAW_OFF
         pitch = math.atan2(vz, horiz) if horiz > 1e-6 else 0.0
         pitch = max(-0.3, min(0.3, pitch))
         self.yaw = yaw

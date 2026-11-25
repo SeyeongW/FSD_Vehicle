@@ -23,6 +23,7 @@ import numpy as np
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs_py import point_cloud2
@@ -127,8 +128,10 @@ class BirdDetectorNode(Node):
         # -------------------------
         # ROS 인터페이스
         # -------------------------
+        # lidar_fusion_node의 출력 QoS(BEST_EFFORT, qos_profile_sensor_data)와
+        # 맞춰야 함 — 안 맞으면 QoS 불일치로 아예 메시지를 못 받는다.
         self.sub = self.create_subscription(
-            PointCloud2, '/fused_pointcloud2', self.callback, 10
+            PointCloud2, '/fused_pointcloud2', self.callback, qos_profile_sensor_data
         )
         self.odom_sub = self.create_subscription(
             Odometry, '/odom', self.odom_callback, 10
@@ -174,12 +177,18 @@ class BirdDetectorNode(Node):
         self.min_motion_frames = 3
         self.max_missed_frames = 60
 
-        self.lock_lost_frames = 50
-        self.lock_keep_missed = 20
+        # opportunistic merge(비동기 3-LiDAR 병합) 특성상 특정 소스가 잠깐 안 들어오면
+        # 실제로는 새가 그대로 보이는데도 stale/미검출 프레임으로 missed가 올라가서
+        # RViz Path가 자주 끊기는 문제가 있었음 — 잠금 유지 여유를 넉넉히 늘림.
+        self.lock_lost_frames = 100
+        self.lock_keep_missed = 40
         self.lock_switch_cooldown = 20
         self.lock_age = 0
 
-        self.rotation_freeze_threshold = 0.20
+        # 회전 중엔 odom 노이즈로 오탐 위험이 있어 재잠금을 보류하는데, 값이 너무
+        # 낮으면 순찰/추격 중 정상적인 코너링만으로도 재잠금이 계속 막혀 경로 공백이
+        # 잦았음. 빠른 제자리 회전만 걸러지도록 완화.
+        self.rotation_freeze_threshold = 0.35
 
         # 코스팅(칼만필터 예측만, 실측 보정 없음) 중 방 경계 밖으로 발산한 트랙을
         # 걸러내기 위한 상한 — lidar_fusion_node의 bounds_xy(20x20 방 기준)와 동일 값.
@@ -389,6 +398,16 @@ class BirdDetectorNode(Node):
                 unmatched_det_indices,
                 key=lambda i: np.linalg.norm(detections[i]['world_centroid'] - locked_track['world_centroid']),
             )
+            reconnect_dist = np.linalg.norm(detections[di]['world_centroid'] - locked_track['world_centroid'])
+        else:
+            reconnect_dist = None
+
+        # 상한이 없으면 "가장 가까운 미매칭 후보"가 실제로는 아주 먼 유령 클러스터
+        # (동기화 안 된 3-LiDAR 병합이 만드는 stale 반사, 벽 모서리 오검출 등)여도
+        # 무조건 잠금 트랙을 그 자리로 순간이동시켜버렸다 — RViz Path에 새가 가지도
+        # 않은 곳으로 선이 튀는 원인. track_match_dist(메인 매칭과 동일 기준)를
+        # 재사용해 그 이상 떨어진 후보는 재연결하지 않고, 그냥 코스팅만 하도록 막는다.
+        if reconnect_dist is not None and reconnect_dist < self.track_match_dist:
             det = detections[di]
             prev_world = locked_track['world_centroid'].copy()
             new_world = det['world_centroid']
@@ -472,6 +491,29 @@ class BirdDetectorNode(Node):
             self.locked_target_missed = 0
             self.lock_age = 0
             locked = None
+
+        # 코스팅 중(이번 프레임 실측 매칭 실패)이라도 확실히 움직이는 새 트랙이
+        # 방금 막 매칭됐다면 그쪽이 진짜 표적일 가능성이 높다 — 새가
+        # track_match_dist(8m) 밖으로 실제 이동해 재연결이 안 되는 경우, 예전엔
+        # lock_keep_missed(40프레임, 약 5~6초)까지 허공을 코스팅하며 눈앞의 새 클러스터를
+        # 무시했다. missed==0(방금 매칭)이고 is_moving_confirmed(3프레임 연속 확인된
+        # 움직임)인 후보가 있으면 즉시 갈아탄다.
+        if locked is not None and locked['missed'] > 0 and not rotating:
+            strong_candidates = [
+                tr for tr in self.tracks
+                if tr['id'] != locked['id'] and tr['missed'] == 0 and tr['is_moving_confirmed']
+            ]
+            if strong_candidates:
+                best_new = min(
+                    strong_candidates,
+                    key=lambda tr: np.linalg.norm(tr['world_centroid'] - locked['world_centroid'])
+                )
+                self.locked_target_id = best_new['id']
+                self.locked_target_missed = 0
+                self.lock_age = 0
+                self._publish_bird_detected(True)
+                self.publish_bird_target(best_new)
+                return
 
         if locked is not None and locked['missed'] <= self.lock_keep_missed:
             self.lock_age += 1
