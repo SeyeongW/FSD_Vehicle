@@ -6,6 +6,7 @@
 # 사용: bash run_trials.sh                 (기본 조건 전부)
 #       CONDS="multi:lidar1" SEEDS="1" bash run_trials.sh
 #  조건 형식 mode:fault  (fault = none | mid360 | lidar1 | lidar2)
+#  추격 조향: STEERING=smc(기본) | pure_pursuit | pn  → 결과는 logs/thesis_<STEERING>/ 에 따로 저장
 
 WS=~/ros2_ws/ugv_ws
 CONDS=${CONDS:-"single:mid360 multi:mid360 multi:lidar1 multi:lidar2"}
@@ -13,7 +14,8 @@ SEEDS=${SEEDS:-"1 2 3"}
 FAULT_DELAY=${FAULT_DELAY:-60}
 POST_FAULT=${POST_FAULT:-60}
 BOOT_WAIT=${BOOT_WAIT:-25}
-LOG_DIR=$WS/logs/thesis
+STEERING=${STEERING:-smc}
+LOG_DIR=$WS/logs/thesis_$STEERING
 mkdir -p "$LOG_DIR"
 RUNLOG=$LOG_DIR/_batch_run.log
 
@@ -46,6 +48,7 @@ for seed in $SEEDS; do
       bash $WS/kill_sim.sh >> "$RUNLOG" 2>&1
       ros2 launch thesis_eval_pkg thesis_bringup.launch.py \
         mode:=$mode fault:=$fault seed:=$seed fault_delay:=$FAULT_DELAY gui:=true \
+        steering_mode:=$STEERING out_dir:=$LOG_DIR \
         > "$LOG_DIR/_launch_${mode}_${fault}_s${seed}.log" 2>&1 &
       lpid=$!
       log "launch PID=$lpid, ${BOOT_WAIT}s 기동 대기"

@@ -56,6 +56,7 @@ def _nodes(context):
             package='thesis_eval_pkg', executable='eval_logger_node', name='eval_logger_node', output='screen',
             parameters=[{
                 'use_sim_time': True,
+                'out_dir': os.path.expanduser(LaunchConfiguration('out_dir').perform(context)),
                 'mode': mode,
                 'fault': fault,
                 'seed': int(LaunchConfiguration('seed').perform(context)),
@@ -78,6 +79,7 @@ def generate_launch_description():
         DeclareLaunchArgument('log', default_value='true', description='eval_logger_node 실행 여부'),
         DeclareLaunchArgument('gui', default_value='true'),
         DeclareLaunchArgument('steering_mode', default_value='pure_pursuit'),
+        DeclareLaunchArgument('out_dir', default_value='~/ros2_ws/ugv_ws/logs/thesis', description='CSV 저장 폴더'),
     ]
 
     base = IncludeLaunchDescription(
